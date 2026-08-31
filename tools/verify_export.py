@@ -15,7 +15,7 @@ import tempfile
 import time
 import wave
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -403,6 +403,9 @@ def benchmark_encode_pipeline(
         invoke()
         timings.append((time.perf_counter_ns() - started) / 1_000_000)
     return {
+        "audio_duration_seconds": repetitions * 0.04,
+        "calls_at_or_above_20ms": sum(value >= 20.0 for value in timings),
+        "maximum_ms": max(timings),
         "p50_ms": percentile(timings, 50),
         "p95_ms": percentile(timings, 95),
         "p99_ms": percentile(timings, 99),
@@ -433,6 +436,9 @@ def benchmark_decode_pipeline(
         invoke()
         timings.append((time.perf_counter_ns() - started) / 1_000_000)
     return {
+        "audio_duration_seconds": repetitions * 0.04,
+        "calls_at_or_above_20ms": sum(value >= 20.0 for value in timings),
+        "maximum_ms": max(timings),
         "p50_ms": percentile(timings, 50),
         "p95_ms": percentile(timings, 95),
         "p99_ms": percentile(timings, 99),
@@ -446,6 +452,8 @@ def verify_bundle(
     seconds: int,
     threads: int,
     benchmark_repetitions: int,
+    fixture_tier: str,
+    fixture_runner: Path | None,
 ) -> None:
     import numpy as np
     import torch
@@ -457,6 +465,16 @@ def verify_bundle(
         PACKET_SAMPLES,
         constant_padding,
     )
+
+    fixture = None
+    if fixture_tier == "h1":
+        if fixture_runner is None:
+            raise ValueError("--fixture-runner is required for an H1 measurement")
+        from capacity_fixture import inspect_h1
+
+        fixture = inspect_h1(fixture_runner)
+    elif fixture_runner is not None:
+        raise ValueError("--fixture-runner requires --fixture-tier h1")
 
     manifest, oracle = load_manifest(bundle, checkpoint)
     records = manifest["graphs"]
@@ -633,9 +651,9 @@ def verify_bundle(
         raise AssertionError("identical reset stream was not deterministic")
     print("epoch reset and recovery controls: 3/3 PASS")
 
-    def require_shape_refusal(label: str, operation: object) -> None:
+    def require_shape_refusal(label: str, operation: Callable[[], object]) -> None:
         try:
-            operation()  # type: ignore[operator]
+            operation()
         except Exception as error:  # Runtime exception types vary by build.
             message = str(error).lower()
             if "dimension" not in message and "invalid" not in message:
@@ -733,8 +751,35 @@ def verify_bundle(
                 benchmark_repetitions,
             ),
         }
+        for row in measurements[label].values():
+            row["packet_duration_ms"] = 40.0
+            row["realtime_multiple_at_p99"] = 40.0 / row["p99_ms"]
+
+    h1_thresholds_passed = sum(
+        row["p99_ms"] < 20.0
+        for profile in measurements.values()
+        for row in profile.values()
+    )
+    h1_thresholds_total = sum(
+        1 for profile in measurements.values() for _ in profile.values()
+    )
+    h1_measured_pass = (
+        fixture is not None and h1_thresholds_passed == h1_thresholds_total
+    )
     result = {
-        "claim": "unfrozen-host-measurement-only",
+        "claim": (
+            "frozen-H1-measurement"
+            if fixture is not None
+            else "unfrozen-host-measurement-only"
+        ),
+        "fixture": fixture,
+        "h1_gate": {
+            "measured_pass": h1_measured_pass,
+            "p99_below_20ms_and_realtime_at_least_2x": {
+                "passed": h1_thresholds_passed,
+                "total": h1_thresholds_total,
+            },
+        },
         "manifest_sha256": sha256(bundle / "manifest.json"),
         "measurements": measurements,
         "parity": {
@@ -744,6 +789,10 @@ def verify_bundle(
             "token_population": total_token_population,
         },
         "schema": "kilix.encodec.export-verification/v2",
+        "verification_sources": {
+            "capacity_fixture.py": sha256(REPOSITORY / "tools/capacity_fixture.py"),
+            "verify_export.py": sha256(Path(__file__).resolve()),
+        },
         "threads": threads,
     }
     result_path = bundle / "verification.json"
@@ -755,13 +804,21 @@ def verify_bundle(
     maximum_decode_p99 = max(
         profile["decode_pipeline"]["p99_ms"] for profile in measurements.values()
     )
+    label = "frozen H1" if fixture is not None else "unfrozen"
     print(
-        "unfrozen performance harness: 6/6 profile pipelines measured; "
+        f"{label} performance harness: "
+        f"{h1_thresholds_passed}/{h1_thresholds_total} profile pipelines "
+        "below 20ms p99 and at least 2x real-time; "
         f"maximum_encode_p99_ms={maximum_encode_p99:.3f} "
         f"maximum_decode_p99_ms={maximum_decode_p99:.3f} "
-        "accepted_H1_credit=0/1"
+        f"measured_H1_gate={int(h1_measured_pass)}/1"
     )
     print("stateful multi-rate export technical controls: 48/48 PASS")
+    if fixture is not None and not h1_measured_pass:
+        raise AssertionError(
+            f"frozen H1 performance gate failed: "
+            f"{h1_thresholds_passed}/{h1_thresholds_total}"
+        )
 
 
 def self_test(skeleton: Path) -> None:
@@ -824,6 +881,10 @@ def main() -> int:
     parser.add_argument("--seconds", type=int, default=1)
     parser.add_argument("--threads", type=int, choices=(1, 2, 4), default=1)
     parser.add_argument("--benchmark-repetitions", type=int, default=100)
+    parser.add_argument(
+        "--fixture-tier", choices=("unfrozen", "h1"), default="unfrozen"
+    )
+    parser.add_argument("--fixture-runner", type=Path)
     args = parser.parse_args()
     skeleton = REPOSITORY / "models/encodec-24khz-v1/manifest.json"
     try:
@@ -838,12 +899,16 @@ def main() -> int:
                 parser.error("--seconds must be between 1 and 8")
             if args.benchmark_repetitions < 20:
                 parser.error("--benchmark-repetitions must be at least 20")
+            if args.fixture_tier == "h1" and args.benchmark_repetitions < 1000:
+                parser.error("H1 measurement requires at least 1000 repetitions")
             verify_bundle(
                 args.bundle,
                 args.checkpoint,
                 args.seconds,
                 args.threads,
                 args.benchmark_repetitions,
+                args.fixture_tier,
+                args.fixture_runner,
             )
     except (AssertionError, OSError, RuntimeError, ValueError) as error:
         parser.exit(1, f"verification refused: {error}\n")

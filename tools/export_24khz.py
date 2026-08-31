@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-TOOL_VERSION = "0.1.4"
+TOOL_VERSION = "0.1.5"
 REPOSITORY = Path(__file__).resolve().parents[1]
 GRAPH_FILES = {
     "encoder": "encoder_stateful_op17.onnx",

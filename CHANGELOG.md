@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5 - 2026-08-31
+
+- Bind performance verification to the frozen H1 q35/qemu64 fixture and refuse
+  an H1 measurement unless its CPU, memory, root disk, OS, and exact runner
+  identities match.
+- Turn the 24 kHz p99 and sustained-real-time requirements and the 48 kHz
+  decoder real-time requirement into executable release gates.
+- Embed the verifier and capacity-check source identities in canonical results.
+
 ## 0.1.4 - 2026-08-31
 
 - Export the complete 24 kHz 3/6/12 kb/s profile family as 8 of 8

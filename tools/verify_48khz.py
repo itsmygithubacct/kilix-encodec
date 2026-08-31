@@ -588,6 +588,7 @@ def timed(function: Callable[[], object], repetitions: int) -> dict[str, Any]:
         values.append((time.perf_counter_ns() - started) / 1_000_000)
     array = np.asarray(values)
     return {
+        "maximum_ms": float(array.max()),
         "p50_ms": float(np.percentile(array, 50)),
         "p95_ms": float(np.percentile(array, 95)),
         "p99_ms": float(np.percentile(array, 99)),
@@ -612,12 +613,10 @@ def benchmark(
             repetitions,
         ),
     }
-    print(
-        "48 kHz unfrozen performance harness: 2/2 graphs measured "
-        f"encoder_p99_ms={rows['encoder']['p99_ms']:.3f} "
-        f"decoder_p99_ms={rows['decoder']['p99_ms']:.3f} "
-        "accepted_H1_credit=0/1"
-    )
+    frame_budget_ms = 1000.0 * STRIDE_SAMPLES / SAMPLE_RATE
+    for row in rows.values():
+        row["frame_budget_ms"] = frame_budget_ms
+        row["realtime_multiple_at_p99"] = frame_budget_ms / row["p99_ms"]
     return rows
 
 
@@ -626,7 +625,19 @@ def verify_bundle(
     model_directory: Path,
     threads: int,
     benchmark_repetitions: int,
+    fixture_tier: str,
+    fixture_runner: Path | None,
 ) -> None:
+    fixture = None
+    if fixture_tier == "h1":
+        if fixture_runner is None:
+            raise ValueError("--fixture-runner is required for an H1 measurement")
+        from capacity_fixture import inspect_h1
+
+        fixture = inspect_h1(fixture_runner)
+    elif fixture_runner is not None:
+        raise ValueError("--fixture-runner requires --fixture-tier h1")
+
     manifest, model = load_manifest(bundle, model_directory)
     encoder = session(bundle / manifest["graphs"]["encoder"]["file"], threads)
     decoder = session(bundle / manifest["graphs"]["decoder"]["file"], threads)
@@ -638,19 +649,46 @@ def verify_bundle(
     frame_result = frame_checks(model, codebooks, encoder, decoder)
     file_result = file_checks(bundle, model, codebooks, encoder, decoder)
     benchmark_result = benchmark(encoder, decoder, benchmark_repetitions)
+    h1_decode_passed = benchmark_result["decoder"]["p99_ms"] < (
+        1000.0 * STRIDE_SAMPLES / SAMPLE_RATE
+    )
+    h1_measured_pass = fixture is not None and h1_decode_passed
     result = {
-        "claim": "technical-controls-on-unfrozen-host",
+        "claim": (
+            "technical-controls-on-frozen-H1"
+            if fixture is not None
+            else "technical-controls-on-unfrozen-host"
+        ),
         "file_profile": file_result,
+        "fixture": fixture,
         "frame_corpus": frame_result,
+        "h1_gate": {
+            "measured_pass": h1_measured_pass,
+            "decoder_realtime": h1_decode_passed,
+        },
         "manifest_sha256": sha256(bundle / "manifest.json"),
         "performance": benchmark_result,
-        "schema": "kilix.encodec.48khz-verification/v1",
+        "schema": "kilix.encodec.48khz-verification/v2",
         "threads": threads,
+        "verification_sources": {
+            "capacity_fixture.py": sha256(REPOSITORY / "tools/capacity_fixture.py"),
+            "verify_48khz.py": sha256(Path(__file__).resolve()),
+        },
     }
     result_path = bundle / "verification.json"
     result_path.write_bytes(canonical_json(result))
     os.chmod(result_path, 0o600)
+    label = "frozen H1" if fixture is not None else "unfrozen"
+    print(
+        f"48 kHz {label} performance harness: 2/2 graphs measured "
+        f"encoder_p99_ms={benchmark_result['encoder']['p99_ms']:.3f} "
+        f"decoder_p99_ms={benchmark_result['decoder']['p99_ms']:.3f} "
+        f"decoder_realtime={int(h1_decode_passed)}/1 "
+        f"measured_H1_gate={int(h1_measured_pass)}/1"
+    )
     print("48 kHz technical controls: 35/35 PASS; formal_P3_credit=0/1")
+    if fixture is not None and not h1_measured_pass:
+        raise AssertionError("48 kHz frozen H1 decoder did not sustain real time")
 
 
 def main() -> int:
@@ -659,15 +697,23 @@ def main() -> int:
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--threads", type=int, choices=(1, 2, 4), default=2)
     parser.add_argument("--benchmark-repetitions", type=int, default=20)
+    parser.add_argument(
+        "--fixture-tier", choices=("unfrozen", "h1"), default="unfrozen"
+    )
+    parser.add_argument("--fixture-runner", type=Path)
     args = parser.parse_args()
     if args.benchmark_repetitions < 10:
         parser.error("--benchmark-repetitions must be at least 10")
+    if args.fixture_tier == "h1" and args.benchmark_repetitions < 100:
+        parser.error("H1 measurement requires at least 100 repetitions")
     try:
         verify_bundle(
             args.bundle,
             args.model_dir,
             args.threads,
             args.benchmark_repetitions,
+            args.fixture_tier,
+            args.fixture_runner,
         )
     except (AssertionError, OSError, RuntimeError, ValueError) as error:
         parser.exit(1, f"48 kHz verification refused: {error}\n")

@@ -1,7 +1,7 @@
 # kilix-encodec
 
 `kilix-encodec` is the C11 provider boundary for Kilix EnCodec packet encoding
-and decoding. The 0.1.4 tree builds the fail-closed provider skeleton plus
+and decoding. The 0.1.5 tree builds the fail-closed provider skeleton plus
 network-free development exporters for state-explicit 24 kHz streaming graphs
 and the bounded 48 kHz stereo file profile. No model runtime, graph,
 checkpoint, codebook, audio fixture, or weight payload is included.
@@ -38,8 +38,17 @@ verification result 1/1 and synthetic listening fixtures 3/3. Verification
 checks every graph contract, exact nested RVQ prefixes, continuous-oracle token
 identity at all 3/3 rates, decoder parity, deterministic epoch recovery, all
 8/8 fixed-shape refusals and all 6/6 profile timing pipelines. The timing result
-is labelled unfrozen-host measurement and receives accepted H1 credit 0/1.
+is labelled unfrozen-host measurement and receives measured H1 gate credit 0/1.
 Blind listening and pinned offline delivery remain 0/1 each.
+
+For a frozen-fixture measurement, both verifiers accept `--fixture-tier h1`
+together with the frozen `fixture.sh` path. They fail closed unless the guest
+proves the exact runner digest and complete H1 identity: Debian 13.5,
+q35/qemu64, 4/4 vCPUs, 8 GiB RAM, the root filesystem on the frozen 100 GiB
+disk, and at least 80 GiB free. The 24 kHz gate requires at least 1,000/1,000
+measured packets in every one of 6/6 encode/decode pipelines and p99 below
+20 ms (therefore at least 2x real-time); the 48 kHz decoder requires at least
+100/100 measured frames and must sustain its 990 ms cadence.
 
 ### Blinded epoch-boundary trial
 
@@ -86,7 +95,8 @@ manifest 1/1, a canonical verification result 1/1, and synthetic listening
 fixtures 4/4. Verification covers all 5/5 fixtures at all 4/4 supported
 bandwidths, bounded end-to-end token drift, decoder parity, deterministic
 three-frame overlap-add, fixed-shape refusal, and an unfrozen-host timing
-harness. Blind listening and accepted H1 credit remain 0/1 each.
+harness. Blind listening and the measured H1 gate remain 0/1 each until run on
+the frozen fixture.
 
 ## Current boundary
 

@@ -1,6 +1,6 @@
 [project]
 name = "kilix-encodec-tools"
-version = "0.1.4"
+version = "0.1.5"
 description = "Locked development tools for kilix-encodec"
 requires-python = ">=3.11,<3.13"
 dependencies = []
