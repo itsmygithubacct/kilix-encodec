@@ -4,8 +4,10 @@ This repository's source and documentation are project-authored and licensed
 under the root MIT license. No third-party source, generated graph, checkpoint,
 codebook, audio sample, or model weight is vendored in this repository.
 
-The future runtime is designed to use ONNX Runtime. ONNX Runtime is not bundled
-in this P1 skeleton and remains separately packaged under its own terms.
+The development export group uses ONNX, ONNX Runtime, PyTorch, torchaudio,
+NumPy, EnCodec and einops under their respective terms. They are locked build
+tools and are not bundled into the native library. The future installed ONNX
+Runtime remains separately packaged under its own terms.
 
 The Meta EnCodec project is reference/export input only. Its project code is
 MIT-licensed upstream. That code license is not a license for every model
@@ -20,4 +22,3 @@ artifact:
 Derived graphs and codebooks are model artifacts, not project code. None may
 be committed or published from this repository without its own recorded
 license and provenance decision.
-

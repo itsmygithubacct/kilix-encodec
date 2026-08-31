@@ -28,7 +28,8 @@ static int run_selftest(void)
 int main(int argc, char **argv)
 {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-        puts("kenc 0.1.0");
+        printf("kenc %u.%u.%u\n", KENC_VERSION_MAJOR, KENC_VERSION_MINOR,
+            KENC_VERSION_PATCH);
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "--selftest") == 0) {
@@ -38,4 +39,3 @@ int main(int argc, char **argv)
     fprintf(stderr, "usage: kenc --version | --selftest\n");
     return 2;
 }
-

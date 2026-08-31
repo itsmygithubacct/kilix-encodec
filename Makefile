@@ -35,7 +35,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean install install-test sanitize test
+.PHONY: all clean export-env export-test install install-test sanitize test
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -72,7 +72,22 @@ test: all $(TEST_BINS)
 	$(COMMAND) --selftest; \
 	$(PYTHON) tools/verify_export.py --skeleton \
 		models/encodec-24khz-v1/manifest.json; \
+	$(PYTHON) tools/verify_export.py --self-test; \
+	$(PYTHON) tools/export_24khz.py --version; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
+
+export-env:
+	uv sync --frozen --group export
+
+export-test:
+	@test -n "$(CHECKPOINT)" || \
+		{ printf '%s\n' 'CHECKPOINT is required'; exit 2; }
+	@test -n "$(OUTPUT_DIR)" || \
+		{ printf '%s\n' 'OUTPUT_DIR is required'; exit 2; }
+	uv run --frozen --group export python tools/export_24khz.py \
+		--checkpoint "$(CHECKPOINT)" --output-dir "$(OUTPUT_DIR)"
+	uv run --frozen --group export python tools/verify_export.py \
+		--bundle "$(OUTPUT_DIR)" --checkpoint "$(CHECKPOINT)"
 
 sanitize:
 	$(MAKE) clean BUILD=build-sanitize

@@ -1,10 +1,29 @@
 [project]
 name = "kilix-encodec-tools"
-version = "0.1.0"
+version = "0.1.1"
 description = "Locked development tools for kilix-encodec"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = []
 
 [tool.uv]
 package = false
 
+[dependency-groups]
+export = [
+  "einops==0.8.1",
+  "encodec==0.1.1",
+  "numpy==2.1.3",
+  "onnx==1.22.0",
+  "onnxruntime==1.29.0",
+  "torch==2.6.0",
+  "torchaudio==2.6.0",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }

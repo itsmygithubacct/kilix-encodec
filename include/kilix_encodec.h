@@ -10,7 +10,7 @@ extern "C" {
 
 #define KENC_VERSION_MAJOR 0u
 #define KENC_VERSION_MINOR 1u
-#define KENC_VERSION_PATCH 0u
+#define KENC_VERSION_PATCH 1u
 
 #define KENC_SAMPLE_RATE_24KHZ 24000u
 #define KENC_PACKET_SAMPLES 960u
@@ -78,4 +78,3 @@ void kenc_decoder_free(kenc_decoder *decoder);
 #endif
 
 #endif
-
