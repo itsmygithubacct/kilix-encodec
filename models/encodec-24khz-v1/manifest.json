@@ -1,0 +1,13 @@
+{
+  "artifacts": [],
+  "codebook_cardinality": 1024,
+  "delivery": "user-supplied",
+  "format": "kilix.encodec.asset/v1",
+  "license_disposition": "no-grant-found-fail-closed",
+  "packet_samples": 960,
+  "profile": "encodec-24khz-v1",
+  "release_qualified": false,
+  "sample_rate": 24000,
+  "status": "p1-skeleton"
+}
+

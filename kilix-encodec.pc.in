@@ -1,0 +1,11 @@
+prefix=@PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: kilix-encodec
+Description: Bounded C11 EnCodec packet provider for Kilix
+Version: 0.1.0
+Libs: -L${libdir} -lkilix-encodec
+Cflags: -I${includedir}
+
