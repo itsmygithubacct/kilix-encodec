@@ -1,7 +1,7 @@
 # kilix-encodec
 
 `kilix-encodec` is the C11 provider boundary for Kilix EnCodec packet encoding
-and decoding. The 0.1.3 tree builds the fail-closed provider skeleton plus
+and decoding. The 0.1.4 tree builds the fail-closed provider skeleton plus
 network-free development exporters for state-explicit 24 kHz streaming graphs
 and the bounded 48 kHz stereo file profile. No model runtime, graph,
 checkpoint, codebook, audio fixture, or weight payload is included.
@@ -32,12 +32,14 @@ make export-test \
   OUTPUT_DIR=/path/to/empty/scratch-directory
 ```
 
-The scratch bundle contains graphs 4/4, a canonical manifest 1/1, a canonical
+The 24 kHz scratch bundle contains graphs 8/8 for all 3/3 required bandwidth
+profiles (3/6/12 kb/s), a canonical manifest 1/1, a canonical
 verification result 1/1 and synthetic listening fixtures 3/3. Verification
-checks ONNX contracts, continuous-oracle parity, token identity, deterministic
-epoch recovery, fixed-shape refusal and an H1-ready timing harness. The timing
-result is labelled unfrozen-host measurement and receives accepted H1 credit
-0/1. Blind listening and pinned offline delivery remain 0/1 each.
+checks every graph contract, exact nested RVQ prefixes, continuous-oracle token
+identity at all 3/3 rates, decoder parity, deterministic epoch recovery, all
+8/8 fixed-shape refusals and all 6/6 profile timing pipelines. The timing result
+is labelled unfrozen-host measurement and receives accepted H1 credit 0/1.
+Blind listening and pinned offline delivery remain 0/1 each.
 
 ### Blinded epoch-boundary trial
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4 - 2026-08-31
+
+- Export the complete 24 kHz 3/6/12 kb/s profile family as 8 of 8
+  fixed-shape stateful and RVQ graphs.
+- Verify exact oracle tokens, quantized latents, decoded waveforms, nested RVQ
+  prefixes, shape refusal, and timing across all 3 of 3 bandwidths.
+- Record the bandwidth-to-codebook mapping in both the committed asset policy
+  skeleton and each scratch-only export manifest.
+
 ## 0.1.3 - 2026-08-31
 
 - Add a scratch-only blinded epoch-boundary trial that separates public audio

@@ -14,13 +14,18 @@ from pathlib import Path
 from typing import Any
 
 
-TOOL_VERSION = "0.1.3"
+TOOL_VERSION = "0.1.4"
 REPOSITORY = Path(__file__).resolve().parents[1]
 GRAPH_FILES = {
     "encoder": "encoder_stateful_op17.onnx",
     "decoder": "decoder_stateful_op17.onnx",
-    "rvq_encode": "rvq_encode_op17.onnx",
-    "rvq_decode": "rvq_decode_op17.onnx",
+    **{
+        f"rvq_{direction}_{int(bandwidth)}kbps": (
+            f"rvq_{direction}_{int(bandwidth)}kbps_op17.onnx"
+        )
+        for bandwidth in (3.0, 6.0, 12.0)
+        for direction in ("encode", "decode")
+    },
 }
 
 
@@ -127,19 +132,26 @@ def export_stateful(model: object, side: str, output: Path) -> dict[str, Any]:
     )
 
 
-def export_rvq(model: object, direction: str, output: Path) -> dict[str, Any]:
+def export_rvq(
+    model: object,
+    direction: str,
+    bandwidth: float,
+    quantizers: int,
+    output: Path,
+) -> dict[str, Any]:
     import onnx
     import torch
 
     from stateful_graph import OPSET, PACKET_LATENT_FRAMES
 
     class RVQEncode(torch.nn.Module):
-        def __init__(self, quantizer: object):
+        def __init__(self, quantizer: object, n_q: int):
             super().__init__()
             self.quantizer = quantizer
+            self.n_q = n_q
 
         def forward(self, latent: torch.Tensor) -> torch.Tensor:
-            return self.quantizer.encode(latent, n_q=8)
+            return self.quantizer.encode(latent, n_q=self.n_q)
 
     class RVQDecode(torch.nn.Module):
         def __init__(self, quantizer: object):
@@ -150,21 +162,23 @@ def export_rvq(model: object, direction: str, output: Path) -> dict[str, Any]:
             return self.quantizer.decode(codes)
 
     if direction == "encode":
-        network = RVQEncode(model.quantizer.vq).eval()
+        network = RVQEncode(model.quantizer.vq, quantizers).eval()
         sample = torch.zeros(1, 128, PACKET_LATENT_FRAMES)
         input_name, output_name = "latent", "codes"
-        output_shape = [8, 1, PACKET_LATENT_FRAMES]
+        output_shape = [quantizers, 1, PACKET_LATENT_FRAMES]
         output_dtype = "int64"
     elif direction == "decode":
         network = RVQDecode(model.quantizer.vq).eval()
-        sample = torch.zeros(8, 1, PACKET_LATENT_FRAMES, dtype=torch.int64)
+        sample = torch.zeros(
+            quantizers, 1, PACKET_LATENT_FRAMES, dtype=torch.int64
+        )
         input_name, output_name = "codes", "quantized"
         output_shape = [1, 128, PACKET_LATENT_FRAMES]
         output_dtype = "float32"
     else:
         raise ValueError(f"unsupported RVQ direction: {direction}")
 
-    key = f"rvq_{direction}"
+    key = f"rvq_{direction}_{int(bandwidth)}kbps"
     path = output / GRAPH_FILES[key]
     torch.onnx.export(
         network,
@@ -186,7 +200,8 @@ def export_rvq(model: object, direction: str, output: Path) -> dict[str, Any]:
             "output_dtype": output_dtype,
             "output_name": output_name,
             "output_shape": output_shape,
-            "quantizers": 8,
+            "bandwidth_kbps": bandwidth,
+            "quantizers": quantizers,
         },
     )
 
@@ -203,22 +218,44 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
     import torch
 
     from stateful_graph import (
+        BANDWIDTH_PROFILES,
         PACKET_LATENT_FRAMES,
         PACKET_SAMPLES,
         SAMPLE_RATE,
-        TARGET_BANDWIDTH,
         load_model,
     )
 
     checkpoint = outside_repository(checkpoint, "checkpoint")
     output = prepare_output_directory(output_path)
     model, identity = load_model(checkpoint)
+    resolved_profiles = tuple(
+        (
+            bandwidth,
+            model.quantizer.get_num_quantizers_for_bandwidth(
+                model.frame_rate, bandwidth
+            ),
+        )
+        for bandwidth, _ in BANDWIDTH_PROFILES
+    )
+    if resolved_profiles != BANDWIDTH_PROFILES:
+        raise ValueError(
+            f"bandwidth profile mapping differs: {resolved_profiles!r}"
+        )
+    if len(model.quantizer.vq.layers) < max(
+        quantizers for _, quantizers in BANDWIDTH_PROFILES
+    ):
+        raise ValueError("checkpoint does not contain all required RVQ layers")
+
     records = {
         "encoder": export_stateful(model, "encoder", output),
         "decoder": export_stateful(model, "decoder", output),
-        "rvq_encode": export_rvq(model, "encode", output),
-        "rvq_decode": export_rvq(model, "decode", output),
     }
+    for bandwidth, quantizers in BANDWIDTH_PROFILES:
+        for direction in ("encode", "decode"):
+            key = f"rvq_{direction}_{int(bandwidth)}kbps"
+            records[key] = export_rvq(
+                model, direction, bandwidth, quantizers, output
+            )
     manifest = {
         "artifact_policy": {
             "checkpoint_delivery": "user-supplied-only",
@@ -235,14 +272,20 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
         "graphs": records,
         "initial_state": "all-zero",
         "packet": {
+            "bandwidths_kbps": [
+                bandwidth for bandwidth, _ in BANDWIDTH_PROFILES
+            ],
+            "codebooks_by_bandwidth": {
+                str(int(bandwidth)): quantizers
+                for bandwidth, quantizers in BANDWIDTH_PROFILES
+            },
             "latent_frames": PACKET_LATENT_FRAMES,
             "sample_rate": SAMPLE_RATE,
             "samples": PACKET_SAMPLES,
-            "target_bandwidth_kbps": TARGET_BANDWIDTH,
         },
         "padding_mode": "constant",
-        "profile": "encodec-24khz-causal-mono-6kbps",
-        "schema": "kilix.encodec.stateful-onnx-export/v1",
+        "profile": "encodec-24khz-causal-mono-3-6-12kbps",
+        "schema": "kilix.encodec.stateful-onnx-export/v2",
         "sources": {
             "export_24khz.py": sha256(Path(__file__).resolve()),
             "pyproject.toml": sha256(REPOSITORY / "pyproject.toml"),
@@ -262,7 +305,7 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
     manifest_path.write_bytes(canonical_json(manifest))
     os.chmod(manifest_path, 0o600)
     print(
-        f"export bundle: graphs={len(records)}/4 manifest=1/1 "
+        f"export bundle: graphs={len(records)}/{len(GRAPH_FILES)} manifest=1/1 "
         f"path={manifest_path} sha256={sha256(manifest_path)}"
     )
     print("publication: 0/1 authorized; derived artifacts remain local-only")

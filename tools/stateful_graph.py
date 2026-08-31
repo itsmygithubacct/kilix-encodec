@@ -23,7 +23,8 @@ from torch import Tensor, nn
 SAMPLE_RATE = 24_000
 PACKET_SAMPLES = 960
 PACKET_LATENT_FRAMES = 3
-TARGET_BANDWIDTH = 6.0
+BANDWIDTH_PROFILES = ((3.0, 4), (6.0, 8), (12.0, 16))
+DEFAULT_BANDWIDTH = 6.0
 OPSET = 17
 CHECKPOINT_FILE = "encodec_24khz-d7cc33bc.th"
 CHECKPOINT_BYTES = 93_171_529
@@ -105,7 +106,7 @@ def load_model(checkpoint: Path) -> tuple[EncodecModel, CheckpointIdentity]:
     model = EncodecModel.encodec_model_24khz(pretrained=False)
     model.load_state_dict(state_dict, strict=True)
     model.eval()
-    model.set_target_bandwidth(TARGET_BANDWIDTH)
+    model.set_target_bandwidth(DEFAULT_BANDWIDTH)
     return model, CheckpointIdentity(
         file=checkpoint.name,
         bytes=opened_stat.st_size,

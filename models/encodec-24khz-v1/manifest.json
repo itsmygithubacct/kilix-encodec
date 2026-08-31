@@ -1,6 +1,16 @@
 {
   "artifacts": [],
+  "bandwidths_kbps": [
+    3,
+    6,
+    12
+  ],
   "codebook_cardinality": 1024,
+  "codebooks_by_bandwidth": {
+    "3": 4,
+    "6": 8,
+    "12": 16
+  },
   "delivery": "user-supplied",
   "format": "kilix.encodec.asset/v1",
   "license_disposition": "no-grant-found-fail-closed",
@@ -10,4 +20,3 @@
   "sample_rate": 24000,
   "status": "p1-skeleton"
 }
-

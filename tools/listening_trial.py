@@ -17,7 +17,7 @@ from typing import Any
 from export_24khz import REPOSITORY, canonical_json, outside_repository, sha256
 
 
-TOOL_VERSION = "0.1.3"
+TOOL_VERSION = "0.1.4"
 PUBLIC_SCHEMA = "kilix.encodec.epoch-listening-public/v1"
 ANSWER_SCHEMA = "kilix.encodec.epoch-listening-answer-key/v1"
 RESPONSE_SCHEMA = "kilix.encodec.epoch-listening-response/v1"
