@@ -35,7 +35,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean export-env export-test install install-test sanitize test
+.PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -74,6 +74,9 @@ test: all $(TEST_BINS)
 		models/encodec-24khz-v1/manifest.json; \
 	$(PYTHON) tools/verify_export.py --self-test; \
 	$(PYTHON) tools/export_24khz.py --version; \
+	$(PYTHON) tools/export_48khz.py --version; \
+	TMPDIR=/home/pleb/scratch-workers \
+		$(PYTHON) tools/export_48khz.py --self-test; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
 
 export-env:
@@ -88,6 +91,16 @@ export-test:
 		--checkpoint "$(CHECKPOINT)" --output-dir "$(OUTPUT_DIR)"
 	uv run --frozen --group export python tools/verify_export.py \
 		--bundle "$(OUTPUT_DIR)" --checkpoint "$(CHECKPOINT)"
+
+export-48khz-test:
+	@test -n "$(MODEL_DIR)" || \
+		{ printf '%s\n' 'MODEL_DIR is required'; exit 2; }
+	@test -n "$(OUTPUT_DIR)" || \
+		{ printf '%s\n' 'OUTPUT_DIR is required'; exit 2; }
+	uv run --frozen --group export python tools/export_48khz.py \
+		--model-dir "$(MODEL_DIR)" --output-dir "$(OUTPUT_DIR)"
+	uv run --frozen --group export python tools/verify_48khz.py \
+		--model-dir "$(MODEL_DIR)" --bundle "$(OUTPUT_DIR)"
 
 sanitize:
 	$(MAKE) clean BUILD=build-sanitize

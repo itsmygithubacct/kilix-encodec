@@ -10,7 +10,7 @@ int main(void)
 
     passed += KENC_VERSION_MAJOR == 0u ? 1u : 0u;
     passed += KENC_VERSION_MINOR == 1u ? 1u : 0u;
-    passed += KENC_VERSION_PATCH == 1u ? 1u : 0u;
+    passed += KENC_VERSION_PATCH == 2u ? 1u : 0u;
     passed += options.sample_rate == KENC_SAMPLE_RATE_24KHZ ? 1u : 0u;
     passed += kenc_options_validate(&options) == KENC_OK ? 1u : 0u;
     printf("installed consumer: %u/%u %s\n", passed, total,

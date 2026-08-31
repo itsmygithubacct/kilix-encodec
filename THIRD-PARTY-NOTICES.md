@@ -5,9 +5,10 @@ under the root MIT license. No third-party source, generated graph, checkpoint,
 codebook, audio sample, or model weight is vendored in this repository.
 
 The development export group uses ONNX, ONNX Runtime, PyTorch, torchaudio,
-NumPy, EnCodec and einops under their respective terms. They are locked build
-tools and are not bundled into the native library. The future installed ONNX
-Runtime remains separately packaged under its own terms.
+NumPy, EnCodec, einops, Transformers, and safetensors under their respective
+terms. They are locked build tools and are not bundled into the native library.
+The future installed ONNX Runtime remains separately packaged under its own
+terms.
 
 The Meta EnCodec project is reference/export input only. Its project code is
 MIT-licensed upstream. That code license is not a license for every model

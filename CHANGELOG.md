@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-08-31
+
+- Add the network-free 48 kHz stereo file-profile exporter using the exact
+  pinned safetensors input and fixed-shape encoder/decoder ONNX graphs.
+- Add native raw-codebook RVQ, all-bandwidth oracle parity, deterministic
+  three-frame overlap-add, listening-fixture, and unfrozen timing controls.
+- Keep the model input, graphs, raw codebooks, verification outputs, and audio
+  fixtures outside Git; their publication remains owner-reserved.
+
 ## 0.1.1 - 2026-08-31
 
 - Add the network-free, state-explicit 24 kHz encoder, decoder, and RVQ export
