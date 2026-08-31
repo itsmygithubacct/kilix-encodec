@@ -1,7 +1,7 @@
 # kilix-encodec
 
 `kilix-encodec` is the C11 provider boundary for Kilix EnCodec packet encoding
-and decoding. The 0.1.2 tree builds the fail-closed provider skeleton plus
+and decoding. The 0.1.3 tree builds the fail-closed provider skeleton plus
 network-free development exporters for state-explicit 24 kHz streaming graphs
 and the bounded 48 kHz stereo file profile. No model runtime, graph,
 checkpoint, codebook, audio fixture, or weight payload is included.
@@ -38,6 +38,36 @@ checks ONNX contracts, continuous-oracle parity, token identity, deterministic
 epoch recovery, fixed-shape refusal and an H1-ready timing harness. The timing
 result is labelled unfrozen-host measurement and receives accepted H1 credit
 0/1. Blind listening and pinned offline delivery remain 0/1 each.
+
+### Blinded epoch-boundary trial
+
+The verifier's `listening/` directory is input to a facilitator-operated,
+paired forced-choice trial. Preparation copies randomized `A`/`B` pairs into a
+public directory while keeping the answer key in a separate private file:
+
+```sh
+python tools/listening_trial.py prepare \
+  --fixtures /path/to/export-bundle/listening \
+  --public-dir /path/to/empty/public-trial \
+  --answer-key /path/to/private/answer-key.json \
+  --trials 20
+```
+
+After each listener returns a completed copy of `response-template.json`, the
+facilitator scores one or more responses without modifying the public trial:
+
+```sh
+python tools/listening_trial.py score \
+  --public-dir /path/to/public-trial \
+  --answer-key /path/to/private/answer-key.json \
+  --response /path/to/listener-01.json \
+  --result /path/to/private/measured-result.json
+```
+
+The manifest, private mapping, audio pairs, responses, and result are
+digest-bound. Scoring reports exact forced-choice and binomial populations but
+grants blind-listening acceptance credit 0/1; that decision remains with the
+release owner.
 
 The separate 48 kHz stereo file-profile exporter accepts only the exact pinned
 official safetensors input and refuses pickle-capable model files. It exports

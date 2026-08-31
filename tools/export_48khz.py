@@ -22,7 +22,7 @@ from export_24khz import (
 )
 
 
-TOOL_VERSION = "0.1.2"
+TOOL_VERSION = "0.1.3"
 MODEL_REVISION = "c3def8e7185ac8c8efdce6eb8c4a651e487a503e"
 MODEL_FILES = {
     "config.json": (803, "4a914ed15ed5a69e19932d05b0c51f2d22c68ffac70e959a757594cb0cd6e2a7"),

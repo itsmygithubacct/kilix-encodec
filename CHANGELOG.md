@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 - 2026-08-31
+
+- Add a scratch-only blinded epoch-boundary trial that separates public audio
+  pairs from its private answer key and verifies every file identity at score
+  time.
+- Add canonical multi-listener responses, exact one-sided binomial
+  measurements, tamper refusal, and an explicit measured-only result boundary.
+
 ## 0.1.2 - 2026-08-31
 
 - Add the network-free 48 kHz stereo file-profile exporter using the exact
