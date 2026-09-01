@@ -49,23 +49,59 @@ def canonical_json(value: dict[str, Any]) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
+#: Every key the skeleton manifest is expected to carry, with its exact value.
+#: The verifier binds this as a SET as well as per-key, so an added key, a
+#: removed key and a changed value are all caught.  Before this was a set, the
+#: verifier checked 10 keys of a 12-key document and printed "10/10", so a
+#: manifest asserting a full commercial licence grant passed at a full
+#: denominator -- a control whose population was narrower than its subject.
+SKELETON_EXPECTED: dict[str, object] = {
+    "format": "kilix.encodec.asset/v1",
+    "profile": "encodec-24khz-v1",
+    "sample_rate": 24_000,
+    "packet_samples": 960,
+    "bandwidths_kbps": [3, 6, 12],
+    "codebooks_by_bandwidth": {"3": 4, "6": 8, "12": 16},
+    "codebook_cardinality": 1024,
+    "license_disposition": "no-grant-found-fail-closed",
+    "status": "p1-skeleton",
+    "release_qualified": False,
+    "artifacts": [],
+    "delivery": "user-supplied",
+}
+
+
 def verify_skeleton(path: Path) -> tuple[int, int]:
     checks: list[bool] = []
-    checks.append(path.is_file() and not path.is_symlink())
+    failures: list[str] = []
+
+    def check(ok: bool, reason: str) -> None:
+        checks.append(ok)
+        if not ok:
+            failures.append(reason)
+
+    check(path.is_file() and not path.is_symlink(), f"{path} is not a regular file")
     document = json.loads(path.read_text(encoding="utf-8"))
-    checks.append(document.get("format") == "kilix.encodec.asset/v1")
-    checks.append(document.get("profile") == "encodec-24khz-v1")
-    checks.append(document.get("sample_rate") == 24_000)
-    checks.append(document.get("packet_samples") == 960)
-    checks.append(document.get("bandwidths_kbps") == [3, 6, 12])
-    checks.append(
-        document.get("codebooks_by_bandwidth") == {"3": 4, "6": 8, "12": 16}
+
+    # Bind the key SET in both directions, so an unexpected key is a failure
+    # and not merely something the loop never looks at.
+    missing = sorted(set(SKELETON_EXPECTED) - set(document))
+    extra = sorted(set(document) - set(SKELETON_EXPECTED))
+    check(
+        not missing and not extra,
+        f"key set differs: missing={missing} unexpected={extra}",
     )
-    checks.append(document.get("release_qualified") is False)
-    checks.append(document.get("artifacts") == [])
-    checks.append(document.get("delivery") == "user-supplied")
+
+    for key, expected in sorted(SKELETON_EXPECTED.items()):
+        actual = document.get(key)
+        # `release_qualified` must be the JSON boolean false, not 0 or "".
+        ok = actual is False if expected is False else actual == expected
+        check(ok, f"{key}: expected {expected!r}, found {actual!r}")
+
     passed = sum(checks)
     total = len(checks)
+    for reason in failures:
+        print(f"  skeleton check failed: {reason}")
     print(
         f"manifest skeleton checks: {passed}/{total} "
         f"{'PASS' if passed == total else 'FAIL'}"
