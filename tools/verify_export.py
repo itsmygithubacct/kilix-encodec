@@ -71,7 +71,9 @@ SKELETON_EXPECTED: dict[str, object] = {
 }
 
 
-def verify_skeleton(path: Path) -> tuple[int, int]:
+def verify_skeleton(
+    path: Path, label: str = "manifest skeleton checks"
+) -> tuple[int, int]:
     checks: list[bool] = []
     failures: list[str] = []
 
@@ -103,7 +105,7 @@ def verify_skeleton(path: Path) -> tuple[int, int]:
     for reason in failures:
         print(f"  skeleton check failed: {reason}")
     print(
-        f"manifest skeleton checks: {passed}/{total} "
+        f"{label}: {passed}/{total} "
         f"{'PASS' if passed == total else 'FAIL'}"
     )
     if passed != total:
@@ -860,7 +862,10 @@ def verify_bundle(
 def self_test(skeleton: Path) -> None:
     passed = 0
     total = 7
-    verify_skeleton(skeleton)
+    # Labelled distinctly: `make test` also runs `--skeleton` on the same
+    # manifest, and two identical lines left a reader no way to tell which
+    # mode a failure came from.
+    verify_skeleton(skeleton, label="self-test manifest skeleton checks")
     passed += 1
     sample = {"b": 2, "a": 1}
     if canonical_json(sample) == b'{\n  "a": 1,\n  "b": 2\n}\n':
