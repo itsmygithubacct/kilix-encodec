@@ -7,4 +7,5 @@ Name: kilix-encodec
 Description: Bounded C11 EnCodec packet provider for Kilix
 Version: 0.1.5
 Libs: -L${libdir} -lkilix-encodec
+Libs.private: @PRIVATE_LIBS@
 Cflags: -I${includedir}

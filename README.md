@@ -1,10 +1,12 @@
 # kilix-encodec
 
-`kilix-encodec` is the C11 provider boundary for Kilix EnCodec packet encoding
-and decoding. The 0.1.5 tree builds the fail-closed provider skeleton plus
-network-free development exporters for state-explicit 24 kHz streaming graphs
-and the bounded 48 kHz stereo file profile. No model runtime, graph,
-checkpoint, codebook, audio fixture, or weight payload is included.
+`kilix-encodec` is the C11 provider for Kilix EnCodec packet encoding and
+decoding. Its optional native ONNX backend implements stateful 24 kHz mono
+encoding and decoding at 3, 6 and 12 kb/s. Development exporters also cover
+the 48 kHz stereo file profile. No runtime binary, graph, checkpoint, codebook,
+audio fixture, or weight payload is included. Native functional support does
+not establish release qualification, consumer integration, or listening
+acceptance.
 
 ## Build and verify
 
@@ -14,10 +16,54 @@ make sanitize
 uv sync --frozen
 ```
 
-`make test` builds all 3 of 3 products, runs 4 of 4 C test binaries, and checks
+`make test` builds all 3 of 3 products, runs 5 of 5 C test binaries, and checks
 the skeleton manifest with the locked Python tool environment. `make sanitize`
-repeats the same 4 of 4 C binaries under AddressSanitizer and
+repeats the same 5 of 5 C binaries under AddressSanitizer and
 UndefinedBehaviorSanitizer.
+
+The default build requires no neural runtime and refuses model loading. To
+build the native backend, install the selected ONNX Runtime 1.21 C API and
+OpenSSL development libraries, then use an explicit local export:
+
+```sh
+make ONNX=1
+make ONNX=1 test-native MODEL_DIR=/path/to/pinned/24khz-export
+# Optional independent token/PCM comparison, using the locked export group:
+uv run --frozen --group export make ONNX=1 test-native \
+  MODEL_DIR=/path/to/pinned/24khz-export ORACLE=1
+```
+
+`ONNX_CFLAGS` and `ONNX_LIBS` can select a separately staged runtime. Its shared
+libraries must also be on the executable's loader path. Native and default
+builds use different directories (`build-onnx` and `build`). Static consumers
+can obtain runtime, crypto and math dependencies with `pkg-config --static`.
+
+The native loader accepts exactly the eight 24 kHz graphs and canonical
+manifest emitted by exporter 0.1.5. It checks their compiled byte counts and
+SHA-256 digests before initializing ORT, then creates sessions from those same
+verified bytes. Asset symlinks, special files and substitutions are refused.
+Tensor names, ranks, dimensions and types are checked before allocating stream
+buffers. Each stream has separate recurrent state and 1 or 2 CPU threads;
+inference uses caller-owned output storage and preallocated state tensors.
+
+### Packet contract
+
+KMA2 packets start with bytes `4b 4d 41 02`, followed by canonical unsigned
+LEB128 integers for profile (1), epoch, packet index and PTS in milliseconds;
+one flags byte; then canonical sample-count and payload-byte-count integers.
+The payload stores 10-bit tokens most-significant-bit first, ordered by time
+and then codebook. Codebooks (4, 8 or 16) are selected outside the packet by
+the agreed stream profile. The parser verifies the exact derived payload
+length, bounds every integer and refuses nonminimal encodings, trailing bytes,
+unknown flags, out-of-range values and incompatible profiles.
+
+Every regular encoder call consumes 960 samples (40 ms). The first packet and
+each configured epoch boundary carry RESET; explicit encoder reset also marks
+DISCONTINUITY. A decoder refuses dependent packets after loss or reordering
+until it receives a later RESET. Replayed epochs are refused. Short output
+buffers and malformed packets do not write output. The native tests exercise
+all rates, independent streams, reset recovery, asset substitution, and exact
+tokens/PCM against independent Python ORT sessions when `ORACLE=1` is set.
 
 ## Export controls
 
@@ -104,8 +150,9 @@ the frozen fixture.
   packet and PCM storage; mutable encoder/decoder state is never shared.
 - The native library performs 0 of 1 network operations and invokes 0 of 1
   Python runtimes.
-- The repository contains 0 of 2 required model artifacts. Model loading
-  returns `KENC_ERR_MODEL` until the later stateful-ONNX phase lands.
+- The repository contains no model artifacts. Without `ONNX=1`, model loading
+  returns `KENC_ERR_MODEL`. Native builds require the exact caller-supplied
+  24 kHz bundle; they do not claim that bundle is release-qualified.
 - The export tool performs 0 of 1 checkpoint downloads. It opens only the
   caller-supplied regular file, verifies its exact size and SHA-256, and uses
   PyTorch's restricted weights-only loader.

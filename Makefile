@@ -1,5 +1,6 @@
 PROJECT := kilix-encodec
-BUILD ?= build
+ONNX ?= 0
+BUILD ?= $(if $(filter 1,$(ONNX)),build-onnx,build)
 PREFIX ?= /usr/local
 DESTDIR ?=
 
@@ -14,6 +15,15 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -fPIC -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wstrict-prototypes -Wmissing-prototypes -Wformat=2 -Werror
 LDFLAGS ?=
+LDLIBS ?=
+
+ifeq ($(ONNX),1)
+ONNX_CFLAGS ?= -I/usr/include/onnxruntime
+ONNX_LIBS ?= -lonnxruntime
+CPPFLAGS += -DKENC_WITH_ONNX $(ONNX_CFLAGS)
+LDLIBS += $(ONNX_LIBS) -lcrypto -lm
+PRIVATE_LIBS := -lonnxruntime -lcrypto -lm
+endif
 
 LIB_SOURCES := \
 	src/context.c \
@@ -24,7 +34,7 @@ LIB_SOURCES := \
 	src/onnx.c
 LIB_OBJECTS := $(LIB_SOURCES:src/%.c=$(BUILD)/%.o)
 LIB_DEPS := $(LIB_OBJECTS:.o=.d)
-TEST_NAMES := packet rvq stream model
+TEST_NAMES := packet rvq stream model wire
 TEST_BINS := $(TEST_NAMES:%=$(BUILD)/test-%)
 
 STATIC_LIB := $(BUILD)/lib$(PROJECT).a
@@ -35,7 +45,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test
+.PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -49,19 +59,19 @@ $(STATIC_LIB): $(LIB_OBJECTS)
 	$(AR) rcs $@ $^
 
 $(SHARED_LIB): $(LIB_OBJECTS)
-	$(CC) -shared -Wl,-soname,lib$(PROJECT).so.0 $(LDFLAGS) -o $@ $^
+	$(CC) -shared -Wl,-soname,lib$(PROJECT).so.0 $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(SHARED_LINK): $(SHARED_LIB)
 	ln -sfn $(notdir $(SHARED_LIB)) $@
 
 $(COMMAND): tools/kenc.c $(STATIC_LIB) | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(STATIC_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(STATIC_LIB) $(LDLIBS)
 
 $(PKG_CONFIG_FILE): kilix-encodec.pc.in VERSION | $(BUILD)
-	sed 's|@PREFIX@|$(PREFIX)|g' $< > $@
+	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@PRIVATE_LIBS@|$(PRIVATE_LIBS)|g' $< > $@
 
 $(BUILD)/test-%: tests/test_%.c tests/test.h $(STATIC_LIB) | $(BUILD)
-	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $(LDFLAGS) -o $@ $< $(STATIC_LIB)
+	$(CC) $(CPPFLAGS) -Isrc -Itests $(CFLAGS) $(LDFLAGS) -o $@ $< $(STATIC_LIB) $(LDLIBS)
 
 test: all $(TEST_BINS)
 	@set -eu; passed=0; total=$(words $(TEST_BINS)); \
@@ -75,15 +85,23 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/verify_export.py --self-test; \
 	$(PYTHON) tools/export_24khz.py --version; \
 	$(PYTHON) tools/export_48khz.py --version; \
-	TMPDIR=/home/pleb/scratch-workers \
-		$(PYTHON) tools/export_48khz.py --self-test; \
+	$(PYTHON) tools/export_48khz.py --self-test; \
 	$(PYTHON) tools/listening_trial.py --version; \
-	TMPDIR=/home/pleb/scratch-workers \
-		$(PYTHON) tools/listening_trial.py --self-test; \
+	$(PYTHON) tools/listening_trial.py --self-test; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
 
 export-env:
 	uv sync --frozen --group export
+
+# MODEL_DIR must be an explicit, previously exported local bundle. This target
+# neither downloads assets nor marks them release-qualified.
+test-native-c: all $(BUILD)/test-native
+	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
+	@test -n "$(MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR is required'; exit 2; }
+	$(BUILD)/test-native "$(MODEL_DIR)"
+
+test-native: test-native-c
+	$(PYTHON) tests/test_native.py "$(SHARED_LIB)" "$(MODEL_DIR)" $(if $(filter 1,$(ORACLE)),--oracle,)
 
 export-test:
 	@test -n "$(CHECKPOINT)" || \

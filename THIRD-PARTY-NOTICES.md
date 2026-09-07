@@ -7,8 +7,10 @@ codebook, audio sample, or model weight is vendored in this repository.
 The development export group uses ONNX, ONNX Runtime, PyTorch, torchaudio,
 NumPy, EnCodec, einops, Transformers, and safetensors under their respective
 terms. They are locked build tools and are not bundled into the native library.
-The future installed ONNX Runtime remains separately packaged under its own
-terms.
+The optional native backend links separately installed ONNX Runtime and OpenSSL
+libraries under their respective terms. Their binaries and source are not
+vendored here. Graph-contract metadata lists identities and tensor interfaces;
+it contains no learned model parameters.
 
 The Meta EnCodec project is reference/export input only. Its project code is
 MIT-licensed upstream. That code license is not a license for every model

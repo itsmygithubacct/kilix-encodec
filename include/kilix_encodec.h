@@ -16,6 +16,7 @@ extern "C" {
 #define KENC_PACKET_SAMPLES 960u
 #define KENC_DEFAULT_EPOCH_PACKETS 25u
 #define KENC_CODEBOOK_CARDINALITY 1024u
+#define KENC_MAX_PACKET_BYTES 160u
 
 #define KENC_PACKET_FLAG_RESET UINT8_C(0x01)
 #define KENC_PACKET_FLAG_END UINT8_C(0x02)
@@ -53,9 +54,19 @@ kenc_options kenc_options_default(void);
 kenc_result kenc_options_validate(const kenc_options *options);
 const char *kenc_result_string(kenc_result result);
 
+/* Load the exact pinned 24 kHz user-supplied export. Symlinks, special files,
+ * changed manifests and changed graph bytes are refused before ORT parses
+ * anything. Builds without ONNX support return KENC_ERR_MODEL. No network or
+ * Python is used. Successful streams retain the model until they are freed. */
 kenc_result kenc_model_load(kenc_model **out, const char *asset_dir);
 void kenc_model_free(kenc_model *model);
 
+/* A context belongs to one stream and must not be used concurrently. The model
+ * can be shared by independent contexts. PCM is signed native-endian mono at
+ * 24 kHz; each push consumes exactly 960 samples. PTS advances by 40 ms until an
+ * explicit reset. The encoder alone owns RESET and the configured epoch cadence.
+ * A buffer of KENC_MAX_PACKET_BYTES always holds a supported packet. A short
+ * output buffer produces no bytes and does not advance the stream. */
 kenc_result kenc_encoder_create(
     kenc_encoder **out, kenc_model *model, const kenc_options *options);
 void kenc_encoder_reset(kenc_encoder *encoder);
@@ -64,6 +75,10 @@ kenc_result kenc_encoder_push_s16(
     uint64_t pts_ms, uint8_t *packet, size_t capacity, size_t *written);
 void kenc_encoder_free(kenc_encoder *encoder);
 
+/* Loss or reordering requires a later RESET packet. A newly created/reset
+ * decoder joins at any RESET; a running decoder refuses replayed epochs.
+ * Malformed packets and short output buffers do not write PCM. The decoder
+ * returns only verified packet metadata and at most KENC_PACKET_SAMPLES. */
 kenc_result kenc_decoder_create(
     kenc_decoder **out, kenc_model *model, const kenc_options *options);
 void kenc_decoder_reset(kenc_decoder *decoder);
