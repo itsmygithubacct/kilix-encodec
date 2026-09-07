@@ -16,9 +16,9 @@ make sanitize
 uv sync --frozen
 ```
 
-`make test` builds all 3 of 3 products, runs 5 of 5 C test binaries, and checks
-the skeleton manifest with the locked Python tool environment. `make sanitize`
-repeats the same 5 of 5 C binaries under AddressSanitizer and
+`make test` builds all 3 of 3 products, runs 6 of 6 C test binaries, exercises
+CLI format refusals and checks the skeleton manifest with the locked Python
+tool environment. `make sanitize` repeats the C and CLI checks under AddressSanitizer and
 UndefinedBehaviorSanitizer.
 
 The default build requires no neural runtime and refuses model loading. To
@@ -62,6 +62,47 @@ uv run --frozen --group export make ONNX=1 test-stereo \
   MODEL_DIR=/path/to/pinned/48khz-export \
   CHECKPOINT_DIR=/path/to/pinned/48khz-safetensors
 ```
+
+The native CLI converts PCM16 WAV files with an explicit model directory:
+
+```sh
+build-onnx/kenc encode --model-dir /path/to/pinned/24khz-export \
+  --profile 24k --bitrate 6 input-mono-24000.wav output.kenc
+build-onnx/kenc encode --model-dir /path/to/pinned/48khz-export \
+  --profile 48k --bitrate 12 input-stereo-48000.wav output-stereo.kenc
+build-onnx/kenc decode --model-dir /path/to/pinned/48khz-export \
+  output-stereo.kenc decoded.wav
+```
+
+`--threads 1|2` controls native inference. Inputs must match the selected rate
+and channel count; this command does not resample. The parser bounds the WAV
+chunk count and every length and rejects symlinks and special input files.
+Existing outputs are preserved with exclusive creation. A failed conversion
+retains its newly created incomplete output for caller cleanup; no path is
+deleted. The complete header is written last and synchronized on success.
+Keep an input WAV unchanged during encoding. Decoding uses the library's sealed
+file snapshot. Files exceeding the standard RIFF output-size limit are refused.
+Offline conversion reports progress and estimated remaining time on stderr.
+
+`kenc decode --seek-sample N` starts at the verified epoch or stereo frame
+boundary at or before N and reports the actual starting sample. The shared
+`kenc_file_source_*` decoder performs stereo pre-roll internally, returns
+interleaved float PCM and trims the final block to the exact duration. Its
+synchronous model loading/inference must run in an owned worker in interactive
+consumers. Short output buffers do not advance it, and a runtime failure
+requires a successful seek before further pulls. Both profiles share this
+source adapter; it owns no output device or DSP.
+
+Native source and CLI tests exercise lifetime and buffer behavior, all seven
+bitrate rows, exact duration, preserving outputs and sample-exact indexed seeks:
+
+```sh
+make ONNX=1 test-source-c test-file-cli \
+  MODEL_DIR=/path/to/24k-export STEREO_MODEL_DIR=/path/to/48k-export
+```
+
+These are functional checks, without a new capacity or consumer qualification
+claim.
 
 The public caller-owned PCM and PTS inputs are the deterministic test boundary.
 Tests provide seeded synthetic inputs through these same APIs; no production

@@ -1,4 +1,5 @@
 #include "kilix_encodec.h"
+#include "file_command.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -37,7 +38,11 @@ int main(int argc, char **argv)
     }
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         printf("usage: kenc --version | --selftest | --help\n");
+        kenc_file_usage();
         return 0;
+    }
+    if (argc >= 2 && (strcmp(argv[1], "encode") == 0 || strcmp(argv[1], "decode") == 0)) {
+        return kenc_file_command(argc, argv);
     }
 
     fprintf(stderr, "usage: kenc --version | --selftest | --help\n");

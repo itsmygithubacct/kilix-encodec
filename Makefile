@@ -28,6 +28,7 @@ endif
 LIB_SOURCES := \
 	src/context.c \
 	src/container.c \
+	src/source.c \
 	src/encoder.c \
 	src/decoder.c \
 	src/rvq.c \
@@ -47,7 +48,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 .DEFAULT_GOAL := all
 
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
-.PHONY: test-stereo test-stereo-c test-container-oracle
+.PHONY: test-stereo test-stereo-c test-container-oracle test-source-c test-file-cli
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -66,8 +67,8 @@ $(SHARED_LIB): $(LIB_OBJECTS)
 $(SHARED_LINK): $(SHARED_LIB)
 	ln -sfn $(notdir $(SHARED_LIB)) $@
 
-$(COMMAND): tools/kenc.c $(STATIC_LIB) | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(STATIC_LIB) $(LDLIBS)
+$(COMMAND): tools/kenc.c tools/file_command.c tools/file_command.h $(STATIC_LIB) | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tools/kenc.c tools/file_command.c $(STATIC_LIB) $(LDLIBS) -lm
 
 $(PKG_CONFIG_FILE): kilix-encodec.pc.in VERSION | $(BUILD)
 	sed -e 's|@PREFIX@|$(PREFIX)|g' -e 's|@PRIVATE_LIBS@|$(PRIVATE_LIBS)|g' $< > $@
@@ -82,6 +83,7 @@ test: all $(TEST_BINS)
 		passed=$$((passed + 1)); \
 	done; \
 	$(COMMAND) --selftest; \
+	$(PYTHON) tests/test_file_cli.py "$(COMMAND)"; \
 	$(PYTHON) tools/verify_export.py --skeleton \
 		models/encodec-24khz-v1/manifest.json; \
 	$(PYTHON) tools/verify_export.py --self-test; \
@@ -116,6 +118,14 @@ test-stereo: test-stereo-c
 
 test-container-oracle: all
 	$(PYTHON) tests/test_container_oracle.py "$(SHARED_LIB)"
+
+test-source-c: all $(BUILD)/test-source
+	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
+	@test -n "$(MODEL_DIR)" -a -n "$(STEREO_MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR and STEREO_MODEL_DIR are required'; exit 2; }
+	$(BUILD)/test-source "$(MODEL_DIR)" "$(STEREO_MODEL_DIR)"
+
+test-file-cli: all
+	$(PYTHON) tests/test_file_cli.py "$(COMMAND)" $(if $(MODEL_DIR),--mono-assets "$(MODEL_DIR)",) $(if $(STEREO_MODEL_DIR),--stereo-assets "$(STEREO_MODEL_DIR)",)
 
 export-test:
 	@test -n "$(CHECKPOINT)" || \

@@ -26,6 +26,7 @@ typedef struct {
 
 typedef struct kenc_file_reader kenc_file_reader;
 typedef struct kenc_file_writer kenc_file_writer;
+typedef struct kenc_file_source kenc_file_source;
 
 /* Caller-owned overlap state, reset on source changes and indexed seeks. The
  * frame is interleaved stereo float; after apply, its first 47520 samples per
@@ -56,6 +57,24 @@ kenc_result kenc_file_reader_next(kenc_file_reader *reader,
 kenc_result kenc_file_reader_seek(kenc_file_reader *reader,
     uint64_t requested_sample, uint64_t *actual_sample);
 void kenc_file_reader_free(kenc_file_reader *reader);
+
+/* One local-file decoder for CLI and player adapters. Model loading and pull
+ * are synchronous inference operations: interactive consumers must call them
+ * from an owned worker, never a UI/audio callback. Asset directories are
+ * explicit; only the directory for the validated file profile is used.
+ * Pull writes interleaved float PCM with at most 960 mono / 47520 stereo
+ * samples per channel. EOF succeeds with zero samples. Short capacity does
+ * not advance the source or write PCM. Seek returns an indexed boundary and
+ * performs stereo pre-roll internally, preserving continuous-playback overlap.
+ * A runtime failure requires a successful seek before pulling again. */
+kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
+    const char *mono_assets, const char *stereo_assets, uint8_t threads,
+    kenc_file_info *info);
+kenc_result kenc_file_source_pull_f32(kenc_file_source *source, float *pcm,
+    size_t scalar_capacity, size_t *samples_written, uint64_t *sample_position);
+kenc_result kenc_file_source_seek(kenc_file_source *source,
+    uint64_t requested_sample, uint64_t *actual_sample);
+void kenc_file_source_free(kenc_file_source *source);
 
 /* The writer duplicates an empty writable regular file. append accepts complete
  * codec-authored records; finish installs the verified index and header only
