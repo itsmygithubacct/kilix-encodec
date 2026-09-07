@@ -17,6 +17,9 @@ extern "C" {
 #define KENC_DEFAULT_EPOCH_PACKETS 25u
 #define KENC_CODEBOOK_CARDINALITY 1024u
 #define KENC_MAX_PACKET_BYTES 160u
+#define KENC_STEREO_FRAME_SAMPLES 48000u
+#define KENC_STEREO_STRIDE_SAMPLES 47520u
+#define KENC_STEREO_LATENT_FRAMES 150u
 
 #define KENC_PACKET_FLAG_RESET UINT8_C(0x01)
 #define KENC_PACKET_FLAG_END UINT8_C(0x02)
@@ -25,6 +28,7 @@ extern "C" {
 typedef struct kenc_model kenc_model;
 typedef struct kenc_encoder kenc_encoder;
 typedef struct kenc_decoder kenc_decoder;
+typedef struct kenc_stereo kenc_stereo;
 
 typedef enum {
     KENC_OK = 0,
@@ -87,6 +91,23 @@ kenc_result kenc_decoder_pull_s16(
     int16_t *pcm, size_t pcm_capacity, size_t *samples_written,
     kenc_packet_info *info);
 void kenc_decoder_free(kenc_decoder *decoder);
+
+/* Separate noncausal 48 kHz stereo frame profile, for local files only. It
+ * cannot be passed to the 24 kHz streaming/KMX API. Input/output floats are
+ * interleaved stereo; each frame contains exactly 48000 samples per channel.
+ * Callers own all buffers and overlap-add adjacent decoded frames at the
+ * 47520-sample stride. Codes are codebook-major with a 150-frame stride.
+ * Only 2/4/8/16 codebooks and 1/2 threads are supported. No network/Python or
+ * model publication occurs. The context must not be used concurrently. */
+kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+    uint8_t codebooks, uint8_t threads);
+kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,
+    const float *pcm, size_t sample_count, uint16_t *codes,
+    size_t code_capacity, float *scale);
+kenc_result kenc_stereo_decode_frame(kenc_stereo *codec,
+    const uint16_t *codes, size_t code_count, float scale,
+    float *pcm, size_t pcm_capacity);
+void kenc_stereo_free(kenc_stereo *codec);
 
 #ifdef __cplusplus
 }

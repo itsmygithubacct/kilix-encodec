@@ -46,6 +46,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 .DEFAULT_GOAL := all
 
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
+.PHONY: test-stereo test-stereo-c
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -102,6 +103,15 @@ test-native-c: all $(BUILD)/test-native
 
 test-native: test-native-c
 	$(PYTHON) tests/test_native.py "$(SHARED_LIB)" "$(MODEL_DIR)" $(if $(filter 1,$(ORACLE)),--oracle,)
+
+test-stereo-c: all $(BUILD)/test-stereo
+	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
+	@test -n "$(MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR is required'; exit 2; }
+	$(BUILD)/test-stereo "$(MODEL_DIR)"
+
+test-stereo: test-stereo-c
+	@test -n "$(CHECKPOINT_DIR)" || { printf '%s\n' 'CHECKPOINT_DIR is required'; exit 2; }
+	$(PYTHON) tests/test_stereo.py "$(SHARED_LIB)" "$(MODEL_DIR)" "$(CHECKPOINT_DIR)"
 
 export-test:
 	@test -n "$(CHECKPOINT)" || \

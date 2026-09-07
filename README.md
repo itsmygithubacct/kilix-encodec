@@ -2,8 +2,8 @@
 
 `kilix-encodec` is the C11 provider for Kilix EnCodec packet encoding and
 decoding. Its optional native ONNX backend implements stateful 24 kHz mono
-encoding and decoding at 3, 6 and 12 kb/s. Development exporters also cover
-the 48 kHz stereo file profile. No runtime binary, graph, checkpoint, codebook,
+encoding and decoding at 3, 6 and 12 kb/s, plus separate 48 kHz stereo frame
+encoding and decoding at 3, 6, 12 and 24 kb/s. No runtime binary, graph, checkpoint, codebook,
 audio fixture, or weight payload is included. Native functional support does
 not establish release qualification, consumer integration, or listening
 acceptance.
@@ -45,6 +45,38 @@ verified bytes. Asset symlinks, special files and substitutions are refused.
 Tensor names, ranks, dimensions and types are checked before allocating stream
 buffers. Each stream has separate recurrent state and 1 or 2 CPU threads;
 inference uses caller-owned output storage and preallocated state tensors.
+
+The separate `kenc_stereo_*` API verifies the exact 48 kHz manifest, two graphs
+and raw codebooks before ORT initialization. It processes noncausal one-second
+frames, preserving per-frame normalization. Input/output float PCM is
+interleaved stereo; codes are codebook-major. The C quantizer is checked against
+the official safetensors model on identical latents, and every corpus/rate row
+must meet the existing end-to-end token and waveform tolerances. These are
+frame primitives: the bounded file container, overlap-add, indexed seek and
+consumer integration remain separate work. The stereo API is never a KMX
+streaming profile.
+
+```sh
+uv run --frozen --group export make ONNX=1 test-stereo \
+  MODEL_DIR=/path/to/pinned/48khz-export \
+  CHECKPOINT_DIR=/path/to/pinned/48khz-safetensors
+```
+
+The public caller-owned PCM and PTS inputs are the deterministic test boundary.
+Tests provide seeded synthetic inputs through these same APIs; no production
+environment switch substitutes neural output or bypasses model verification.
+
+`tools/bench_native.py` measures the native library directly using standard
+Python and the public C ABI. It records every measured call, nearest-rank p99,
+binary/manifest/runtime digests and peak RSS. The default 24 kHz population is
+1,000 calls in each of six encode/decode rows. The stereo profile uses 100 calls
+in each of four decoder rows. Outputs explicitly distinguish unfrozen-host
+measurements from a verified H1 fixture and do not grant whole-release credit.
+
+```sh
+python tools/bench_native.py --library build-onnx/libkilix-encodec.so \
+  --assets /path/to/pinned/24khz-export --output /path/to/new-result.json
+```
 
 ### Packet contract
 
@@ -152,7 +184,7 @@ the frozen fixture.
   Python runtimes.
 - The repository contains no model artifacts. Without `ONNX=1`, model loading
   returns `KENC_ERR_MODEL`. Native builds require the exact caller-supplied
-  24 kHz bundle; they do not claim that bundle is release-qualified.
+  bundle for the chosen profile; they do not claim it is release-qualified.
 - The export tool performs 0 of 1 checkpoint downloads. It opens only the
   caller-supplied regular file, verifies its exact size and SHA-256, and uses
   PyTorch's restricted weights-only loader.

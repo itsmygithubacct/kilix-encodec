@@ -13,6 +13,34 @@ kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
     return KENC_ERR_MODEL;
 }
 void kenc_model_free(kenc_model *model) { free(model); }
+kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+    uint8_t codebooks, uint8_t threads)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (asset_dir == NULL || asset_dir[0] == '\0'
+        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
+        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    return KENC_ERR_MODEL;
+}
+void kenc_stereo_free(kenc_stereo *codec) { free(codec); }
+kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,
+    const float *pcm, size_t sample_count, uint16_t *codes,
+    size_t code_capacity, float *scale)
+{
+    (void)codec; (void)pcm; (void)sample_count; (void)codes;
+    (void)code_capacity; (void)scale;
+    return KENC_ERR_RUNTIME;
+}
+kenc_result kenc_stereo_decode_frame(kenc_stereo *codec,
+    const uint16_t *codes, size_t code_count, float scale,
+    float *pcm, size_t pcm_capacity)
+{
+    (void)codec; (void)codes; (void)code_count; (void)scale;
+    (void)pcm; (void)pcm_capacity;
+    return KENC_ERR_RUNTIME;
+}
+
 kenc_result kenc_native_create(kenc_native_stream **out, kenc_model *model,
     const kenc_options *options, int encoding)
 {
@@ -433,6 +461,236 @@ kenc_result kenc_native_decode(kenc_native_stream *stream,
     stream->bank = 1u - stream->bank;
 done:
     return result;
+}
+
+
+/* The noncausal stereo profile has a separate context, contracts and loader.
+ * It never shares causal state or a KMA2 profile ID with 24 kHz streaming. */
+struct kenc_stereo {
+    const OrtApi *api;
+    OrtEnv *environment;
+    OrtSession *encoder;
+    OrtSession *decoder;
+    OrtMemoryInfo *memory;
+    OrtIoBinding *encode_binding;
+    OrtIoBinding *decode_binding;
+    native_buffer input;
+    native_buffer latent;
+    native_buffer scale;
+    native_buffer output;
+    float *books;
+    float norms[16u * KENC_CODEBOOK_CARDINALITY];
+    float residual[128u * KENC_STEREO_LATENT_FRAMES];
+    uint16_t tokens[16u * KENC_STEREO_LATENT_FRAMES];
+    uint8_t codebooks;
+};
+
+static const kenc_tensor_contract stereo_audio = { "audio", 3u, {1, 2, 48000} };
+static const kenc_tensor_contract stereo_latent = { "latent", 3u, {1, 128, 150} };
+static const kenc_tensor_contract stereo_quantized = { "quantized", 3u, {1, 128, 150} };
+static const kenc_tensor_contract stereo_scale = { "scale", 2u, {1, 1, 0} };
+
+static kenc_result stereo_session(kenc_stereo *codec, const void *graph,
+    size_t graph_size, uint8_t threads, int encoding, OrtSession **out)
+{
+    const OrtApi *api = codec->api;
+    OrtSessionOptions *options = NULL;
+    OrtSession *session = NULL;
+    OrtAllocator *allocator = NULL;
+    size_t inputs = 0u, outputs = 0u;
+    kenc_result result = KENC_OK;
+    ORT_TRY(api->CreateSessionOptions(&options));
+    ORT_TRY(api->SetIntraOpNumThreads(options, (int)threads));
+    ORT_TRY(api->SetInterOpNumThreads(options, 1));
+    ORT_TRY(api->SetSessionExecutionMode(options, ORT_SEQUENTIAL));
+    ORT_TRY(api->SetSessionGraphOptimizationLevel(options, ORT_ENABLE_ALL));
+    ORT_TRY(api->AddSessionConfigEntry(options, "session.intra_op.allow_spinning", "0"));
+    ORT_TRY(api->AddSessionConfigEntry(options, "session.inter_op.allow_spinning", "0"));
+    ORT_TRY(api->CreateSessionFromArray(codec->environment, graph, graph_size, options, &session));
+    ORT_TRY(api->GetAllocatorWithDefaultOptions(&allocator));
+    ORT_TRY(api->SessionGetInputCount(session, &inputs));
+    ORT_TRY(api->SessionGetOutputCount(session, &outputs));
+    if (inputs != (encoding ? 1u : 2u) || outputs != (encoding ? 2u : 1u)) {
+        result = KENC_ERR_MODEL; goto done;
+    }
+    result = check_tensor(api, session, allocator, 0u, 1,
+        encoding ? &stereo_audio : &stereo_quantized);
+    if (result != KENC_OK) { goto done; }
+    result = check_tensor(api, session, allocator, 0u, 0,
+        encoding ? &stereo_latent : &stereo_audio);
+    if (result != KENC_OK) { goto done; }
+    result = check_tensor(api, session, allocator, 1u, !encoding, &stereo_scale);
+    if (result != KENC_OK) { goto done; }
+    *out = session;
+    session = NULL;
+done:
+    if (session != NULL) { api->ReleaseSession(session); }
+    if (options != NULL) { api->ReleaseSessionOptions(options); }
+    return result;
+}
+
+static kenc_result stereo_buffer(kenc_stereo *codec, native_buffer *buffer,
+    const kenc_tensor_contract *contract)
+{
+    size_t bytes = sizeof(float);
+    for (size_t i = 0u; i < contract->rank; ++i) { bytes *= (size_t)contract->shape[i]; }
+    buffer->data = calloc(1u, bytes);
+    if (buffer->data == NULL) { return KENC_ERR_MEMORY; }
+    buffer->bytes = bytes;
+    return ort_result(codec->api, codec->api->CreateTensorWithDataAsOrtValue(
+        codec->memory, buffer->data, bytes, contract->shape, contract->rank,
+        ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &buffer->tensor));
+}
+
+void kenc_stereo_free(kenc_stereo *codec)
+{
+    if (codec == NULL) { return; }
+    const OrtApi *api = codec->api;
+    if (codec->encode_binding != NULL) { api->ReleaseIoBinding(codec->encode_binding); }
+    if (codec->decode_binding != NULL) { api->ReleaseIoBinding(codec->decode_binding); }
+    free_buffer(api, &codec->input);
+    free_buffer(api, &codec->output);
+    free_buffer(api, &codec->latent);
+    free_buffer(api, &codec->scale);
+    if (codec->encoder != NULL) { api->ReleaseSession(codec->encoder); }
+    if (codec->decoder != NULL) { api->ReleaseSession(codec->decoder); }
+    if (codec->memory != NULL) { api->ReleaseMemoryInfo(codec->memory); }
+    if (codec->environment != NULL) { api->ReleaseEnv(codec->environment); }
+    free(codec->books);
+    free(codec);
+}
+
+kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+    uint8_t codebooks, uint8_t threads)
+{
+    static const char *const files[4] = {
+        "manifest.json", "encoder_frame_op17.onnx", "decoder_frame_op17.onnx", "rvq-codebooks.f32le"
+    };
+    static const size_t sizes[4] = {3901u, 29909926u, 29882042u, 8388608u};
+    static const char *const hashes[4] = {
+        "844d8fcfdb2fb13d0485a9429c83debb590dcf964244fe0d06c50b5ec3380e38",
+        "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a",
+        "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1",
+        "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"
+    };
+    kenc_stereo *codec = NULL;
+    const OrtApi *api = NULL;
+    void *data[4] = {NULL};
+    int directory = -1;
+    kenc_result result = KENC_ERR_MODEL;
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (asset_dir == NULL || asset_dir[0] == '\0'
+        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
+        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    directory = open(asset_dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (directory < 0) { return KENC_ERR_MODEL; }
+    for (size_t i = 0u; i < 4u; ++i) {
+        result = read_verified(directory, files[i], sizes[i], hashes[i], &data[i]);
+        if (result != KENC_OK) { goto done; }
+    }
+    codec = calloc(1u, sizeof(*codec));
+    if (codec == NULL) { result = KENC_ERR_MEMORY; goto done; }
+    api = OrtGetApiBase()->GetApi(21u);
+    if (api == NULL) { result = KENC_ERR_RUNTIME; goto done; }
+    codec->api = api;
+    codec->codebooks = codebooks;
+    codec->books = data[3];
+    data[3] = NULL;
+    /* Decode little-endian IEEE float32 bytes in place, independently of the
+     * host byte order. Only already hash-verified codebooks reach this step. */
+    _Static_assert(sizeof(float) == 4u, "the stereo profile requires float32");
+    for (size_t i = 0u; i < sizes[3] / 4u; ++i) {
+        const unsigned char *bytes = (const unsigned char *)codec->books + i * 4u;
+        uint32_t bits = (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8u
+            | (uint32_t)bytes[2] << 16u | (uint32_t)bytes[3] << 24u;
+        memcpy(&codec->books[i], &bits, 4u);
+        if (!isfinite(codec->books[i])) { result = KENC_ERR_MODEL; goto done; }
+        codec->norms[i / 128u] += codec->books[i] * codec->books[i];
+    }
+    ORT_TRY(api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "kilix-encodec-stereo", &codec->environment));
+    result = stereo_session(codec, data[1], sizes[1], threads, 1, &codec->encoder);
+    if (result != KENC_OK) { goto done; }
+    result = stereo_session(codec, data[2], sizes[2], threads, 0, &codec->decoder);
+    if (result != KENC_OK) { goto done; }
+    ORT_TRY(api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &codec->memory));
+    native_buffer *buffers[] = {&codec->input, &codec->output, &codec->latent, &codec->scale};
+    const kenc_tensor_contract *contracts[] = {&stereo_audio, &stereo_audio, &stereo_latent, &stereo_scale};
+    for (size_t i = 0u; i < 4u; ++i) {
+        result = stereo_buffer(codec, buffers[i], contracts[i]);
+        if (result != KENC_OK) { goto done; }
+    }
+    ORT_TRY(api->CreateIoBinding(codec->encoder, &codec->encode_binding));
+    ORT_TRY(api->BindInput(codec->encode_binding, "audio", codec->input.tensor));
+    ORT_TRY(api->BindOutput(codec->encode_binding, "latent", codec->latent.tensor));
+    ORT_TRY(api->BindOutput(codec->encode_binding, "scale", codec->scale.tensor));
+    ORT_TRY(api->CreateIoBinding(codec->decoder, &codec->decode_binding));
+    ORT_TRY(api->BindInput(codec->decode_binding, "quantized", codec->latent.tensor));
+    ORT_TRY(api->BindInput(codec->decode_binding, "scale", codec->scale.tensor));
+    ORT_TRY(api->BindOutput(codec->decode_binding, "audio", codec->output.tensor));
+    *out = codec;
+    codec = NULL;
+done:
+    for (size_t i = 0u; i < 4u; ++i) { free(data[i]); }
+    if (directory >= 0) { (void)close(directory); }
+    kenc_stereo_free(codec);
+    return result;
+}
+
+kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,
+    const float *pcm, size_t sample_count, uint16_t *codes,
+    size_t code_capacity, float *scale)
+{
+    if (codec == NULL || pcm == NULL || codes == NULL || scale == NULL
+        || sample_count != KENC_STEREO_FRAME_SAMPLES) { return KENC_ERR_INVALID; }
+    size_t count = (size_t)codec->codebooks * KENC_STEREO_LATENT_FRAMES;
+    if (code_capacity < count) { return KENC_ERR_TRUNCATED; }
+    for (size_t i = 0u; i < KENC_STEREO_FRAME_SAMPLES * 2u; ++i) {
+        if (!isfinite(pcm[i]) || pcm[i] < -1.0f || pcm[i] > 1.0f) { return KENC_ERR_INVALID; }
+    }
+    float *input = codec->input.data;
+    for (size_t i = 0u; i < KENC_STEREO_FRAME_SAMPLES; ++i) {
+        input[i] = pcm[i * 2u];
+        input[KENC_STEREO_FRAME_SAMPLES + i] = pcm[i * 2u + 1u];
+    }
+    kenc_result result = ort_result(codec->api,
+        codec->api->RunWithBinding(codec->encoder, NULL, codec->encode_binding));
+    if (result != KENC_OK) { return result; }
+    float value = *(float *)codec->scale.data;
+    if (!isfinite(value) || value <= 0.0f || value > 2.0f) { return KENC_ERR_RUNTIME; }
+    result = kenc_rvq_encode_frame(codec->latent.data, codec->books, codec->norms,
+        codec->codebooks, codec->residual, codec->tokens);
+    if (result != KENC_OK) { return result; }
+    memcpy(codes, codec->tokens, count * sizeof(*codes));
+    *scale = value;
+    return KENC_OK;
+}
+
+kenc_result kenc_stereo_decode_frame(kenc_stereo *codec,
+    const uint16_t *codes, size_t code_count, float scale,
+    float *pcm, size_t pcm_capacity)
+{
+    if (codec == NULL || codes == NULL || pcm == NULL
+        || code_count != (size_t)codec->codebooks * KENC_STEREO_LATENT_FRAMES) { return KENC_ERR_INVALID; }
+    if (pcm_capacity < KENC_STEREO_FRAME_SAMPLES * 2u) { return KENC_ERR_TRUNCATED; }
+    if (!isfinite(scale) || scale <= 0.0f || scale > 2.0f) { return KENC_ERR_PROTOCOL; }
+    for (size_t i = 0u; i < code_count; ++i) {
+        if (codes[i] >= KENC_CODEBOOK_CARDINALITY) { return KENC_ERR_PROTOCOL; }
+    }
+    kenc_rvq_decode_frame(codes, codec->books, codec->codebooks, codec->latent.data);
+    *(float *)codec->scale.data = scale;
+    kenc_result result = ort_result(codec->api,
+        codec->api->RunWithBinding(codec->decoder, NULL, codec->decode_binding));
+    if (result != KENC_OK) { return result; }
+    const float *output = codec->output.data;
+    for (size_t i = 0u; i < KENC_STEREO_FRAME_SAMPLES * 2u; ++i) {
+        if (!isfinite(output[i])) { return KENC_ERR_RUNTIME; }
+    }
+    for (size_t i = 0u; i < KENC_STEREO_FRAME_SAMPLES; ++i) {
+        pcm[i * 2u] = output[i];
+        pcm[i * 2u + 1u] = output[KENC_STEREO_FRAME_SAMPLES + i];
+    }
+    return KENC_OK;
 }
 
 #endif

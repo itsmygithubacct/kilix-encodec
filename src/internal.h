@@ -34,4 +34,9 @@ kenc_result kenc_native_encode(kenc_native_stream *stream,
 kenc_result kenc_native_decode(kenc_native_stream *stream,
     const uint16_t *codes, int16_t *pcm);
 
+kenc_result kenc_rvq_encode_frame(const float *latent, const float *books,
+    const float *norms, uint8_t count, float *residual, uint16_t *codes);
+void kenc_rvq_decode_frame(const uint16_t *codes, const float *books,
+    uint8_t count, float *quantized);
+
 #endif
