@@ -1,6 +1,6 @@
 """Bounded native library capacity measurement; never whole-release acceptance."""
 from __future__ import annotations
-import argparse,ctypes as c,hashlib,json,math,os,platform,resource,sys,time
+import argparse,ctypes as c,hashlib,json,os,platform,resource,sys,time
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
@@ -15,6 +15,19 @@ def sha(path):
     return digest.hexdigest()
 
 
+def duration_statistics(durations):
+    """Retain acquisition order and exact integer data for independent replay."""
+    if not durations or any(type(value) is not int or value < 0 for value in durations):
+        raise ValueError('durations must be a nonempty sequence of nonnegative integer nanoseconds')
+    values=sorted(durations)
+    rank=(99*len(values)+99)//100
+    total=sum(values)
+    return {'durations_ns':list(durations),'samples':len(values),
+            'p99_nearest_rank':rank,'p99_ns':values[rank-1],
+            'total_ns':total,'p99_ms':values[rank-1]/1e6,
+            'mean_ms':total/len(values)/1e6}
+
+
 def measure(args):
     if args.fixture_tier=='h1':
         if args.fixture_runner is None:raise ValueError('--fixture-runner is required for H1')
@@ -23,13 +36,12 @@ def measure(args):
     native=Native(args.library)
     rows=[]
     def row(mode,rate,durations,deadline):
-        values=sorted(durations)
-        # Nearest-rank p99, with every measured invocation represented.
-        p99=values[math.ceil(len(values)*.99)-1]/1e6
-        mean=sum(values)/len(values)/1e6
-        record={'operation':mode,'bitrate_kbps':rate,'threads':args.threads,'samples':len(values),'p99_ms':p99,'mean_ms':mean,'deadline_ms':deadline,'capacity_threshold_met':p99<deadline}
+        statistics=duration_statistics(durations)
+        p99=statistics['p99_ms'];mean=statistics['mean_ms']
+        record={'operation':mode,'bitrate_kbps':rate,'threads':args.threads,
+                **statistics,'deadline_ms':deadline,'capacity_threshold_met':p99<deadline}
         rows.append(record)
-        print(f'native {mode} {rate:g} kb/s: {len(values)} calls p99={p99:.3f} ms mean={mean:.3f} ms threshold={deadline:g} ms',flush=True)
+        print(f'native {mode} {rate:g} kb/s: {len(durations)} calls p99={p99:.3f} ms mean={mean:.3f} ms threshold={deadline:g} ms',flush=True)
     def require(result):
         if result!=0:raise RuntimeError(f'native call refused with bounded result {result}')
     started=time.monotonic()
