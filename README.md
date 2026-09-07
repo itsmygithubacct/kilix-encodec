@@ -51,10 +51,11 @@ and raw codebooks before ORT initialization. It processes noncausal one-second
 frames, preserving per-frame normalization. Input/output float PCM is
 interleaved stereo; codes are codebook-major. The C quantizer is checked against
 the official safetensors model on identical latents, and every corpus/rate row
-must meet the existing end-to-end token and waveform tolerances. These are
-frame primitives: the bounded file container, overlap-add, indexed seek and
-consumer integration remain separate work. The stereo API is never a KMX
-streaming profile.
+must meet the existing end-to-end token and waveform tolerances. The separate
+`kilix_encodec_file.h` interface adds bounded local files, verified indexes,
+sealed input snapshots and shared overlap-add. [FILE-FORMAT.md](FILE-FORMAT.md)
+specifies framing, limits, padding and seek pre-roll. Live framing and consumer
+integration remain separate work. The stereo API is never a KMX profile.
 
 ```sh
 uv run --frozen --group export make ONNX=1 test-stereo \

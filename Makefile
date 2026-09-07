@@ -27,6 +27,7 @@ endif
 
 LIB_SOURCES := \
 	src/context.c \
+	src/container.c \
 	src/encoder.c \
 	src/decoder.c \
 	src/rvq.c \
@@ -34,7 +35,7 @@ LIB_SOURCES := \
 	src/onnx.c
 LIB_OBJECTS := $(LIB_SOURCES:src/%.c=$(BUILD)/%.o)
 LIB_DEPS := $(LIB_OBJECTS:.o=.d)
-TEST_NAMES := packet rvq stream model wire
+TEST_NAMES := packet rvq stream model wire container
 TEST_BINS := $(TEST_NAMES:%=$(BUILD)/test-%)
 
 STATIC_LIB := $(BUILD)/lib$(PROJECT).a
@@ -46,7 +47,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 .DEFAULT_GOAL := all
 
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
-.PHONY: test-stereo test-stereo-c
+.PHONY: test-stereo test-stereo-c test-container-oracle
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -113,6 +114,9 @@ test-stereo: test-stereo-c
 	@test -n "$(CHECKPOINT_DIR)" || { printf '%s\n' 'CHECKPOINT_DIR is required'; exit 2; }
 	$(PYTHON) tests/test_stereo.py "$(SHARED_LIB)" "$(MODEL_DIR)" "$(CHECKPOINT_DIR)"
 
+test-container-oracle: all
+	$(PYTHON) tests/test_container_oracle.py "$(SHARED_LIB)"
+
 export-test:
 	@test -n "$(CHECKPOINT)" || \
 		{ printf '%s\n' 'CHECKPOINT is required'; exit 2; }
@@ -144,6 +148,7 @@ install: all
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig $(DESTDIR)$(PREFIX)/bin \
 		$(DESTDIR)$(PREFIX)/share/doc/$(PROJECT)
 	$(INSTALL) -m 0644 include/kilix_encodec.h $(DESTDIR)$(PREFIX)/include/
+	$(INSTALL) -m 0644 include/kilix_encodec_file.h $(DESTDIR)$(PREFIX)/include/
 	$(INSTALL) -m 0644 $(STATIC_LIB) $(DESTDIR)$(PREFIX)/lib/
 	$(INSTALL) -m 0755 $(SHARED_LIB) $(DESTDIR)$(PREFIX)/lib/
 	ln -sfn lib$(PROJECT).so.0 \
@@ -151,7 +156,7 @@ install: all
 	$(INSTALL) -m 0644 $(PKG_CONFIG_FILE) \
 		$(DESTDIR)$(PREFIX)/lib/pkgconfig/
 	$(INSTALL) -m 0755 $(COMMAND) $(DESTDIR)$(PREFIX)/bin/
-	$(INSTALL) -m 0644 LICENSE THIRD-PARTY-NOTICES.md README.md \
+	$(INSTALL) -m 0644 LICENSE THIRD-PARTY-NOTICES.md README.md FILE-FORMAT.md \
 		$(DESTDIR)$(PREFIX)/share/doc/$(PROJECT)/
 
 install-test: all
