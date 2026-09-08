@@ -70,11 +70,15 @@ def build(environment, python, uv, output_root):
         raise ValueError('environment uses a different interpreter')
     # Read metadata without executing caller-selected interpreter/site code.
     distributions = []
-    for metadata_path in (environment / 'lib/python3.12/site-packages').glob('*.dist-info/METADATA'):
-        metadata = email.parser.BytesParser().parsebytes(build_io.file_bytes(metadata_path, CHECK, maximum=2 * 1024**2))
+    packages = environment / 'lib/python3.12/site-packages'
+    metadata_hashes = {}
+    for metadata_path in packages.glob('*.dist-info/METADATA'):
+        payload = build_io.file_bytes(metadata_path, CHECK, maximum=2 * 1024**2)
+        metadata = email.parser.BytesParser().parsebytes(payload)
         if len(metadata.get_all('Name', [])) != 1 or len(metadata.get_all('Version', [])) != 1:
             raise ValueError('dependency identity metadata is ambiguous')
         distributions.append([metadata['Name'].lower().replace('_', '-'), metadata['Version']])
+        metadata_hashes[metadata_path.relative_to(packages).as_posix()] = hashlib.sha256(payload).hexdigest()
     if sorted(distributions) != binding['runtime_packages']:
         raise ValueError('export environment package population differs from the frozen lock')
     evidence = {'packages': sorted(distributions), 'toolchain': binding['toolchain']}
@@ -113,7 +117,7 @@ def build(environment, python, uv, output_root):
             add('python/' + relative.as_posix(), path, python_root)
         elif path.is_symlink():
             raise ValueError('runtime directory symlink is unsupported')
-    packages = environment / 'lib/python3.12/site-packages'
+    archived_metadata = set()
     for path in packages.rglob('*'):
         CHECK()
         traversed += 1
@@ -128,9 +132,17 @@ def build(environment, python, uv, output_root):
         if len(relative.parts) == 2 and relative.parts[0].endswith('.dist-info') and relative.name == 'RECORD':
             continue
         if path.is_file():
-            add('python/lib/python3.12/site-packages/' + relative.as_posix(), path, packages)
+            expected = None
+            if len(relative.parts) == 2 and relative.parts[0].endswith('.dist-info') and relative.name == 'METADATA':
+                expected = metadata_hashes.get(relative.as_posix())
+                if expected is None:
+                    raise ValueError('dependency metadata population changed during packaging')
+                archived_metadata.add(relative.as_posix())
+            add('python/lib/python3.12/site-packages/' + relative.as_posix(), path, packages, expected=expected)
         elif path.is_symlink():
             raise ValueError('dependency directory symlink is unsupported')
+    if archived_metadata != set(metadata_hashes):
+        raise ValueError('dependency metadata population changed during packaging')
     for name, expected in binding['source_files'].items():
         add('source/' + name, ROOT / name, ROOT, expected=expected)
     add('bin/uv', uv, uv.parent, 0o700, expected=binding['uv_binary_sha256'])
@@ -170,7 +182,8 @@ def build(environment, python, uv, output_root):
         archive_hash = digest(stage / 'runtime.tar')
         if archive_size > MAXIMUM_BYTES + 64 * 1024**2:
             raise ValueError('runtime archive exceeds bound')
-        template = build_io.file_bytes(ROOT / 'tools/converter_runtime.py', CHECK, maximum=65536).decode()
+        template_bytes = build_io.file_bytes(ROOT / 'tools/converter_runtime.py', CHECK, maximum=65536)
+        template = template_bytes.decode()
         for old, new in {
             '@BUNDLE_SHA256@': archive_hash, '@BUNDLE_BYTES@': str(archive_size),
             '@RUNTIME_BYTES@': str(total), '@OUTPUTS_JSON@': json.dumps(binding['outputs'], sort_keys=True, separators=(',', ':')),
@@ -188,7 +201,7 @@ def build(environment, python, uv, output_root):
             'runtime_tar_sha256': archive_hash, 'runtime_tar_bytes': archive_size,
             'runtime_bytes': total, 'runtime_files': rows,
             'command_sha256': digest(stage / 'command'),
-            'template_sha256': digest(ROOT / 'tools/converter_runtime.py'),
+            'template_sha256': hashlib.sha256(template_bytes).hexdigest(),
             'builder_sha256': digest(Path(__file__)), 'model_payloads_included': False}
         receipt['build_io_sha256'] = digest(Path(build_io.__file__))
         receipt['tool_archives'] = binding['tool_archives']
