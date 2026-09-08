@@ -10,13 +10,24 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
+import selectors
 import subprocess
+import time
 import zipfile
 
 
-def git_bytes(source: Path, arguments: list[str], maximum: int) -> bytes:
+def git_bytes(source: Path, arguments: list[str], maximum: int, *, check=None, cleanup=None) -> bytes:
+    """Poll the caller's unchanged budget; cleanup belongs to its dedicated CLI.
+
+    Ordinary bundle callers need no process-wide reaper. A dedicated subreaper
+    may supply cleanup to prove its escaped descendants are gone as well.
+    """
+    if check is None:
+        check = lambda: None
+    check()
     # Neither the calling shell nor archive attributes may select different
     # bytes under the requested commit's name. Missing objects stay offline.
     environment = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C",
@@ -25,35 +36,66 @@ def git_bytes(source: Path, arguments: list[str], maximum: int) -> bytes:
                    "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0"}
     command = ["/usr/bin/git", "--no-replace-objects", "--literal-pathspecs",
                "-C", str(source.resolve()), *arguments]
-    with subprocess.Popen(command, env=environment, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL) as child:
+    with subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as child:
         try:
-            payload = child.stdout.read(maximum + 1)
-            if len(payload) > maximum:
-                raise ValueError("content Git object exceeds bound")
-            if child.wait() != 0:
+            payload = bytearray()
+            os.set_blocking(child.stdout.fileno(), False)
+            with selectors.DefaultSelector() as selector:
+                selector.register(child.stdout, selectors.EVENT_READ)
+                while selector.get_map():
+                    check()
+                    # An escaped descendant can retain the output pipe after
+                    # Git exits. The native CLI owns that complete subtree.
+                    if child.poll() is not None and cleanup is not None:
+                        cleanup()
+                    for key, _events in selector.select(.05):
+                        check()
+                        try:
+                            block = os.read(key.fd, min(65536, maximum + 1 - len(payload)))
+                        except BlockingIOError:
+                            continue
+                        if not block:
+                            selector.unregister(key.fileobj)
+                        else:
+                            payload.extend(block)
+                            if len(payload) > maximum:
+                                raise ValueError("content Git object exceeds bound")
+                # EOF does not prove process exit. Keep the same cancellation
+                # and deadline checks while an output-less Git child remains.
+                while child.poll() is None:
+                    check()
+                    time.sleep(.01)
+            check()
+            if child.returncode != 0:
                 raise ValueError("content Git object is unavailable")
-            return payload
+            return bytes(payload)
         finally:
             if child.poll() is None:
                 child.kill()
-                child.wait()
+            child.wait()
+            if cleanup is not None:
+                cleanup()
 
 
-def git_object(source: Path, kind: str, oid: str, maximum: int) -> bytes:
+def git_object(source: Path, kind: str, oid: str, maximum: int, *, check=None, cleanup=None) -> bytes:
     if not re.fullmatch("[0-9a-f]{40}", oid):
         raise ValueError("invalid content Git identity")
-    payload = git_bytes(source, ["cat-file", kind, oid], maximum)
+    payload = git_bytes(source, ["cat-file", kind, oid], maximum, check=check, cleanup=cleanup)
     identity = kind.encode() + b" " + str(len(payload)).encode() + b"\0" + payload
     if hashlib.sha1(identity).hexdigest() != oid:
         raise ValueError("content Git object identity mismatch")
+    if check is not None:
+        check()
     return payload
 
 
-def git_tree(source: Path, oid: str) -> dict[str, tuple[str, str]]:
-    payload = git_object(source, "tree", oid, 2 * 1024**2)
+def git_tree(source: Path, oid: str, *, check=None, cleanup=None) -> dict[str, tuple[str, str]]:
+    payload = git_object(source, "tree", oid, 2 * 1024**2, check=check, cleanup=cleanup)
     result = {}
     while payload:
+        if check is not None:
+            check()
         metadata, separator, remaining = payload.partition(b"\0")
         if not separator or len(remaining) < 20:
             raise ValueError("invalid content Git tree")

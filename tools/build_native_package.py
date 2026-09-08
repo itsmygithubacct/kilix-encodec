@@ -36,9 +36,9 @@ def canonical(value):
     return (json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n').encode()
 
 
-def source_files(source, commit, check):
+def source_files(source, commit, check, *, cleanup=None):
     """Ignore worktree/archive attributes and verify every consumed Git object."""
-    raw = objects.git_object(source, 'commit', commit, 65536)
+    raw = objects.git_object(source, 'commit', commit, 65536, check=check, cleanup=cleanup)
     tree = raw.split(b'\n', 1)[0].removeprefix(b'tree ').decode()
     if not SHA.fullmatch(tree):
         raise ValueError('source commit has no canonical tree')
@@ -50,7 +50,7 @@ def source_files(source, commit, check):
         check()
         if depth > 12:
             raise ValueError('native source tree is too deep')
-        for name, (mode, child) in objects.git_tree(source, oid).items():
+        for name, (mode, child) in objects.git_tree(source, oid, check=check, cleanup=cleanup).items():
             check()
             path = prefix + name
             if mode == '40000':
@@ -60,7 +60,7 @@ def source_files(source, commit, check):
                 raise ValueError('native source population is unsupported')
             if Path(name).suffix.lower() in ('.onnx', '.pt', '.th', '.safetensors', '.deb'):
                 raise ValueError('model or binary payload is not native source')
-            data = objects.git_object(source, 'blob', child, 2 * 1024**2)
+            data = objects.git_object(source, 'blob', child, 2 * 1024**2, check=check, cleanup=cleanup)
             total += len(data)
             if total > MAX_SOURCE:
                 raise ValueError('native source exceeds the byte bound')
@@ -129,7 +129,7 @@ def build(args):
         stage = args.output.parent/staging_name
         held = stack.enter_context(process_io.Directory(stage, private=True))
         check = lambda: process_io.checkpoint(deadline, parent, source, content, held)
-        tree, files = source_files(source.path, args.commit, check)
+        tree, files = source_files(source.path, args.commit, check, cleanup=process_io.reap_owned)
         # The launcher and reused helpers must be precisely this source candidate.
         for name in ('build_native_package.py', 'build_content_bundle.py', 'converter_build_io.py'):
             if process_io.file_bytes(ROOT/'tools'/name, check, maximum=2*1024**2) != files['tools/'+name][1]:

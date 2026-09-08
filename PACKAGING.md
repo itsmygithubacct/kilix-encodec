@@ -35,3 +35,13 @@ relocated production installation. For private build tests, use
 `pkg-config --define-prefix` and an explicit private loader path; verify both
 consumers resolve the same `.so.0`. Root-owned runtime package installation and
 final release source selection remain separate steps.
+
+## Raw source capture
+
+The original package deadline and SIGINT/SIGTERM cancellation also cover the
+first commit, every tree and every blob read. Git output is polled and byte
+bounded; EOF alone is not treated as process exit. Refusal kills and reaps the
+Git process, and the dedicated native CLI reaps its owned escaped descendants
+before returning. Raw object identity, offline selection and archive modes
+remain verified. The reusable bundle helper does not acquire process-wide
+reaping authority when called without the dedicated CLI cleanup callback.
