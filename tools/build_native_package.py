@@ -224,6 +224,8 @@ def build(args):
         doc = dest/'usr/share/doc/kilix-encodec'
         write_source_archive(files, doc/'source.tar.gz')
         (doc/'debian-dependencies.json').write_bytes(files['tools/debian-dependencies.json'][1])
+        for name in ('source.tar.gz', 'debian-dependencies.json'):
+            (doc/name).chmod(0o644)
         record = {'schema': 'kilix.encodec.native-package/v1', 'source_commit': args.commit,
                   'source_tree': tree, 'content_commit': args.content_commit,
                   'content_bundle_sha256': content_receipt['bundle_sha256'],
@@ -234,8 +236,10 @@ def build(args):
                   'snapshot': lock['snapshot'], 'packages': packages, 'runtime_files': runtime_files,
                   'files': inventory(dest, check)}
         (doc/'native-package.json').write_bytes(canonical(record))
+        (doc/'native-package.json').chmod(0o644)
         control = dest/'DEBIAN'
         control.mkdir(mode=0o755)
+        control.chmod(0o755)
         version = files['VERSION'][1].decode().strip()+'+git'+args.commit[:12]+'.'+args.content_commit[:12]
         depends = ', '.join(name+' (= '+lock['packages'][name]['version']+')' for name in ('libonnxruntime1.21', 'libssl3t64', 'libc6'))
         (control/'control').write_text(f'Package: libkilix-encodec\nVersion: {version}\nArchitecture: amd64\n'
@@ -243,12 +247,14 @@ def build(args):
             f'Depends: {depends}\nSection: libs\nPriority: optional\n'
             'Description: Shared Kilix codec and installed-content admission\n No model payload or model authorization is included.\n')
         (control/'triggers').write_text('activate-noawait ldconfig\n')
+        for name in ('control', 'triggers'):
+            (control/name).chmod(0o644)
         for operation in ('postinst', 'postrm'):
             script = control/operation
             script.write_text('#!/bin/sh\nset -e\nif [ "$1" = configure ] || [ "$1" = remove ]; then\n  ldconfig\nfi\n')
             script.chmod(0o755)
         package = stage/'libkilix-encodec.deb'
-        run(['/usr/bin/dpkg-deb', '--root-owner-group', '-Zxz', '--build', str(dest), str(package)])
+        run(['/usr/bin/dpkg-deb', '--root-owner-group', '--threads-max=2', '-Zxz', '--build', str(dest), str(package)])
         # No consumer-local codec or ORT payload is installed in the package.
         check()
         if process_io.file_bytes(compiler, check, maximum=64*1024**2) != compiler_bytes:
