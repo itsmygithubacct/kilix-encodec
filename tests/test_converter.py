@@ -182,6 +182,110 @@ class ConverterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 held.check()
 
+    def populated_fixture(self, name):
+        fixture = self.packaging_fixture(name)
+        source, environment = fixture[:2]
+        binding = json.loads((source / 'tools/converter-inputs.json').read_text())
+        binding['runtime_packages'] = json.loads((ROOT / 'tools/converter-inputs.json').read_text())['runtime_packages']
+        packages = environment / 'lib/python3.12/site-packages'
+        metadata = []
+        for package, version in binding['runtime_packages']:
+            directory = packages / (package + '-' + version + '.dist-info')
+            directory.mkdir(mode=0o700)
+            path = directory / 'METADATA'
+            path.write_text('Metadata-Version: 2.1\nName: ' + package + '\nVersion: ' + version + '\n')
+            metadata.append(path)
+        (source / 'tools/converter-inputs.json').write_text(json.dumps(binding))
+        return fixture, metadata
+
+    def test_packaging_refuses_late_same_size_package_version_change(self):
+        fixture, metadata = self.populated_fixture('metadata-version')
+        source, environment, python, uv, output, _members = fixture
+        watched = metadata[0]
+        original = watched.read_bytes()
+        changed = original.replace(b'2026.7.22', b'2025.7.22')
+        self.assertEqual(len(changed), len(original))
+        self.assertNotEqual(changed, original)
+        open_tar = tarfile.open
+        def mutate(*args, **kwargs):
+            watched.write_bytes(changed)
+            return open_tar(*args, **kwargs)
+        with mock.patch.object(builder, 'ROOT', source), \
+             mock.patch.object(tarfile, 'open', mutate), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, 'digest differs'):
+                builder.build(environment, python, uv, output)
+        self.assertEqual(list(output.iterdir()), [])
+
+    def test_packaging_refuses_added_or_removed_metadata_after_enumeration(self):
+        for mode in ('added', 'removed'):
+            with self.subTest(mode=mode):
+                fixture, metadata = self.populated_fixture('metadata-' + mode)
+                source, environment, python, uv, output, _members = fixture
+                packages = environment / 'lib/python3.12/site-packages'
+                original_rglob = Path.rglob
+                def mutate(path, *args, **kwargs):
+                    if path == packages:
+                        if mode == 'removed':
+                            metadata[0].unlink()
+                        else:
+                            extra = packages / 'additional-1.dist-info'
+                            extra.mkdir(mode=0o700)
+                            (extra / 'METADATA').write_bytes(b'Name: additional\nVersion: 1\n')
+                    return original_rglob(path, *args, **kwargs)
+                with mock.patch.object(builder, 'ROOT', source), \
+                     mock.patch.object(Path, 'rglob', mutate), contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(ValueError, 'metadata population changed'):
+                        builder.build(environment, python, uv, output)
+                self.assertEqual(list(output.iterdir()), [])
+
+    def test_packaging_retains_validated_metadata_after_its_read(self):
+        fixture, metadata = self.populated_fixture('metadata-retained')
+        source, environment, python, uv, output, _members = fixture
+        watched = metadata[0]
+        original = watched.read_bytes()
+        name = 'python/lib/python3.12/site-packages/' + watched.relative_to(environment/'lib/python3.12/site-packages').as_posix()
+        addfile = tarfile.TarFile.addfile
+        def mutate(archive, member, fileobj=None):
+            if member.name == name:
+                watched.write_bytes(original.replace(b'2026.7.22', b'2025.7.22'))
+            return addfile(archive, member, fileobj)
+        with mock.patch.object(builder, 'ROOT', source), \
+             mock.patch.object(tarfile.TarFile, 'addfile', mutate), contextlib.redirect_stdout(io.StringIO()):
+            builder.build(environment, python, uv, output)
+        with tarfile.open(output / '.converter/runtime.tar') as archive:
+            self.assertEqual(archive.extractfile(name).read(), original)
+        receipt = json.loads((output / '.converter/receipt.json').read_text())
+        self.assertIn(['certifi', '2026.7.22'], receipt['packages'])
+        self.assertEqual(receipt['runtime_files'][name]['sha256'], hashlib.sha256(original).hexdigest())
+
+    def test_template_receipt_binds_the_exact_compiled_snapshot(self):
+        source, environment, python, uv, output, _members = self.packaging_fixture('template-read')
+        path = source / 'tools/converter_runtime.py'
+        original = path.read_bytes()
+        changed = original.replace(b'Template for the installed', b'Template for the altered__', 1)
+        self.assertNotEqual(changed, original)
+        read = build_io.file_bytes
+        consumed = []
+        def mutate(selected, check, **kwargs):
+            if Path(selected) == path and not consumed:
+                path.write_bytes(changed)
+                data = read(selected, check, **kwargs)
+                consumed.append(data)
+                path.write_bytes(original)
+                return data
+            return read(selected, check, **kwargs)
+        with mock.patch.object(builder, 'ROOT', source), \
+             mock.patch.object(build_io, 'file_bytes', mutate), contextlib.redirect_stdout(io.StringIO()):
+            builder.build(environment, python, uv, output)
+        receipt = json.loads((output / '.converter/receipt.json').read_text())
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(consumed, [changed])
+        self.assertEqual(receipt['template_sha256'], hashlib.sha256(changed).hexdigest())
+        self.assertNotEqual(receipt['template_sha256'], hashlib.sha256(original).hexdigest())
+        command = (output / 'bin/kilix-encodec-convert-24khz').read_bytes()
+        self.assertIn(b'Template for the altered__', command)
+        self.assertEqual(receipt['command_sha256'], hashlib.sha256(command).hexdigest())
+
     def test_file_fifo_oversize_and_cancel_are_bounded(self):
         fifo = self.root / 'fifo'
         os.mkfifo(fifo, 0o600)
