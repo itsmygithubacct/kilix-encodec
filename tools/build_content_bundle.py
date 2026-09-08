@@ -13,8 +13,106 @@ import json
 from pathlib import Path
 import re
 import subprocess
-import tarfile
 import zipfile
+
+
+def git_bytes(source: Path, arguments: list[str], maximum: int) -> bytes:
+    # Neither the calling shell nor archive attributes may select different
+    # bytes under the requested commit's name. Missing objects stay offline.
+    environment = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C",
+                   "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+                   "GIT_CONFIG_SYSTEM": "/dev/null", "GIT_NO_REPLACE_OBJECTS": "1",
+                   "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0"}
+    command = ["/usr/bin/git", "--no-replace-objects", "--literal-pathspecs",
+               "-C", str(source.resolve()), *arguments]
+    with subprocess.Popen(command, env=environment, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL) as child:
+        try:
+            payload = child.stdout.read(maximum + 1)
+            if len(payload) > maximum:
+                raise ValueError("content Git object exceeds bound")
+            if child.wait() != 0:
+                raise ValueError("content Git object is unavailable")
+            return payload
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+
+
+def git_object(source: Path, kind: str, oid: str, maximum: int) -> bytes:
+    if not re.fullmatch("[0-9a-f]{40}", oid):
+        raise ValueError("invalid content Git identity")
+    payload = git_bytes(source, ["cat-file", kind, oid], maximum)
+    identity = kind.encode() + b" " + str(len(payload)).encode() + b"\0" + payload
+    if hashlib.sha1(identity).hexdigest() != oid:
+        raise ValueError("content Git object identity mismatch")
+    return payload
+
+
+def git_tree(source: Path, oid: str) -> dict[str, tuple[str, str]]:
+    payload = git_object(source, "tree", oid, 2 * 1024**2)
+    result = {}
+    while payload:
+        metadata, separator, remaining = payload.partition(b"\0")
+        if not separator or len(remaining) < 20:
+            raise ValueError("invalid content Git tree")
+        mode, separator, raw_name = metadata.partition(b" ")
+        name = raw_name.decode("utf-8")
+        if (not separator or not name or name in (".", "..") or "/" in name
+                or name in result or mode not in (b"40000", b"100644", b"100755", b"120000", b"160000")):
+            raise ValueError("unsupported content Git tree entry")
+        result[name] = (mode.decode(), remaining[:20].hex())
+        payload = remaining[20:]
+    return result
+
+
+def content_members(source: Path, commit: str):
+    raw_commit = git_object(source, "commit", commit, 64 * 1024)
+    first_line = raw_commit.split(b"\n", 1)[0]
+    if not re.fullmatch(b"tree [0-9a-f]{40}", first_line):
+        raise ValueError("content commit has no canonical tree")
+    tree = first_line[5:].decode()
+    root = git_tree(source, tree)
+    if root.get("src", (None,))[0] != "40000" or root.get("LICENSE", (None,))[0] not in ("100644", "100755"):
+        raise ValueError("content package or license is missing")
+    src = git_tree(source, root["src"][1])
+    if src.get("kilix_content", (None,))[0] != "40000":
+        raise ValueError("content package is missing")
+    members, objects = {}, {}
+    total = 0
+    entries = 0
+
+    def add(path: str, name: str, mode: str, oid: str):
+        nonlocal total
+        if mode not in ("100644", "100755"):
+            raise ValueError("content authority contains unsupported entries")
+        value = git_object(source, "blob", oid, 2 * 1024**2)
+        total += len(value)
+        if total > 4 * 1024**2 or len(members) >= 128:
+            raise ValueError("content authority population exceeds bound")
+        members[name] = value
+        objects[path] = dict(mode=mode, oid=oid, bytes=len(value))
+
+    def visit(oid: str, prefix: str, depth: int):
+        nonlocal entries
+        if depth > 16:
+            raise ValueError("content package nesting exceeds bound")
+        for name, (mode, child) in git_tree(source, oid).items():
+            entries += 1
+            if entries > 256:
+                raise ValueError("content package entries exceed bound")
+            path = prefix + "/" + name
+            if mode == "40000":
+                visit(child, path, depth + 1)
+            elif (Path(name).suffix in (".py", ".json") or name == "py.typed") and "__pycache__" not in path.split("/"):
+                add("src/" + path, path, mode, child)
+            else:
+                raise ValueError("unexpected content package member")
+
+    add("LICENSE", "licenses/kilix-content.txt", *root["LICENSE"])
+    visit(src["kilix_content"][1], "kilix_content", 0)
+    return members, tree, objects
 
 
 def write_changed(path: Path, payload: bytes):
@@ -28,38 +126,14 @@ def write_changed(path: Path, payload: bytes):
 def build(source: Path, commit: str, output: Path):
     if not re.fullmatch("[0-9a-f]{40}", commit):
         raise ValueError("an exact content commit is required")
-    actual = subprocess.check_output(["git", "rev-parse", "--verify", commit + "^{commit}"], cwd=source, text=True).strip()
-    if actual != commit:
-        raise ValueError("content commit did not resolve exactly")
-    archive = subprocess.check_output(["git", "archive", "--format=tar", commit,
-        "src/kilix_content", "LICENSE"], cwd=source)
-    if len(archive) > 4*1024**2:
-        raise ValueError("content authority archive exceeds bound")
-    members = {}
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tar:
-        for entry in tar.getmembers():
-            if entry.isdir():
-                continue
-            if not entry.isfile() or entry.size > 2*1024**2:
-                raise ValueError("content authority contains unsupported entries")
-            path = Path(entry.name)
-            if entry.name == "LICENSE":
-                name = "licenses/kilix-content.txt"
-            elif (entry.name.startswith("src/kilix_content/") and (path.suffix in (".py", ".json") or path.name == "py.typed")
-                    and "__pycache__" not in path.parts):
-                name = entry.name.removeprefix("src/")
-            else:
-                raise ValueError("unexpected content package member")
-            if name in members:
-                raise ValueError("duplicate content member")
-            members[name] = tar.extractfile(entry).read()
+    members, tree, objects = content_members(source, commit)
     if not 5 <= len(members) <= 128 or "kilix_content/__init__.py" not in members or "licenses/kilix-content.txt" not in members:
         raise ValueError("incomplete content authority population")
     root = Path(__file__).resolve().parents[1]
     for path in ("installed_assets.py", "graph_population.py", "content_worker.py"):
         members["__main__.py" if path == "content_worker.py" else path] = (root / "python" / path).read_bytes()
-    record = dict(schema="kilix.encodec.content-build/v1", content_commit=commit,
-        content_archive_sha256=hashlib.sha256(archive).hexdigest(),
+    record = dict(schema="kilix.encodec.content-build/v2", content_commit=commit,
+        content_tree=tree, content_objects=objects,
         files={name:dict(bytes=len(data),sha256=hashlib.sha256(data).hexdigest()) for name,data in sorted(members.items())})
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED) as target:

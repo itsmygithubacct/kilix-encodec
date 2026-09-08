@@ -278,6 +278,13 @@ new catalog produces a new binary and build receipt. Model payloads are never
 part of this bundle. `CONTENT=0` is development-only byte/path functionality;
 it refuses the installed admission API.
 
+The packager reads raw commit, tree and blob objects and recomputes their Git
+identities. Git replacement refs, archive attributes and ambient Git routing
+cannot substitute or omit package members. The version-2 build receipt records
+the content tree and every selected source blob, alongside the deterministic
+ZIP and file digests. Missing, oversized or unsupported objects refuse before
+any output is emitted.
+
 `kilix_encodec_content.h` exposes `kenc_installed_assets_open`. Each call runs
 the embedded ZIP from a read-only sealed memory descriptor with isolated system
 Python, a minimal environment and hard resource ceilings. The caller supplies
