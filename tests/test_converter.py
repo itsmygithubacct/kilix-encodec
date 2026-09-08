@@ -1,10 +1,12 @@
 """Bounded real file/process controls for the local converter build and command."""
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import fcntl
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import types
@@ -21,6 +24,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import converter_build_io as build_io
+import build_converter as builder
 
 
 def runtime_module():
@@ -43,6 +47,124 @@ class ConverterTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root)
         self.assertEqual(len(os.listdir('/proc/self/fd')), self.fds)
+
+    def packaging_fixture(self, name):
+        """Real frozen source/notice bytes; tiny inert tool/environment fixtures."""
+        area = self.root / name
+        area.mkdir(mode=0o700)
+        source = area / 'source'
+        source.mkdir(mode=0o700)
+        binding = json.loads((ROOT / 'tools/converter-inputs.json').read_text())
+        paths = [*binding['source_files'], 'tools/converter_runtime.py',
+                 'tools/NO-MODEL-GRANT-24KHZ.txt',
+                 *('tools/converter-notices/' + item for item in binding['uv_notices'])]
+        for relative in paths:
+            destination = source / relative
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            destination.write_bytes((ROOT / relative).read_bytes())
+        python = area / 'python/bin/python3.12'
+        uv = area / 'uv/uv'
+        for label, path in (('python', python), ('uv', uv)):
+            path.parent.mkdir(parents=True, mode=0o700)
+            path.write_bytes((label + ' inert packaging fixture\n').encode())
+            path.chmod(0o700)
+            binding[label + '_binary_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        (area / 'python/lib').mkdir(mode=0o700)
+        environment = area / 'environment'
+        (environment / 'bin').mkdir(parents=True, mode=0o700)
+        (environment / 'bin/python').symlink_to(python)
+        (environment / 'lib/python3.12/site-packages').mkdir(parents=True, mode=0o700)
+        binding['runtime_packages'] = []
+        (source / 'tools/converter-inputs.json').write_text(json.dumps(binding))
+        output = area / 'output'
+        output.mkdir(mode=0o700)
+        members = {'source/' + relative: (source / relative, expected)
+                   for relative, expected in binding['source_files'].items()}
+        members.update({'python/bin/python3.12': (python, binding['python_binary_sha256']),
+                        'bin/uv': (uv, binding['uv_binary_sha256'])})
+        members.update({'notices/' + relative: (source / 'tools/converter-notices' / relative,
+                                                expected['sha256'])
+                        for relative, expected in binding['uv_notices'].items()})
+        return source, environment, python, uv, output, members
+
+    def test_packaging_binds_actual_source_tools_and_notices(self):
+        source, environment, python, uv, output, members = self.packaging_fixture('unchanged')
+        with mock.patch.object(builder, 'ROOT', source), \
+             contextlib.redirect_stdout(io.StringIO()):
+            builder.build(environment, python, uv, output)
+        receipt = json.loads((output / '.converter/receipt.json').read_text())
+        with tarfile.open(output / '.converter/runtime.tar') as archive:
+            for name, (path, expected) in members.items():
+                payload = archive.extractfile(name).read()
+                self.assertEqual(payload, path.read_bytes())
+                self.assertEqual(hashlib.sha256(payload).hexdigest(), expected)
+                self.assertEqual(receipt['runtime_files'][name]['sha256'], expected)
+                if name.startswith('source/'):
+                    self.assertEqual(receipt['source_files'][name.removeprefix('source/')], expected)
+        self.assertTrue((output / 'bin/kilix-encodec-convert-24khz').is_file())
+
+    def test_packaging_refuses_same_size_mutation_after_frozen_identity_checks(self):
+        # Each actual packaging read follows the initial frozen-identity check.
+        # In particular the exporter edit is the original one-byte docstring
+        # mutation; no selected interpreter, exporter or model is executed.
+        initial = self.packaging_fixture('population')[-1]
+        for index, name in enumerate(initial):
+            with self.subTest(member=name):
+                source, environment, python, uv, output, members = self.packaging_fixture(str(index))
+                watched, expected = members[name]
+                original = watched.read_bytes()
+                offset = 0
+                if name == 'source/tools/export_24khz.py':
+                    offset = original.index(b'"""') + 3
+                    while original[offset:offset + 1] in (b'\n', b' ', b'\r'):
+                        offset += 1
+                replacement = b'x' if original[offset:offset + 1] != b'x' else b'y'
+                changed = original[:offset] + replacement + original[offset + 1:]
+                self.assertEqual(len(changed), len(original))
+                self.assertNotEqual(hashlib.sha256(changed).hexdigest(), expected)
+                if name == 'source/tools/export_24khz.py':
+                    compile(changed, str(watched), 'exec')
+                read = build_io.file_bytes
+                mutated = False
+                def mutate(path, check, **kwargs):
+                    nonlocal mutated
+                    data = read(path, check, **kwargs)
+                    if Path(path) == source / 'tools/NO-MODEL-GRANT-24KHZ.txt':
+                        watched.write_bytes(changed)
+                        mutated = True
+                    return data
+                with mock.patch.object(builder, 'ROOT', source), \
+                     mock.patch.object(build_io, 'file_bytes', side_effect=mutate), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(ValueError, 'digest differs'):
+                        builder.build(environment, python, uv, output)
+                self.assertTrue(mutated)
+                self.assertEqual(watched.read_bytes(), changed)
+                self.assertEqual(list(output.iterdir()), [])
+
+    def test_packaging_uses_verified_bytes_even_if_path_changes_before_tar_write(self):
+        source, environment, python, uv, output, members = self.packaging_fixture('after-read')
+        name = 'source/tools/export_24khz.py'
+        watched, expected = members[name]
+        original = watched.read_bytes()
+        addfile = tarfile.TarFile.addfile
+        changed = False
+        def mutate(archive, member, fileobj=None):
+            nonlocal changed
+            if member.name == name:
+                watched.write_bytes(b'x' + original[1:])
+                changed = True
+            return addfile(archive, member, fileobj)
+        with mock.patch.object(builder, 'ROOT', source), \
+             mock.patch.object(tarfile.TarFile, 'addfile', mutate), \
+             contextlib.redirect_stdout(io.StringIO()):
+            builder.build(environment, python, uv, output)
+        self.assertTrue(changed)
+        with tarfile.open(output / '.converter/runtime.tar') as archive:
+            self.assertEqual(archive.extractfile(name).read(), original)
+        receipt = json.loads((output / '.converter/receipt.json').read_text())
+        self.assertEqual(receipt['runtime_files'][name]['sha256'], expected)
+        self.assertEqual(receipt['source_files']['tools/export_24khz.py'], expected)
 
     def test_directory_refuses_shared_and_symlink_ancestors(self):
         real = self.root / 'real'

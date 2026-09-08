@@ -84,7 +84,7 @@ def build(environment, python, uv, output_root):
         raise ValueError('refusing any existing converter output')
     entries = {}
 
-    def add(name, path, boundary, mode=None):
+    def add(name, path, boundary, mode=None, *, expected=None):
         CHECK()
         target = path.resolve(strict=True)
         if not target.is_relative_to(boundary):
@@ -93,11 +93,13 @@ def build(environment, python, uv, output_root):
         if (not stat.S_ISREG(info.st_mode) or info.st_uid not in (0, os.geteuid())
                 or info.st_mode & 0o022 or info.st_size > 1024**3 or name in entries):
             raise ValueError('unsafe or duplicate runtime file')
-        entries[name] = (target, info.st_size, mode or (0o700 if info.st_mode & 0o111 else 0o600))
+        entries[name] = (target, info.st_size,
+                         mode or (0o700 if info.st_mode & 0o111 else 0o600), expected)
         if len(entries) > MAXIMUM_FILES:
             raise ValueError('runtime file count exceeds bound')
 
-    add('python/bin/python3.12', python, python_root, 0o700)
+    add('python/bin/python3.12', python, python_root, 0o700,
+        expected=binding['python_binary_sha256'])
     traversed = 0
     for path in (python_root / 'lib').rglob('*'):
         CHECK()
@@ -129,13 +131,13 @@ def build(environment, python, uv, output_root):
             add('python/lib/python3.12/site-packages/' + relative.as_posix(), path, packages)
         elif path.is_symlink():
             raise ValueError('dependency directory symlink is unsupported')
-    for name in binding['source_files']:
-        add('source/' + name, ROOT / name, ROOT)
-    add('bin/uv', uv, uv.parent, 0o700)
+    for name, expected in binding['source_files'].items():
+        add('source/' + name, ROOT / name, ROOT, expected=expected)
+    add('bin/uv', uv, uv.parent, 0o700, expected=binding['uv_binary_sha256'])
     for name, expected in binding['uv_notices'].items():
         path = ROOT / 'tools/converter-notices' / name
         build_io.file_bytes(path, CHECK, maximum=65536, expected=expected['sha256'])
-        add('notices/' + name, path, ROOT)
+        add('notices/' + name, path, ROOT, expected=expected['sha256'])
     total = sum(row[1] for row in entries.values())
     if not 1 <= len(entries) <= MAXIMUM_FILES or not 1 <= total <= MAXIMUM_BYTES:
         raise ValueError('converter runtime exceeds its declared resource bound')
@@ -151,8 +153,10 @@ def build(environment, python, uv, output_root):
     try:
         rows = {}
         with tarfile.open(stage / 'runtime.tar', 'w', format=tarfile.PAX_FORMAT) as archive:
-            for name, (path, size, mode) in sorted(entries.items()):
-                payload = build_io.file_bytes(path, CHECK, maximum=size)
+            for name, (path, size, mode, expected) in sorted(entries.items()):
+                # Verify the actual immutable bytes handed to tarfile, not
+                # just an earlier read of this mutable source pathname.
+                payload = build_io.file_bytes(path, CHECK, maximum=size, expected=expected)
                 if len(payload) != size:
                     raise ValueError('runtime input changed during packaging')
                 item = tarfile.TarInfo(name)
