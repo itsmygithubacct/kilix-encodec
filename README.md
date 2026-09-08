@@ -1,5 +1,9 @@
 # kilix-encodec
 
+The offline shared-library package recipe is documented in
+[PACKAGING.md](PACKAGING.md). It installs one `/usr` library for Amp and KMX;
+model setup and converter execution remain separate explicit operations.
+
 `kilix-encodec` is the C11 provider for Kilix EnCodec packet encoding and
 decoding. Its optional native ONNX backend implements stateful 24 kHz mono
 encoding and decoding at 3, 6 and 12 kb/s, plus separate 48 kHz stereo frame
