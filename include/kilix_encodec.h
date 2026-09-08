@@ -54,9 +54,23 @@ typedef struct {
     uint16_t samples;
 } kenc_packet_info;
 
+/* Verified wire metadata, separate from the existing decoder-output ABI. */
+typedef struct {
+    uint64_t epoch;
+    uint64_t index;
+    kenc_packet_info packet;
+} kenc_packet_metadata;
+
 kenc_options kenc_options_default(void);
 kenc_result kenc_options_validate(const kenc_options *options);
 const char *kenc_result_string(kenc_result result);
+
+/* Parse the complete opaque KMA2 packet without a model or inference. Validates
+ * the selected profile, epoch index bound and short-final-packet rule, but not
+ * continuity relative to another packet. Decoder contexts own that state.
+ * On refusal, metadata is unchanged. Consumers must not reimplement KMA2. */
+kenc_result kenc_packet_metadata_read(kenc_packet_metadata *metadata,
+    const uint8_t *packet, size_t packet_size, const kenc_options *options);
 
 /* Load the exact pinned 24 kHz user-supplied export. Symlinks, special files,
  * changed manifests and changed graph bytes are refused before ORT parses

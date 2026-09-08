@@ -32,8 +32,19 @@ int main(void)
             TEST_CHECK(output.pts_ms == UINT64_MAX && output.flags == input.flags);
             TEST_CHECK(output.samples == input.samples && output.codebooks == input.codebooks);
             TEST_CHECK(memcmp(input.codes, output.codes, sizeof(input.codes)) == 0);
+            kenc_options options = kenc_options_default();
+            options.codebooks = input.codebooks;
+            kenc_packet_metadata metadata = {0};
+            TEST_CHECK(kenc_packet_metadata_read(&metadata, buffer, written, &options) == KENC_OK);
+            TEST_CHECK(metadata.epoch == UINT64_MAX && metadata.index == 0u
+                && metadata.packet.pts_ms == UINT64_MAX && metadata.packet.flags == input.flags
+                && metadata.packet.samples == input.samples);
             for (size_t short_size = 0u; short_size < written; ++short_size) {
                 TEST_CHECK(kenc_packet_read(&output, buffer, short_size, input.codebooks) != KENC_OK);
+                kenc_packet_metadata previous;
+                memcpy(&previous, &metadata, sizeof(previous));
+                TEST_CHECK(kenc_packet_metadata_read(&metadata, buffer, short_size, &options) != KENC_OK);
+                TEST_CHECK(memcmp(&previous, &metadata, sizeof(metadata)) == 0);
             }
             buffer[written] = 0u;
             TEST_CHECK(kenc_packet_read(&output, buffer, written + 1u, input.codebooks) == KENC_ERR_PROTOCOL);
@@ -51,6 +62,20 @@ int main(void)
     };
     TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_OK);
     TEST_CHECK(written == sizeof(golden) && memcmp(buffer, golden, sizeof(golden)) == 0);
+    kenc_options options = kenc_options_default();
+    options.codebooks = 4u;
+    kenc_packet_metadata metadata = {0};
+    memcpy(changed, golden, sizeof(golden));
+    changed[8] = KENC_PACKET_FLAG_RESET; /* Short PCM without END is not a live packet. */
+    TEST_CHECK(kenc_packet_metadata_read(&metadata, changed, sizeof(golden), &options) == KENC_ERR_PROTOCOL);
+    memcpy(changed, golden, sizeof(golden));
+    changed[8] = KENC_PACKET_FLAG_END; changed[6] = 25u;
+    TEST_CHECK(kenc_packet_metadata_read(&metadata, changed, sizeof(golden), &options) == KENC_ERR_PROTOCOL);
+    changed[6] = 24u;
+    TEST_CHECK(kenc_packet_metadata_read(&metadata, changed, sizeof(golden), &options) == KENC_OK);
+    TEST_CHECK(metadata.index == 24u);
+    TEST_CHECK(kenc_packet_metadata_read(&metadata, golden, sizeof(golden), NULL) == KENC_ERR_INVALID);
+    TEST_CHECK(kenc_packet_metadata_read(NULL, golden, sizeof(golden), &options) == KENC_ERR_INVALID);
     memset(changed, 0xa5, sizeof(changed));
     TEST_CHECK(kenc_packet_write(&input, changed, written - 1u, &written) == KENC_ERR_TRUNCATED);
     TEST_CHECK(written == 0u && changed[0] == 0xa5u && changed[sizeof(golden) - 1u] == 0xa5u);

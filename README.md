@@ -235,3 +235,10 @@ the frozen fixture.
   scratch-only; publication is owner-reserved.
 
 Large graphs, weights, and codebooks do not belong in Git history.
+
+The public `kenc_packet_metadata_read` parser exposes verified epoch, index,
+PTS, flags and sample count without model loading. It validates the complete
+opaque KMA2 packet against explicit options; only a decoder context checks
+continuity against prior packets. A refusal leaves metadata unchanged. This
+separate structure preserves the existing decoder-output ABI and keeps wire
+parsing inside the codec library for file/live/KMX consumers.

@@ -7,6 +7,29 @@ static int valid_codebooks(uint8_t count)
     return count == 4u || count == 8u || count == 16u;
 }
 
+kenc_result kenc_packet_metadata_read(kenc_packet_metadata *metadata,
+    const uint8_t *packet, size_t packet_size, const kenc_options *options)
+{
+    kenc_wire_packet value;
+    if (metadata == NULL || kenc_options_validate(options) != KENC_OK) {
+        return KENC_ERR_INVALID;
+    }
+    kenc_result result = kenc_packet_read(&value, packet, packet_size, options->codebooks);
+    if (result != KENC_OK) { return result; }
+    if (value.index >= options->epoch_packets
+        || (value.samples != KENC_PACKET_SAMPLES && (value.flags & KENC_PACKET_FLAG_END) == 0u)) {
+        return KENC_ERR_PROTOCOL;
+    }
+    kenc_packet_metadata verified = {0};
+    verified.epoch = value.epoch;
+    verified.index = value.index;
+    verified.packet.pts_ms = value.pts_ms;
+    verified.packet.flags = value.flags;
+    verified.packet.samples = value.samples;
+    *metadata = verified;
+    return KENC_OK;
+}
+
 static void put_varint(uint8_t *buffer, size_t *position, uint64_t value)
 {
     do {
