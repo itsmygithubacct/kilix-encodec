@@ -26,9 +26,10 @@ void kenc_file_source_free(kenc_file_source *source)
     free(source);
 }
 
-kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
-    const char *mono_assets, const char *stereo_assets, uint8_t threads,
-    kenc_file_info *info)
+static kenc_result source_create(kenc_file_source **out, int descriptor,
+    const char *mono_assets, const char *stereo_assets,
+    const kenc_asset_set *mono_fds, const kenc_asset_set *stereo_fds,
+    int descriptors, uint8_t threads, kenc_file_info *info)
 {
     if (out == NULL) { return KENC_ERR_INVALID; }
     *out = NULL;
@@ -38,14 +39,16 @@ kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
     kenc_result result = kenc_file_reader_create(&source->reader, descriptor, &source->info);
     if (result != KENC_OK) { goto done; }
     if (source->info.profile == KENC_FILE_PROFILE_MONO) {
-        result = kenc_model_load(&source->model, mono_assets);
+        result = descriptors ? kenc_model_load_fds(&source->model, mono_fds)
+            : kenc_model_load(&source->model, mono_assets);
         if (result != KENC_OK) { goto done; }
         kenc_options options = kenc_options_default();
         options.codebooks = source->info.codebooks;
         options.threads = threads;
         result = kenc_decoder_create(&source->mono, source->model, &options);
     } else {
-        result = kenc_stereo_create(&source->stereo, stereo_assets, source->info.codebooks, threads);
+        result = descriptors ? kenc_stereo_create_fds(&source->stereo, stereo_fds, source->info.codebooks, threads)
+            : kenc_stereo_create(&source->stereo, stereo_assets, source->info.codebooks, threads);
     }
     if (result != KENC_OK) { goto done; }
     source->frame = calloc(source->info.profile == KENC_FILE_PROFILE_MONO ? 960u : 96000u,
@@ -57,6 +60,20 @@ kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
 done:
     kenc_file_source_free(source);
     return result;
+}
+
+kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
+    const char *mono_assets, const char *stereo_assets, uint8_t threads,
+    kenc_file_info *info)
+{
+    return source_create(out, descriptor, mono_assets, stereo_assets, NULL, NULL, 0, threads, info);
+}
+
+kenc_result kenc_file_source_create_fds(kenc_file_source **out, int descriptor,
+    const kenc_asset_set *mono_assets, const kenc_asset_set *stereo_assets,
+    uint8_t threads, kenc_file_info *info)
+{
+    return source_create(out, descriptor, NULL, NULL, mono_assets, stereo_assets, 1, threads, info);
 }
 
 static kenc_result decode_next(kenc_file_source *source)

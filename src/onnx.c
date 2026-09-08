@@ -13,6 +13,13 @@ kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
     return KENC_ERR_MODEL;
 }
 void kenc_model_free(kenc_model *model) { free(model); }
+kenc_result kenc_model_load_fds(kenc_model **out, const kenc_asset_set *assets)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (assets == NULL || assets->files == NULL || assets->count != 9u) { return KENC_ERR_INVALID; }
+    return KENC_ERR_MODEL;
+}
 kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
     uint8_t codebooks, uint8_t threads)
 {
@@ -24,6 +31,16 @@ kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
     return KENC_ERR_MODEL;
 }
 void kenc_stereo_free(kenc_stereo *codec) { free(codec); }
+kenc_result kenc_stereo_create_fds(kenc_stereo **out, const kenc_asset_set *assets,
+    uint8_t codebooks, uint8_t threads)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (assets == NULL || assets->files == NULL || assets->count != 4u
+        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
+        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    return KENC_ERR_MODEL;
+}
 kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,
     const float *pcm, size_t sample_count, uint16_t *codes,
     size_t code_capacity, float *scale)
@@ -121,8 +138,33 @@ static kenc_result ort_result(const OrtApi *api, OrtStatus *status)
     if (result != KENC_OK) { goto done; } \
 } while (0)
 
-/* Hash and load the same bytes. Never pass a mutable model pathname to ORT. */
-static kenc_result read_verified(int directory, const char *name, size_t bytes,
+typedef struct {
+    int directory;
+    const kenc_asset_set *assets;
+} model_input;
+
+static int valid_asset_set(const kenc_asset_set *assets, const char *const *names,
+    size_t count)
+{
+    if (assets == NULL || assets->files == NULL || assets->count != count) { return 0; }
+    for (size_t i = 0u; i < count; ++i) {
+        const kenc_asset_fd *file = &assets->files[i];
+        if (file->name == NULL || strnlen(file->name, 128u) == 128u || file->descriptor < 0) { return 0; }
+        size_t matches = 0u;
+        for (size_t j = 0u; j < count; ++j) {
+            if (strcmp(file->name, names[j]) == 0) { ++matches; }
+        }
+        if (matches != 1u) { return 0; }
+        for (size_t j = 0u; j < i; ++j) {
+            if (strcmp(file->name, assets->files[j].name) == 0) { return 0; }
+        }
+    }
+    return 1;
+}
+
+/* Hash and load the same bytes. Never pass a mutable model pathname to ORT.
+ * Descriptor input is borrowed; pread never changes a caller's file offset. */
+static kenc_result read_verified(const model_input *input, const char *name, size_t bytes,
     const char *expected, void **out)
 {
     int descriptor = -1;
@@ -135,23 +177,42 @@ static kenc_result read_verified(int directory, const char *name, size_t bytes,
     static const char digits[] = "0123456789abcdef";
     kenc_result result = KENC_ERR_MODEL;
     *out = NULL;
-    descriptor = openat(directory, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (input->assets == NULL) {
+        descriptor = openat(input->directory, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    } else {
+        for (size_t i = 0u; i < input->assets->count; ++i) {
+            if (strcmp(input->assets->files[i].name, name) == 0) {
+                descriptor = input->assets->files[i].descriptor;
+                break;
+            }
+        }
+    }
     if (descriptor < 0 || fstat(descriptor, &metadata) != 0
         || !S_ISREG(metadata.st_mode) || metadata.st_size < 0
         || (uintmax_t)metadata.st_size != bytes) {
         goto done;
     }
+    if (input->assets != NULL) {
+        int flags = fcntl(descriptor, F_GETFL);
+        int descriptor_flags = fcntl(descriptor, F_GETFD);
+        /* Stable Linux F_GET_SEALS UAPI, also for older libc headers. */
+        int seals = fcntl(descriptor, 1034);
+        if (metadata.st_uid != geteuid() || (metadata.st_mode & 0133) != 0
+            || flags < 0 || (flags & O_ACCMODE) != O_RDONLY
+            || descriptor_flags < 0 || (descriptor_flags & FD_CLOEXEC) == 0
+            || seals < 0 || (seals & 0x000f) != 0x000f) { goto done; }
+    }
     data = malloc(bytes);
     if (data == NULL) { result = KENC_ERR_MEMORY; goto done; }
     while (offset < bytes) {
-        ssize_t count = read(descriptor, data + offset, bytes - offset);
+        ssize_t count = pread(descriptor, data + offset, bytes - offset, (off_t)offset);
         if (count < 0 && errno == EINTR) { continue; }
         if (count <= 0) { goto done; }
         offset += (size_t)count;
     }
     unsigned char extra;
     ssize_t count;
-    do { count = read(descriptor, &extra, 1u); } while (count < 0 && errno == EINTR);
+    do { count = pread(descriptor, &extra, 1u, (off_t)bytes); } while (count < 0 && errno == EINTR);
     if (count != 0 || EVP_Digest(data, bytes, digest, &digest_size,
             EVP_sha256(), NULL) != 1 || digest_size != 32u) {
         goto done;
@@ -166,32 +227,26 @@ static kenc_result read_verified(int directory, const char *name, size_t bytes,
     data = NULL;
     result = KENC_OK;
 done:
-    if (descriptor >= 0) { (void)close(descriptor); }
+    if (descriptor >= 0 && input->assets == NULL) { (void)close(descriptor); }
     free(data);
     return result;
 }
 
-kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
+static kenc_result model_load(kenc_model **out, const model_input *input)
 {
     kenc_model *model = NULL;
-    int directory = -1;
     void *manifest = NULL;
     kenc_result result = KENC_ERR_MODEL;
-    if (out == NULL) { return KENC_ERR_INVALID; }
-    *out = NULL;
-    if (asset_dir == NULL || asset_dir[0] == '\0') { return KENC_ERR_INVALID; }
-    directory = open(asset_dir, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
-    if (directory < 0) { return KENC_ERR_MODEL; }
     model = calloc(1u, sizeof(*model));
     if (model == NULL) { result = KENC_ERR_MEMORY; goto done; }
     atomic_init(&model->references, 1u);
     /* This is the exact scratch-export v2 contract, still user-supplied only. */
-    result = read_verified(directory, "manifest.json", 12768u,
+    result = read_verified(input, "manifest.json", 12768u,
         "02201a5a947dc0a0b9cce84d585eca35fb8a7e57aee4d404d5cb14f495f40b6c",
         &manifest);
     if (result != KENC_OK) { goto done; }
     for (size_t i = 0u; i < KENC_GRAPH_COUNT; ++i) {
-        result = read_verified(directory, kenc_graphs[i].file, kenc_graphs[i].bytes,
+        result = read_verified(input, kenc_graphs[i].file, kenc_graphs[i].bytes,
             kenc_graphs[i].sha256, &model->graphs[i]);
         if (result != KENC_OK) { goto done; }
     }
@@ -204,9 +259,33 @@ kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
     model = NULL;
 done:
     free(manifest);
-    (void)close(directory);
     kenc_model_free(model);
     return result;
+}
+
+kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (asset_dir == NULL || asset_dir[0] == '\0') { return KENC_ERR_INVALID; }
+    int directory = open(asset_dir, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (directory < 0) { return KENC_ERR_MODEL; }
+    const model_input input = {directory, NULL};
+    kenc_result result = model_load(out, &input);
+    (void)close(directory);
+    return result;
+}
+
+kenc_result kenc_model_load_fds(kenc_model **out, const kenc_asset_set *assets)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    const char *names[KENC_GRAPH_COUNT + 1u];
+    names[0] = "manifest.json";
+    for (size_t i = 0u; i < KENC_GRAPH_COUNT; ++i) { names[i + 1u] = kenc_graphs[i].file; }
+    if (!valid_asset_set(assets, names, KENC_GRAPH_COUNT + 1u)) { return KENC_ERR_INVALID; }
+    const model_input input = {-1, assets};
+    return model_load(out, &input);
 }
 
 void kenc_model_free(kenc_model *model)
@@ -560,7 +639,7 @@ void kenc_stereo_free(kenc_stereo *codec)
     free(codec);
 }
 
-kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+static kenc_result stereo_create(kenc_stereo **out, const model_input *input,
     uint8_t codebooks, uint8_t threads)
 {
     static const char *const files[4] = {
@@ -576,17 +655,10 @@ kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
     kenc_stereo *codec = NULL;
     const OrtApi *api = NULL;
     void *data[4] = {NULL};
-    int directory = -1;
     kenc_result result = KENC_ERR_MODEL;
-    if (out == NULL) { return KENC_ERR_INVALID; }
-    *out = NULL;
-    if (asset_dir == NULL || asset_dir[0] == '\0'
-        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
-        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
-    directory = open(asset_dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (directory < 0) { return KENC_ERR_MODEL; }
+    if (input->assets != NULL && !valid_asset_set(input->assets, files, 4u)) { return KENC_ERR_INVALID; }
     for (size_t i = 0u; i < 4u; ++i) {
-        result = read_verified(directory, files[i], sizes[i], hashes[i], &data[i]);
+        result = read_verified(input, files[i], sizes[i], hashes[i], &data[i]);
         if (result != KENC_OK) { goto done; }
     }
     codec = calloc(1u, sizeof(*codec));
@@ -632,9 +704,36 @@ kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
     codec = NULL;
 done:
     for (size_t i = 0u; i < 4u; ++i) { free(data[i]); }
-    if (directory >= 0) { (void)close(directory); }
     kenc_stereo_free(codec);
     return result;
+}
+
+kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+    uint8_t codebooks, uint8_t threads)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (asset_dir == NULL || asset_dir[0] == '\0'
+        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
+        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    int directory = open(asset_dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (directory < 0) { return KENC_ERR_MODEL; }
+    const model_input input = {directory, NULL};
+    kenc_result result = stereo_create(out, &input, codebooks, threads);
+    (void)close(directory);
+    return result;
+}
+
+kenc_result kenc_stereo_create_fds(kenc_stereo **out, const kenc_asset_set *assets,
+    uint8_t codebooks, uint8_t threads)
+{
+    if (out == NULL) { return KENC_ERR_INVALID; }
+    *out = NULL;
+    if (assets == NULL || assets->files == NULL || assets->count != 4u
+        || (codebooks != 2u && codebooks != 4u && codebooks != 8u && codebooks != 16u)
+        || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    const model_input input = {-1, assets};
+    return stereo_create(out, &input, codebooks, threads);
 }
 
 kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,

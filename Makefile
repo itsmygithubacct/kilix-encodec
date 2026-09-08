@@ -49,6 +49,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
 .PHONY: test-stereo test-stereo-c test-container-oracle test-source-c test-file-cli
+.PHONY: test-asset-fds
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -123,6 +124,11 @@ test-source-c: all $(BUILD)/test-source
 	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
 	@test -n "$(MODEL_DIR)" -a -n "$(STEREO_MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR and STEREO_MODEL_DIR are required'; exit 2; }
 	$(BUILD)/test-source "$(MODEL_DIR)" "$(STEREO_MODEL_DIR)"
+
+test-asset-fds: all $(BUILD)/test-asset_fds
+	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
+	@test -n "$(MODEL_DIR)" -a -n "$(STEREO_MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR and STEREO_MODEL_DIR are required'; exit 2; }
+	$(BUILD)/test-asset_fds "$(MODEL_DIR)" "$(STEREO_MODEL_DIR)"
 
 test-file-cli: all
 	$(PYTHON) tests/test_file_cli.py "$(COMMAND)" $(if $(MODEL_DIR),--mono-assets "$(MODEL_DIR)",) $(if $(STEREO_MODEL_DIR),--stereo-assets "$(STEREO_MODEL_DIR)",)

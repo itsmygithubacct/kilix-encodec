@@ -79,6 +79,25 @@ kenc_result kenc_packet_metadata_read(kenc_packet_metadata *metadata,
 kenc_result kenc_model_load(kenc_model **out, const char *asset_dir);
 void kenc_model_free(kenc_model *model);
 
+/* Installed consumers obtain these borrowed descriptors from their receipt
+ * adapter. Each name is an exact root-relative manifest/graph filename. The
+ * complete population is required (9 mono / 4 stereo), without duplicates or
+ * extra members. FDs must be owned, read-only regular files with CLOEXEC and
+ * all Linux write/grow/shrink/seal seals. Loaders preserve offsets and never
+ * close the caller's descriptors; keep them open until loading returns.
+ * The same compiled sizes, SHA-256 values and ORT contracts apply. Successful
+ * contexts own their bytes and survive closing the input set. This library
+ * proves bytes, not receipt authority; installed callers must admit first. */
+typedef struct {
+    const char *name;
+    int descriptor;
+} kenc_asset_fd;
+typedef struct {
+    const kenc_asset_fd *files;
+    size_t count;
+} kenc_asset_set;
+kenc_result kenc_model_load_fds(kenc_model **out, const kenc_asset_set *assets);
+
 /* A context belongs to one stream and must not be used concurrently. The model
  * can be shared by independent contexts. PCM is signed native-endian mono at
  * 24 kHz; each push consumes exactly 960 samples. PTS advances by 40 ms until an
@@ -114,6 +133,8 @@ void kenc_decoder_free(kenc_decoder *decoder);
  * Only 2/4/8/16 codebooks and 1/2 threads are supported. No network/Python or
  * model publication occurs. The context must not be used concurrently. */
 kenc_result kenc_stereo_create(kenc_stereo **out, const char *asset_dir,
+    uint8_t codebooks, uint8_t threads);
+kenc_result kenc_stereo_create_fds(kenc_stereo **out, const kenc_asset_set *assets,
     uint8_t codebooks, uint8_t threads);
 kenc_result kenc_stereo_encode_frame(kenc_stereo *codec,
     const float *pcm, size_t sample_count, uint16_t *codes,

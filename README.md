@@ -242,3 +242,21 @@ opaque KMA2 packet against explicit options; only a decoder context checks
 continuity against prior packets. A refusal leaves metadata unchanged. This
 separate structure preserves the existing decoder-output ABI and keeps wire
 parsing inside the codec library for file/live/KMX consumers.
+
+Installed consumers can use `kenc_model_load_fds`, `kenc_stereo_create_fds`
+and `kenc_file_source_create_fds` with the complete named set of read-only,
+sealed Linux descriptors obtained from their receipt adapter. Each descriptor
+must be caller-owned and CLOEXEC, with all four write/grow/shrink/seal seals.
+The library checks the same exact manifest and graph sizes and hashes before
+ORT parses any graph. It preserves borrowed offsets, never closes those FDs,
+and retains its own bytes after loading. Extra, duplicate or missing names
+refuse. The unused file profile's descriptor set can be null.
+
+These native interfaces verify model bytes. The installed consumer still must
+obtain current packaged catalog and license-receipt authority through
+`Installer.open_asset`; a path or sealed descriptor alone is not model admission.
+Existing directory loaders remain available for explicit development tools.
+`make ONNX=1 test-asset-fds MODEL_DIR=... STEREO_MODEL_DIR=...` checks sealed
+input refusal, byte-for-byte directory-loader parity and post-close lifetime
+for both profiles and the shared file decoder. It does not qualify a consumer
+or transfer timing/listening results to a new release candidate.

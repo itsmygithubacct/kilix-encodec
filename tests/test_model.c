@@ -29,5 +29,14 @@ int main(void)
     kenc_model_free(NULL);
     TEST_CHECK(1);
 
+    kenc_asset_set assets = {NULL, 0u};
+    kenc_stereo *stereo = (kenc_stereo *)(uintptr_t)1u;
+    TEST_CHECK(kenc_model_load_fds(NULL, NULL) == KENC_ERR_INVALID);
+    TEST_CHECK(kenc_model_load_fds(&model, NULL) == KENC_ERR_INVALID && model == NULL);
+    TEST_CHECK(kenc_model_load_fds(&model, &assets) == KENC_ERR_INVALID && model == NULL);
+    TEST_CHECK(kenc_stereo_create_fds(NULL, NULL, 4u, 2u) == KENC_ERR_INVALID);
+    TEST_CHECK(kenc_stereo_create_fds(&stereo, NULL, 4u, 2u) == KENC_ERR_INVALID && stereo == NULL);
+    TEST_CHECK(kenc_stereo_create_fds(&stereo, &assets, 4u, 2u) == KENC_ERR_INVALID && stereo == NULL);
+
     return test_summary("test_model", passed, total);
 }

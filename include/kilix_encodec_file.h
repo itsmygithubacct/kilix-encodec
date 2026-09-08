@@ -70,6 +70,12 @@ void kenc_file_reader_free(kenc_file_reader *reader);
 kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
     const char *mono_assets, const char *stereo_assets, uint8_t threads,
     kenc_file_info *info);
+/* Equivalent decoder using admitted sealed asset FDs. Only the validated file
+ * profile's set is read; the other may be NULL. No paths are reopened, and
+ * borrowed asset/input descriptors remain owned by the caller. */
+kenc_result kenc_file_source_create_fds(kenc_file_source **out, int descriptor,
+    const kenc_asset_set *mono_assets, const kenc_asset_set *stereo_assets,
+    uint8_t threads, kenc_file_info *info);
 kenc_result kenc_file_source_pull_f32(kenc_file_source *source, float *pcm,
     size_t scalar_capacity, size_t *samples_written, uint64_t *sample_position);
 kenc_result kenc_file_source_seek(kenc_file_source *source,
