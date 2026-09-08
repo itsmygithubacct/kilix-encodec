@@ -1,6 +1,7 @@
 PROJECT := kilix-encodec
 ONNX ?= 0
-BUILD ?= $(if $(filter 1,$(ONNX)),build-onnx,build)
+CONTENT ?= 0
+BUILD ?= $(if $(filter 1,$(ONNX)),build-onnx,build)$(if $(filter 1,$(CONTENT)),-content,)
 PREFIX ?= /usr/local
 DESTDIR ?=
 
@@ -25,7 +26,15 @@ LDLIBS += $(ONNX_LIBS) -lcrypto -lm
 PRIVATE_LIBS := -lonnxruntime -lcrypto -lm
 endif
 
+ifeq ($(CONTENT),1)
+CPPFLAGS += -DKENC_WITH_CONTENT -I$(BUILD)
+$(BUILD)/admission.o: $(BUILD)/content_bundle.h
+$(BUILD)/content_bundle.h: python/installed_assets.py python/graph_population.py python/content_worker.py tools/build_content_bundle.py FORCE_CONTENT | $(BUILD)
+	$(PYTHON) tools/build_content_bundle.py --source "$(CONTENT_SOURCE)" --commit "$(CONTENT_COMMIT)" --output "$(BUILD)"
+endif
+
 LIB_SOURCES := \
+	src/admission.c \
 	src/context.c \
 	src/container.c \
 	src/source.c \
@@ -36,7 +45,7 @@ LIB_SOURCES := \
 	src/onnx.c
 LIB_OBJECTS := $(LIB_SOURCES:src/%.c=$(BUILD)/%.o)
 LIB_DEPS := $(LIB_OBJECTS:.o=.d)
-TEST_NAMES := packet rvq stream model wire container
+TEST_NAMES := packet rvq stream model wire container admission
 TEST_BINS := $(TEST_NAMES:%=$(BUILD)/test-%)
 
 STATIC_LIB := $(BUILD)/lib$(PROJECT).a
@@ -49,7 +58,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
 .PHONY: test-stereo test-stereo-c test-container-oracle test-source-c test-file-cli
-.PHONY: test-asset-fds
+.PHONY: test-asset-fds FORCE_CONTENT test-content-python test-content-ipc
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -133,6 +142,15 @@ test-asset-fds: all $(BUILD)/test-asset_fds
 test-file-cli: all
 	$(PYTHON) tests/test_file_cli.py "$(COMMAND)" $(if $(MODEL_DIR),--mono-assets "$(MODEL_DIR)",) $(if $(STEREO_MODEL_DIR),--stereo-assets "$(STEREO_MODEL_DIR)",)
 
+test-content-python:
+	PYTHONPATH=python:$(CONTENT_SOURCE)/src $(PYTHON) -m unittest discover -s tests -p 'test_content_*.py' -v
+
+test-content-ipc: | $(BUILD)
+	$(PYTHON) tests/build_content_peer.py "$(BUILD)/admission-ipc"
+	$(CC) -Iinclude -Isrc -I$(BUILD)/admission-ipc -Itests -DKENC_WITH_CONTENT $(CFLAGS) $(LDFLAGS) \
+		-o $(BUILD)/test-admission-ipc tests/test_admission_ipc.c src/admission.c
+	$(BUILD)/test-admission-ipc
+
 export-test:
 	@test -n "$(CHECKPOINT)" || \
 		{ printf '%s\n' 'CHECKPOINT is required'; exit 2; }
@@ -165,6 +183,7 @@ install: all
 		$(DESTDIR)$(PREFIX)/share/doc/$(PROJECT)
 	$(INSTALL) -m 0644 include/kilix_encodec.h $(DESTDIR)$(PREFIX)/include/
 	$(INSTALL) -m 0644 include/kilix_encodec_file.h $(DESTDIR)$(PREFIX)/include/
+	$(INSTALL) -m 0644 include/kilix_encodec_content.h $(DESTDIR)$(PREFIX)/include/
 	$(INSTALL) -m 0644 $(STATIC_LIB) $(DESTDIR)$(PREFIX)/lib/
 	$(INSTALL) -m 0755 $(SHARED_LIB) $(DESTDIR)$(PREFIX)/lib/
 	ln -sfn lib$(PROJECT).so.0 \
@@ -174,6 +193,10 @@ install: all
 	$(INSTALL) -m 0755 $(COMMAND) $(DESTDIR)$(PREFIX)/bin/
 	$(INSTALL) -m 0644 LICENSE THIRD-PARTY-NOTICES.md README.md FILE-FORMAT.md \
 		$(DESTDIR)$(PREFIX)/share/doc/$(PROJECT)/
+ifeq ($(CONTENT),1)
+	$(INSTALL) -m 0644 $(BUILD)/content_bundle.receipt.json $(BUILD)/CONTENT-LICENSE.txt \
+		$(DESTDIR)$(PREFIX)/share/doc/$(PROJECT)/
+endif
 
 install-test: all
 	rm -rf $(BUILD)/install-root
@@ -183,8 +206,10 @@ install-test: all
 	flags=$$(PKG_CONFIG_PATH="$$pc_path" \
 		$(PKG_CONFIG) --define-prefix --cflags --libs $(PROJECT)); \
 	$(CC) $(CFLAGS) -o $(BUILD)/test-install tests/test_install.c $$flags
-	LD_LIBRARY_PATH=$(abspath $(BUILD)/install-root$(PREFIX)/lib) \
+	LD_LIBRARY_PATH=$(abspath $(BUILD)/install-root$(PREFIX)/lib):"$${LD_LIBRARY_PATH:-}" \
 		$(BUILD)/test-install
+
+FORCE_CONTENT:
 
 clean:
 	rm -rf $(BUILD)

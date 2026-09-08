@@ -25,3 +25,10 @@ artifact:
 Derived graphs and codebooks are model artifacts, not project code. None may
 be committed or published from this repository without its own recorded
 license and provenance decision.
+
+An optional `CONTENT=1` build embeds the explicitly selected kilix-content
+source package under that package's MIT license. The sealed ZIP contains its
+complete `LICENSE` as `licenses/kilix-content.txt`; the generated build receipt
+records the exact source commit and every bundled file hash. This optional
+runtime uses the separately installed system Python and standard library.
+Neither that interpreter nor any model payload is embedded by this build.

@@ -260,3 +260,45 @@ Existing directory loaders remain available for explicit development tools.
 input refusal, byte-for-byte directory-loader parity and post-close lifetime
 for both profiles and the shared file decoder. It does not qualify a consumer
 or transfer timing/listening results to a new release candidate.
+
+Installed admission is an additional explicit build option:
+
+```sh
+make ONNX=1 CONTENT=1 CONTENT_SOURCE=/path/to/kilix-content \
+    CONTENT_COMMIT=FULL_40_CHARACTER_COMMIT
+```
+
+The build reads that exact content Git archive, includes its license, and
+embeds a deterministic ZIP containing the complete authority package, packaged
+catalog and this provider's admission helper. `content_bundle.receipt.json`
+records every source hash, exact content commit and ZIP digest. No package or
+catalog is taken from the process's Python path. The final source closure must
+bind both this provider and the chosen content source; rebuilding against a
+new catalog produces a new binary and build receipt. Model payloads are never
+part of this bundle. `CONTENT=0` is development-only byte/path functionality;
+it refuses the installed admission API.
+
+`kilix_encodec_content.h` exposes `kenc_installed_assets_open`. Each call runs
+the embedded ZIP from a read-only sealed memory descriptor with isolated system
+Python, a minimal environment and hard resource ceilings. The caller supplies
+an absolute content storage root and a 1–120000 ms deadline. The helper checks
+the exact F101 IDs, versions, graph population, compatibility and packaged
+catalog before opening the production receipt store and `Installer.open_asset`.
+All declared notices and metadata are verified too; only the native 9/4 graph
+members are returned. Every returned descriptor is rehashed by the helper,
+then subject to the native loader's unchanged compiled hash/ORT checks.
+
+The C caller accepts one bounded, credential-bound descriptor record only
+after the owned helper exits successfully, closes all received FDs on refusal,
+and kills/reaps only its own helper on cancellation or deadline. No arbitrary
+helper/interpreter path, ambient loader/Python import configuration, caller
+catalog, receipt decision, download, converter or path-only admission is used.
+The optional `XDG_STATE_HOME` continues to select the production receipt store
+under that API's ownership and authority checks. A successful asset object owns
+its FDs until `kenc_installed_assets_free`; model contexts retain their own bytes.
+
+`make test-content-python CONTENT_SOURCE=/path/to/kilix-content` checks the
+real receipt/snapshot API with clearly synthetic graph identities and catalog
+data. `make test-content-ipc` checks C descriptor framing, privacy, limits,
+cancellation and cleanup with an explicitly synthetic embedded peer. These
+fixtures provide no actual model admission or release qualification credit.
