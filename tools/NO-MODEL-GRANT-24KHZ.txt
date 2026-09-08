@@ -1,0 +1,6 @@
+EnCodec 24 kHz checkpoint and derivatives: no affirmative redistribution grant found in the recorded release authority.
+The project MIT code license is not a model grant. No mirror or redistribution of this checkpoint, graphs or codebooks is authorized.
+F100 must use the original exact user-supplied checkpoint and local conversion after the required user decision.
+Official source: https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th
+Checkpoint SHA256: d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf
+This notice records the frozen determination; it does not grant or determine additional model rights.

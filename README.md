@@ -260,3 +260,69 @@ Existing directory loaders remain available for explicit development tools.
 input refusal, byte-for-byte directory-loader parity and post-close lifetime
 for both profiles and the shared file decoder. It does not qualify a consumer
 or transfer timing/listening results to a new release candidate.
+
+## Local 24 kHz conversion command
+
+`tools/build_converter.py` builds a relocatable conversion command from the
+unchanged export source and lock. Run it with system Python on Linux x86-64:
+
+```sh
+python3 tools/build_converter.py
+```
+
+The default build acquires the exact UV 0.12.3 and CPython 3.12.8 tool archives
+listed in `tools/converter-inputs.json`, then constructs a fresh CPU environment
+from the frozen lock. It builds the EnCodec sdist only after the locked wheels
+supply setuptools. No model input is acquired. Tool archives and dependency
+artifacts use a private cache; `--offline` requires that cache to be populated.
+`--cache-dir` selects another private cache, `--output-root` selects an existing
+destination, and `--timeout` bounds the entire build, up to 3,600 seconds.
+An explicit development environment can be selected only with all three
+`--environment`, `--python` and `--uv` paths. That route records the selected
+bytes and the exact package population; it does not acquire a new environment.
+
+The output consists of `bin/kilix-encodec-convert-24khz` and its adjacent
+`.converter/runtime.tar` and build receipt. Keep these together when relocating
+them. The receipt binds the exporter, lock, tools, package population, every
+runtime member, notices, builder and generated command. It is build evidence;
+F100 installed-asset and source-supply authority are separate. Existing output
+entries are never overwritten. The dedicated build process owns and reaps its
+children before removing its private staging directories, including children
+that create a new session. Inputs and destination directory identities are
+checked while building; symlink or shared directory chains refuse.
+Generated package `RECORD` indexes are omitted because they include temporary
+environment command wrappers which are not shipped. Dependency code, version
+metadata and license notices are retained and bound in the runtime receipt.
+
+Invoke the command with the original, locally supplied checkpoint and an
+existing, empty directory owned by the current user with mode 0700:
+
+```sh
+bin/kilix-encodec-convert-24khz \
+  --input /absolute/path/to/encodec_24khz-d7cc33bc.th \
+  --output /absolute/path/to/empty-output \
+  --timeout 180
+```
+
+The command accepts only the exact size and SHA-256 of the frozen original
+checkpoint. It seals that input and its complete runtime before execution,
+uses the restricted weights-only exporter in a private process/network/mount
+namespace, and checks all nine output files against the native population.
+The bounded temporary runtime is read-only before the selected interpreter
+starts; the trusted bootstrap installs hard resource limits first. Two CPU
+threads are selected. Cancellation and deadlines tear down the owned process
+tree. A failed attempt can leave partial files in its output directory for
+the caller to inspect or discard; a new conversion requires an empty output.
+
+Successful output also carries `notices/NO-MODEL-GRANT-24KHZ.txt`. Neither this
+tool nor its output grants a model license, creates a source-supply decision,
+admits an installed model, or authorizes redistribution. Checkpoints, runtime
+archives and generated graphs must not be committed to this repository.
+The command needs system Python, bubblewrap, user namespaces and Linux memfd
+seals. The development runtime occupies roughly 1.1 GiB on disk and additional
+temporary memory while converting; this is not a fitted device profile.
+
+`python3 tests/test_converter.py -v` runs bounded file, cancellation, process
+ownership and output-publication controls without model payloads or network
+access. Real conversion, reproducible builds and installed admission require
+their separate exact inputs and evidence.
