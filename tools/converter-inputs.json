@@ -1,0 +1,224 @@
+{
+  "checkpoint": {
+    "bytes": 93171529,
+    "sha256": "d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf"
+  },
+  "notice_sha256": "253aa05a6109269e0c6db8493618060684a2826b7ccf3a496eea7f0b4ea2b0c3",
+  "outputs": {
+    "decoder_stateful_op17.onnx": {
+      "bytes": 29733075,
+      "sha256": "90cb4f26f05df4ad3537cfc2ab495fa4e6f9074b5f32303cdf4b89dbe548722a"
+    },
+    "encoder_stateful_op17.onnx": {
+      "bytes": 29720617,
+      "sha256": "19c6f57f0d39d2660942c958a797133fa0eedd4120cccf5daecc5726427b8269"
+    },
+    "manifest.json": {
+      "bytes": 12768,
+      "sha256": "02201a5a947dc0a0b9cce84d585eca35fb8a7e57aee4d404d5cb14f495f40b6c"
+    },
+    "rvq_decode_12kbps_op17.onnx": {
+      "bytes": 8396869,
+      "sha256": "5e0db494814c629326fe4d82ce799915fdb45f841d3d99526bf126468849b9b2"
+    },
+    "rvq_decode_3kbps_op17.onnx": {
+      "bytes": 2099386,
+      "sha256": "776ab1b5a3990fb9b96a6eca43010356b08dc6f9c423af32601fb67f84a8a322"
+    },
+    "rvq_decode_6kbps_op17.onnx": {
+      "bytes": 4198507,
+      "sha256": "505b6e01f75e6e966499be4e20a42d282959320653978a951cf44094aae7b2c0"
+    },
+    "rvq_encode_12kbps_op17.onnx": {
+      "bytes": 16285603,
+      "sha256": "cf1c80c23955255809ba90f564e6f30e0911851a298c4622f180585b4a4c5a37"
+    },
+    "rvq_encode_3kbps_op17.onnx": {
+      "bytes": 3677949,
+      "sha256": "a873a3264a134df0d61557e0e751ac3702f15ad5a8fb97d53712ab746d533ad0"
+    },
+    "rvq_encode_6kbps_op17.onnx": {
+      "bytes": 7880428,
+      "sha256": "938a494c90dcb185a01e18457a9c08d6b6184785e8099baca29499cf5dbd020c"
+    }
+  },
+  "python_binary_sha256": "0dc3a692fa85fcdb7f1a5877d2adf179809ac417a07ffde2373c832863800a15",
+  "runtime_packages": [
+    [
+      "certifi",
+      "2026.7.22"
+    ],
+    [
+      "charset-normalizer",
+      "3.5.1"
+    ],
+    [
+      "einops",
+      "0.8.1"
+    ],
+    [
+      "encodec",
+      "0.1.1"
+    ],
+    [
+      "filelock",
+      "3.32.4"
+    ],
+    [
+      "flatbuffers",
+      "25.12.19"
+    ],
+    [
+      "fsspec",
+      "2026.7.0"
+    ],
+    [
+      "hf-xet",
+      "1.6.0"
+    ],
+    [
+      "huggingface-hub",
+      "0.36.2"
+    ],
+    [
+      "idna",
+      "3.19"
+    ],
+    [
+      "jinja2",
+      "3.1.6"
+    ],
+    [
+      "markupsafe",
+      "3.0.3"
+    ],
+    [
+      "ml-dtypes",
+      "0.6.0"
+    ],
+    [
+      "mpmath",
+      "1.3.0"
+    ],
+    [
+      "networkx",
+      "3.6.1"
+    ],
+    [
+      "numpy",
+      "2.1.3"
+    ],
+    [
+      "onnx",
+      "1.22.0"
+    ],
+    [
+      "onnxruntime",
+      "1.29.0"
+    ],
+    [
+      "packaging",
+      "26.3"
+    ],
+    [
+      "protobuf",
+      "7.36.0"
+    ],
+    [
+      "pyyaml",
+      "6.0.3"
+    ],
+    [
+      "regex",
+      "2026.8.31"
+    ],
+    [
+      "requests",
+      "2.34.2"
+    ],
+    [
+      "safetensors",
+      "0.6.2"
+    ],
+    [
+      "setuptools",
+      "84.0.0"
+    ],
+    [
+      "sympy",
+      "1.13.1"
+    ],
+    [
+      "tokenizers",
+      "0.22.2"
+    ],
+    [
+      "torch",
+      "2.6.0+cpu"
+    ],
+    [
+      "torchaudio",
+      "2.6.0+cpu"
+    ],
+    [
+      "tqdm",
+      "4.70.0"
+    ],
+    [
+      "transformers",
+      "4.57.6"
+    ],
+    [
+      "typing-extensions",
+      "4.16.0"
+    ],
+    [
+      "urllib3",
+      "2.7.0"
+    ]
+  ],
+  "schema": "kilix.encodec.converter-inputs/v1",
+  "source_files": {
+    "pyproject.toml": "3937fe9804948e25e3550bb6f5d576ad50d2c35b8f3e588427ba05382d16086e",
+    "tools/export_24khz.py": "e95ef4ba52b3b3a65c23098757b2dfaf1eaa2b1da9004d2762ef3333902e8783",
+    "tools/stateful_graph.py": "7a94906d6e1cd809162ba77ea82728f2bf544a0c98895d268e8d2e786b0790f4",
+    "uv.lock": "5fcb6bcca9a8d6cf1674a3a063bef7d863485d3736beeb97dc19624f453d071c"
+  },
+  "tool_archives": {
+    "python": {
+      "binary_member": "python/bin/python3.12",
+      "binary_sha256": "0dc3a692fa85fcdb7f1a5877d2adf179809ac417a07ffde2373c832863800a15",
+      "bytes": 21288771,
+      "sha256": "34a5a1619aba16544ec8d6f225be59b333d650f58983eeca25193722dc9016fd",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+    },
+    "uv": {
+      "binary_member": "uv-x86_64-unknown-linux-gnu/uv",
+      "binary_sha256": "729d27dbea534ee540a2d3ef43a62fa1a10af7fcbb6d57a70d5859509f624578",
+      "bytes": 21721441,
+      "sha256": "600cf9a742aca00d292673b16b5acffaa7b8c269a364ad0c2e79498dcb1fe101",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-unknown-linux-gnu.tar.gz"
+    }
+  },
+  "toolchain": {
+    "encodec": "0.1.1",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.29.0",
+    "python": "3.12.8",
+    "torch": "2.6.0+cpu",
+    "uv": "uv 0.12.3 (x86_64-unknown-linux-gnu)"
+  },
+  "uv_binary_sha256": "729d27dbea534ee540a2d3ef43a62fa1a10af7fcbb6d57a70d5859509f624578",
+  "uv_notices": {
+    "uv-LICENSE-APACHE": {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "source_url": "https://raw.githubusercontent.com/astral-sh/uv/507230998c9541d67814b57463ac00e454ff6991/LICENSE-APACHE"
+    },
+    "uv-LICENSE-MIT": {
+      "bytes": 1077,
+      "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
+      "source_url": "https://raw.githubusercontent.com/astral-sh/uv/507230998c9541d67814b57463ac00e454ff6991/LICENSE-MIT"
+    }
+  }
+}
