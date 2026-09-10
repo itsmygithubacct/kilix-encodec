@@ -80,6 +80,7 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/listening_trial.py --version; \
 	TMPDIR=/home/pleb/scratch-workers \
 		$(PYTHON) tools/listening_trial.py --self-test; \
+	$(PYTHON) tools/capacity_fixture.py --self-test; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
 
 export-env:

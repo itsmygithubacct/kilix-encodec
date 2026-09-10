@@ -42,10 +42,12 @@ is labelled unfrozen-host measurement and receives measured H1 gate credit 0/1.
 Blind listening and pinned offline delivery remain 0/1 each.
 
 For a frozen-fixture measurement, both verifiers accept `--fixture-tier h1`
-together with the frozen `fixture.sh` path. They fail closed unless the guest
-proves the exact runner digest and complete H1 identity: Debian 13.5,
-q35/qemu64, 4/4 vCPUs, 8 GiB RAM, the root filesystem on the frozen 100 GiB
-disk, and at least 80 GiB free. The 24 kHz gate requires at least 1,000/1,000
+together with the frozen `fixture.sh` path. The durable runner is
+`021-capacity-fixtures/fixture.sh` and is built by `build-fixtures.sh` in
+that same directory. They fail closed unless the guest proves the exact
+runner digest and complete H1 identity: Debian 13.5, q35/qemu64, 4/4 vCPUs,
+8 GiB RAM, KVM (`kvm-clock` plus `-accel kvm` on the runner), the root
+filesystem on the frozen 100 GiB disk, and at least 80 GiB free. The 24 kHz gate requires at least 1,000/1,000
 measured packets in every one of 6/6 encode/decode pipelines and p99 below
 20 ms (therefore at least 2x real-time); the 48 kHz decoder requires at least
 100/100 measured frames and must sustain its 990 ms cadence.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fifteenth H1 identity control: the guest must advertise `kvm-clock`, and the
+  runner must pass `-accel kvm`. The recorded runner digest is the
+  `021-capacity-fixtures/fixture.sh` that includes that accelerator.
+
 ## 0.1.5 - 2026-08-31
 
 - Bind performance verification to the frozen H1 q35/qemu64 fixture and refuse
