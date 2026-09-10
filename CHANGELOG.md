@@ -5,6 +5,9 @@
 - Fifteenth H1 identity control: the guest must advertise `kvm-clock`, and the
   runner must pass `-accel kvm`. The recorded runner digest is the
   `021-capacity-fixtures/fixture.sh` that includes that accelerator.
+- `check_h1_snapshot` is the identity predicate; `--snapshot FILE RUNNER`
+  applies it to a recorded guest. A builder exit 0 requires that check to have
+  run and passed.
 
 ## 0.1.5 - 2026-08-31
 
