@@ -9,12 +9,22 @@ import importlib.metadata
 import json
 import os
 import platform
+import socket
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from license_review import (
+    CHECKPOINT_FILE,
+    record_license_review,
+    require_license_review,
+    verify_user_supplied_checkpoint,
+)
 
 
-TOOL_VERSION = "0.1.5"
+TOOL_VERSION = "0.1.6"
 REPOSITORY = Path(__file__).resolve().parents[1]
 GRAPH_FILES = {
     "encoder": "encoder_stateful_op17.onnx",
@@ -213,7 +223,16 @@ def uv_version() -> str:
     return completed.stdout.strip()
 
 
-def export_bundle(checkpoint: Path, output_path: Path) -> Path:
+def export_bundle(
+    checkpoint: Path,
+    output_path: Path,
+    attestation: Path | None = None,
+) -> Path:
+    checkpoint = outside_repository(checkpoint, "checkpoint")
+    require_license_review(checkpoint, attestation)
+    verify_user_supplied_checkpoint(checkpoint)
+    output = prepare_output_directory(output_path)
+
     import onnx
     import torch
 
@@ -225,8 +244,6 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
         load_model,
     )
 
-    checkpoint = outside_repository(checkpoint, "checkpoint")
-    output = prepare_output_directory(output_path)
     model, identity = load_model(checkpoint)
     resolved_profiles = tuple(
         (
@@ -288,6 +305,7 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
         "schema": "kilix.encodec.stateful-onnx-export/v2",
         "sources": {
             "export_24khz.py": sha256(Path(__file__).resolve()),
+            "license_review.py": sha256(REPOSITORY / "tools/license_review.py"),
             "pyproject.toml": sha256(REPOSITORY / "pyproject.toml"),
             "stateful_graph.py": sha256(REPOSITORY / "tools/stateful_graph.py"),
             "uv.lock": sha256(REPOSITORY / "uv.lock"),
@@ -312,19 +330,142 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
     return manifest_path
 
 
+def _forbid_network() -> None:
+    def blocked(*_args: object, **_kwargs: object) -> socket.socket:
+        raise OSError("network forbidden during 24 kHz first-use tests")
+
+    socket.socket = blocked  # type: ignore[misc, assignment]
+
+
+def _refused(action: Callable[[], object], needle: str | None = None) -> bool:
+    try:
+        action()
+    except ValueError as error:
+        text = str(error)
+        if needle is None or needle in text:
+            return True
+        raise
+    return False
+
+
+def policy_self_test() -> None:
+    """Drive export_bundle: missing attestation refuses; present review
+    proceeds to the existing user-supplied checkpoint verification.
+    """
+
+    scratch = os.environ.get("TMPDIR", "/home/pleb/scratch-workers")
+    _forbid_network()
+    with tempfile.TemporaryDirectory(
+        prefix="kilix-encodec-24khz-license-", dir=scratch
+    ) as temporary:
+        root = Path(temporary)
+        checkpoint = root / CHECKPOINT_FILE
+        license_text = root / "reviewed-license.txt"
+        license_text.write_text(
+            "user-reviewed 24 kHz checkpoint license text\n", encoding="utf-8"
+        )
+        output = root / "export-output"
+        copied = root / "copied-checkpoint.th"
+
+        missing = _refused(
+            lambda: export_bundle(checkpoint, output),
+            "license-review attestation is required",
+        )
+        no_output = not output.exists()
+        no_copy = not copied.exists() and list(root.rglob("*.th")) == []
+
+        record_license_review(checkpoint, license_text)
+        checkpoint.write_bytes(b"user-supplied-not-the-meta-checkpoint")
+        identity = _refused(
+            lambda: export_bundle(checkpoint, output),
+            "checkpoint size mismatch",
+        )
+        still_no_output = not output.exists()
+        still_no_copy = not any(
+            path.read_bytes() == checkpoint.read_bytes() and path != checkpoint
+            for path in root.rglob("*")
+            if path.is_file()
+        )
+        still_no_fetch = set(root.rglob("*.th")) == {checkpoint}
+
+        cli_checkpoint = root / "cli" / CHECKPOINT_FILE
+        cli_output = root / "cli-output"
+        cli = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--checkpoint",
+                str(cli_checkpoint),
+                "--output-dir",
+                str(cli_output),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        cli_refused = (
+            cli.returncode == 1
+            and "license-review attestation is required" in cli.stderr
+            and not cli_output.exists()
+        )
+
+        cases = (
+            missing,
+            no_output,
+            no_copy,
+            identity,
+            still_no_output,
+            still_no_copy,
+            still_no_fetch,
+            cli_refused,
+        )
+        passed = sum(1 for case in cases if case)
+        if passed != len(cases):
+            raise RuntimeError(
+                f"24 kHz first-use license self-test failed: {passed}/{len(cases)}"
+            )
+        print(f"24 kHz first-use license refusals: {passed}/{len(cases)} PASS")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--record-license-review", action="store_true")
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--license-text", type=Path)
+    parser.add_argument("--license-attestation", type=Path)
     args = parser.parse_args()
     if args.version:
         print(f"kilix-encodec export tool {TOOL_VERSION}")
         return 0
+    if args.self_test:
+        try:
+            policy_self_test()
+        except (OSError, RuntimeError, ValueError) as error:
+            parser.exit(1, f"export refused: {error}\n")
+        return 0
+    if args.record_license_review:
+        if args.checkpoint is None or args.license_text is None:
+            parser.error(
+                "--checkpoint and --license-text are required with "
+                "--record-license-review"
+            )
+        try:
+            path = record_license_review(
+                args.checkpoint, args.license_text, args.license_attestation
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            parser.exit(1, f"export refused: {error}\n")
+        print(f"license-review attestation recorded: {path}")
+        return 0
     if args.checkpoint is None or args.output_dir is None:
         parser.error("--checkpoint and --output-dir are required")
     try:
-        export_bundle(args.checkpoint, args.output_dir)
+        export_bundle(
+            args.checkpoint, args.output_dir, args.license_attestation
+        )
     except (OSError, RuntimeError, ValueError) as error:
         parser.exit(1, f"export refused: {error}\n")
     return 0

@@ -1,8 +1,9 @@
 """State-explicit fixed-packet EnCodec graph construction.
 
 The development exporter receives a user-supplied checkpoint path.  It never
-uses EnCodec's URL-loading path, and the checkpoint is loaded with PyTorch's
-restricted ``weights_only`` loader after exact byte verification.
+uses EnCodec's URL-loading path. Opening the 24 kHz checkpoint requires a
+recorded local license-review attestation, then the exact byte identity, then
+PyTorch's restricted ``weights_only`` loader.
 """
 
 from __future__ import annotations
@@ -19,6 +20,13 @@ from encodec import EncodecModel
 from encodec.modules import SConv1d, SConvTranspose1d, SLSTM
 from torch import Tensor, nn
 
+from license_review import (
+    CHECKPOINT_BYTES,
+    CHECKPOINT_FILE,
+    CHECKPOINT_SHA256,
+    require_license_review,
+)
+
 
 SAMPLE_RATE = 24_000
 PACKET_SAMPLES = 960
@@ -26,11 +34,6 @@ PACKET_LATENT_FRAMES = 3
 BANDWIDTH_PROFILES = ((3.0, 4), (6.0, 8), (12.0, 16))
 DEFAULT_BANDWIDTH = 6.0
 OPSET = 17
-CHECKPOINT_FILE = "encodec_24khz-d7cc33bc.th"
-CHECKPOINT_BYTES = 93_171_529
-CHECKPOINT_SHA256 = (
-    "d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf"
-)
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,7 @@ def _sha256_file(handle: object) -> str:
 def load_model(checkpoint: Path) -> tuple[EncodecModel, CheckpointIdentity]:
     """Load the exact reviewed checkpoint without network or unrestricted pickle."""
 
+    require_license_review(checkpoint)
     try:
         path_stat = checkpoint.lstat()
     except FileNotFoundError as error:

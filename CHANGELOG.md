@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6 - 2026-09-11
+
+- Require a recorded local license-review attestation before opening or
+  exporting the 24 kHz checkpoint (license text path and digest, timestamp,
+  and the user-supplied checkpoint path).
+- Missing attestation refuses without copying or fetching the checkpoint.
+  The skeleton `license_disposition=no-grant-found-fail-closed` is unchanged.
+  The native runtime still does not download.
+
 ## 0.1.5 - 2026-08-31
 
 - Bind performance verification to the frozen H1 q35/qemu64 fixture and refuse

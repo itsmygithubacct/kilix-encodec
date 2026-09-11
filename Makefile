@@ -74,6 +74,8 @@ test: all $(TEST_BINS)
 		models/encodec-24khz-v1/manifest.json; \
 	$(PYTHON) tools/verify_export.py --self-test; \
 	$(PYTHON) tools/export_24khz.py --version; \
+	TMPDIR=/home/pleb/scratch-workers \
+		$(PYTHON) tools/export_24khz.py --self-test; \
 	$(PYTHON) tools/export_48khz.py --version; \
 	TMPDIR=/home/pleb/scratch-workers \
 		$(PYTHON) tools/export_48khz.py --self-test; \

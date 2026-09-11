@@ -16,7 +16,8 @@ artifact:
 
 - the required 24 kHz causal checkpoint has no affirmative redistribution
   grant in the reviewed source and remains fail-closed, non-redistributable,
-  and user-supplied;
+  and user-supplied. First use records a local license-review attestation;
+  this repository still does not vendor or download the checkpoint;
 - the separately required 48 kHz stereo checkpoint has publisher-declared MIT
   metadata, but it is not present in this repository.
 

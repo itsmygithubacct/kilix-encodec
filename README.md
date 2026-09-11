@@ -1,7 +1,7 @@
 # kilix-encodec
 
 `kilix-encodec` is the C11 provider boundary for Kilix EnCodec packet encoding
-and decoding. The 0.1.5 tree builds the fail-closed provider skeleton plus
+and decoding. The 0.1.6 tree builds the fail-closed provider skeleton plus
 network-free development exporters for state-explicit 24 kHz streaming graphs
 and the bounded 48 kHz stereo file profile. No model runtime, graph,
 checkpoint, codebook, audio fixture, or weight payload is included.
@@ -23,9 +23,17 @@ UndefinedBehaviorSanitizer.
 
 Export dependencies are isolated in the locked `export` group. The exporter
 accepts only the exact reviewed user-supplied checkpoint and refuses to write
-inside the Git repository:
+inside the Git repository. It does not download Meta's checkpoint. First use
+records a local license-review attestation; without that record, open and
+export refuse (`KENC_ERR_MODEL` / CLI exit 1) and do not copy or fetch the
+file. The committed skeleton stays
+`license_disposition=no-grant-found-fail-closed` until a user-supplied
+artifact is present. The native runtime still does not download.
 
 ```sh
+python tools/export_24khz.py --record-license-review \
+  --checkpoint /path/to/encodec_24khz-d7cc33bc.th \
+  --license-text /path/to/reviewed-checkpoint-license.txt
 make export-env
 make export-test \
   CHECKPOINT=/path/to/encodec_24khz-d7cc33bc.th \
@@ -106,9 +114,12 @@ the frozen fixture.
   Python runtimes.
 - The repository contains 0 of 2 required model artifacts. Model loading
   returns `KENC_ERR_MODEL` until the later stateful-ONNX phase lands.
-- The export tool performs 0 of 1 checkpoint downloads. It opens only the
-  caller-supplied regular file, verifies its exact size and SHA-256, and uses
-  PyTorch's restricted weights-only loader.
+- The export tool performs 0 of 1 checkpoint downloads. Opening or exporting
+  the 24 kHz checkpoint requires a recorded local license-review attestation
+  (license text path and digest, timestamp, user-supplied checkpoint path).
+  After that record exists, it opens only the caller-supplied regular file,
+  verifies its exact size and SHA-256, and uses PyTorch's restricted
+  weights-only loader.
 - The 24 kHz checkpoint and every derivative remain user-supplied and
   non-redistributable. The 48 kHz safetensors input and every derivative remain
   scratch-only; publication is owner-reserved.

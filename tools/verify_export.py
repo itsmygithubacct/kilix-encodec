@@ -165,6 +165,7 @@ def load_manifest(bundle: Path, checkpoint: Path) -> tuple[dict[str, Any], objec
 
     expected_sources = {
         "export_24khz.py": sha256(REPOSITORY / "tools/export_24khz.py"),
+        "license_review.py": sha256(REPOSITORY / "tools/license_review.py"),
         "pyproject.toml": sha256(REPOSITORY / "pyproject.toml"),
         "stateful_graph.py": sha256(REPOSITORY / "tools/stateful_graph.py"),
         "uv.lock": sha256(REPOSITORY / "uv.lock"),

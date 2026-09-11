@@ -16,7 +16,9 @@ kenc_result kenc_model_load(kenc_model **out, const char *asset_dir)
         return KENC_ERR_INVALID;
     }
 
-    /* P1 is deliberately fail-closed until the stateful ONNX gate lands. */
+    /* P1 is fail-closed: no network, no bundled weights, no checkpoint fetch.
+     * First-use license-review lives on the 24 kHz exporter; this runtime
+     * still does not download. */
     return KENC_ERR_MODEL;
 }
 
