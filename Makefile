@@ -161,6 +161,9 @@ export-test:
 		--checkpoint "$(CHECKPOINT)" --output-dir "$(OUTPUT_DIR)"
 	uv run --frozen --group export python tools/verify_export.py \
 		--bundle "$(OUTPUT_DIR)" --checkpoint "$(CHECKPOINT)"
+	uv run --frozen --group export python tools/verify_epoch_programme.py --self-test
+	uv run --frozen --group export python tools/verify_epoch_programme.py \
+		--bundle "$(OUTPUT_DIR)"
 
 export-48khz-test:
 	@test -n "$(MODEL_DIR)" || \

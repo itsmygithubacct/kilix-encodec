@@ -185,6 +185,22 @@ pair shares the same stream start and is identical before its epoch boundary
 measured H1 gate credit 0/1. Blind listening and pinned offline delivery
 remain 0/1 each.
 
+`tools/verify_epoch_programme.py` then holds that runtime to the checked F101
+remedy programme recorded in `tests/fixtures/f101-c5r4-programme.json`: the
+14 programme items' codes and float32 PCM identities at 6, 3 and 12 kb/s,
+fresh-encoder and fresh-decoder identity for epochs 1-11 at each rate, the
+never-reset rendering's identity, and the 3 and 12 kb/s boundary level tables
+within 0.01 dB. The 9 synthetic items are regenerated and must hash to the
+programme manifest. The 5 recorded excerpts are read from the directory named
+by `KENC_F101_PROGRAMME_DIR`; when it is unset, every control that needs them
+is reported and counted as SKIPPED, never as passed:
+
+```sh
+KENC_F101_PROGRAMME_DIR=/path/to/programme make export-test \
+  CHECKPOINT=/path/to/encodec_24khz-d7cc33bc.th \
+  OUTPUT_DIR=/path/to/empty/scratch-directory
+```
+
 For a frozen-fixture measurement, both verifiers accept `--fixture-tier h1`
 together with the frozen `fixture.sh` path. They fail closed unless the guest
 proves the exact runner digest and complete H1 identity: Debian 13.5,

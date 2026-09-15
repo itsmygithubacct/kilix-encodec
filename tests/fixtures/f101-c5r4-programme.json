@@ -1,0 +1,864 @@
+{
+ "arm": "C5-R4",
+ "decision": "OD-AL 2026-09-15: every epoch start primes zero state with a 4-packet repeat pre-roll",
+ "determinism_totals": {
+  "12": {
+   "D_rx": 154,
+   "D_tx": 154,
+   "total": 154
+  },
+  "3": {
+   "D_rx": 154,
+   "D_tx": 154,
+   "total": 154
+  },
+  "6": {
+   "D_rx": 154,
+   "D_tx": 154,
+   "total": 154
+  }
+ },
+ "items": [
+  {
+   "construction": "verifier signal() form, torch seed 13, peak 0.9",
+   "continuous": {
+    "12": {
+     "codes": "a62db4341ddecbf7f213b852f52f8773652f4cf3031a6ea3f09515c54cee6b03",
+     "pcm_float32": "7f3e7d942f33a38a37d76cb773fd6c4f208fe8f9b1a00bfc55e7330965ea0759"
+    },
+    "3": {
+     "codes": "72954747a3af38e449f099d4a9b2b77fa3e2ca038fe5cf0e3afdd2642fc67410",
+     "pcm_float32": "6cdf37526dec725e76d72b500eae789f1a0cc7a9f56d8bb161b7ef0ee0700112"
+    },
+    "6": {
+     "codes": "f5035246aa45bb76febdc6ea8693c27eb69ac27955313126e64b6b06b2b52cf3",
+     "pcm_float32": "fbcc9da7a9025879d2f70970b03ef0a8bb37a2f636d094cf00448e2d9870849b"
+    }
+   },
+   "kind": "fixture",
+   "name": "syn-fixture",
+   "renders": {
+    "12": {
+     "codes": "7081009a2f03b706e779766a651881064cc104718e479ccbb7f211098702de17",
+     "pcm_float32": "f5d309d80839883245f9016d0151f8c680193d39bda7452c45fa6b4c8109e370"
+    },
+    "3": {
+     "codes": "222a9c02de3c5c657a9c8785b27a6375553563e2355ede2a0bc47b6d5842775f",
+     "pcm_float32": "66f83db25251fc1d499a715f098e97c1f52f7e5f19a542b1aa7d7a542fc5551b"
+    },
+    "6": {
+     "codes": "b76788f5af774fb5ce5fd85dc593c6ee94c539069d665b2b151958ca450273af",
+     "pcm_float32": "b784aefb973bcfb747d2a4a73be59ad30c26830a75fccdde83507d9f30c92e0a"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "32e868af8138c26e551549d2afdc44869180c23729b71a9aafd47833af2256f8"
+  },
+  {
+   "construction": "sine 440 Hz amplitude 0.25",
+   "continuous": {
+    "12": {
+     "codes": "970ea6e8478f24c232506a1f863b1add737ce726910edc0745d286afd3f7bc3f",
+     "pcm_float32": "5cdd6dbe1e66befc899dfda2130d0cc14b98203c42b8c9681557cc6d9980f62e"
+    },
+    "3": {
+     "codes": "c872f22de378368e1f70a786fb34c0ba14ead708d7ad2ea990a342532afc3765",
+     "pcm_float32": "580c186519beb416fd5a4ed842d5d047d11a795d8661eb1f81b7c55519823b9e"
+    },
+    "6": {
+     "codes": "b693dd5c80d2e787337d82f1dd38f714e2fb99e1f6cd3046aac46e93b15c7e51",
+     "pcm_float32": "c3057e05ec292c8afc372e1a3d6397bfac24d5384f7adfc88a8521b8ef32e3e9"
+    }
+   },
+   "kind": "tones",
+   "name": "syn-tone440",
+   "renders": {
+    "12": {
+     "codes": "706ba7c2f0641f824f3bf0e0d9da4b40d785b82332c490eb432410ab656464a6",
+     "pcm_float32": "0f0c2e3d06ae8dfcd364e3c97e80cdf2ba830b54fa9c4cdbebf0b051aee92059"
+    },
+    "3": {
+     "codes": "24e3979ca5e339394cbf206099d21b49e08bd5871ff728694a08e8d9ff927eca",
+     "pcm_float32": "6bab9262d8c5c43d1916a81ed88728ca0c08ca73094571c7f040fbdb393d8809"
+    },
+    "6": {
+     "codes": "588966d79206abac2a981af426a322e33ba785c441d7c9c7854942457a729b78",
+     "pcm_float32": "af0c21c8de4a46e07b249da6327113c257ee38dbc4e278f7cccd9d4a04dd64c3"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "d0786cd08385433582c5e73cc8ed65712ffcbe753a05aaaedc6be1ab41a29436"
+  },
+  {
+   "construction": "sine 100 Hz amplitude 0.25",
+   "continuous": {
+    "12": {
+     "codes": "dcd76a23694ffa60eca0eb119ef753bd0a766b5f113101bd29922fa8bc5dabce",
+     "pcm_float32": "fc0a1be986807b866435e2a05aa7eec286f0a3b8bbf17faec262e1b64d79797d"
+    },
+    "3": {
+     "codes": "220a6786a23685d9cf4bf0f2eb3357e268f7884927d8033d9b6df6afcf698099",
+     "pcm_float32": "d22e997b6e1bd0fd585f8d455b2e8c9934d8667ce10485f48a9b2b780c39e696"
+    },
+    "6": {
+     "codes": "3129244c67ab7658267c03d42b582c57ee36885e56b5bdc72de32605ebc3ccaa",
+     "pcm_float32": "313d7cb0d9307f854db37abe9a87107369b5d777dbf9234112f98650cef2227a"
+    }
+   },
+   "kind": "tones",
+   "name": "syn-tone100",
+   "renders": {
+    "12": {
+     "codes": "49891bd701b26ce87d4c010bb3dd8900ac3f4a1c60b225cc94abfdbc3d1e05bb",
+     "pcm_float32": "b6d31ca410e0187a14b1679d25117716c6be8e7105f0c90cd1ba2d5fec63db1e"
+    },
+    "3": {
+     "codes": "74338d3c1e67896bc358c9237db2fdb4d086e15e8efe6dffeb7aaf6c59706407",
+     "pcm_float32": "38eefb0458280b48d4b7c2b6fde326535a0a6dabd3150d492db8de1d8580420a"
+    },
+    "6": {
+     "codes": "2e7892833f145b86a745b1d2acac9d1319bef31bec03dde27a7f47d0b7d6d68b",
+     "pcm_float32": "f4f9e66e599c0a8841beb3747f07ae2ad52510c53b699a3ea81d3637286b783d"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "a7054639bc5a5ee753a7a711642f8db92a5207a98812814e74371615a3691ca5"
+  },
+  {
+   "construction": "exponential sweep 40 Hz-11 kHz over 12 s amplitude 0.25",
+   "continuous": {
+    "12": {
+     "codes": "a6c3b8932583c74b6f74819fb8702edef250852778bee57670ef57a4bbc220ad",
+     "pcm_float32": "bc2a59bd02037b8dd84a400df0d66b114cdbd71d92203bda23cc7c78fc95474c"
+    },
+    "3": {
+     "codes": "488d3bfd12c9cbfedbef532b536120d91b149d240021d502fa3ab4671df78cc7",
+     "pcm_float32": "2e7b707f342227c45b3ed3de67bf9e2a286aab9e1681a4309d8d522e2dc9117f"
+    },
+    "6": {
+     "codes": "71d0a5b9773798f8d0b21d2c30f0150c600a570e1287868d6eadd0f744569911",
+     "pcm_float32": "a366717a74f8bfc85f923ab54fd1ee9b18c8071b2a6857cea7560b4eaf47c35d"
+    }
+   },
+   "kind": "tones",
+   "name": "syn-sweep",
+   "renders": {
+    "12": {
+     "codes": "ecabb29d30eec3f7f23fa279217df408bdb4429a63b16d326902c63af5533b1d",
+     "pcm_float32": "e6d05ed7c273cb851047c3827aecfdcb737bcc27aa849056ea2474697ee5ae6a"
+    },
+    "3": {
+     "codes": "55819d3e2c09f24329ff0cb24898bca4daa1023a3db234b3e43673913106c20b",
+     "pcm_float32": "490845c0c9280bdc2af14e4eac8dabbd280967e2e9cbb2d59c44f4dd9aa73f36"
+    },
+    "6": {
+     "codes": "11b36975cc9f54a940a3d9938c541bb89805c518281f1b4e2b9e6bda67fd48d2",
+     "pcm_float32": "697bba33737591834260f858ef680f034ecb521ce871d235905622892e3685aa"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "bb1cafe595434cacf3c0cee9ae0eca4da93eb31fdd30b915df13a7782b38abf9"
+  },
+  {
+   "construction": "Gaussian white noise RMS 0.1 seed 101",
+   "continuous": {
+    "12": {
+     "codes": "7cae296e514f8856865161b64c99c37dc2bcc588ab11a0e3f23b5c62478c696a",
+     "pcm_float32": "ac1efa5f7902d06168ae886daf3b6efd5cb6faae6627f5a1640a23e1deb30bac"
+    },
+    "3": {
+     "codes": "cb9201921f72060284d103d0c3c7277f5e5cb332bf1ef47f4a40e72cb6de27d7",
+     "pcm_float32": "829c70807746a49814b88bb77fe6991a1394f7d06ad7f5026b72c71f2ca5edc5"
+    },
+    "6": {
+     "codes": "3a5d3f9ea24fe900c3abce8e7f8a939587310b22921d326ff723bdb3e781784b",
+     "pcm_float32": "f1e401a95624701fbd195f26446958d55b55715bf05c06b2e5a6101cec5a1aeb"
+    }
+   },
+   "kind": "noise",
+   "name": "syn-white",
+   "renders": {
+    "12": {
+     "codes": "a5d592f62a067d24eb6af5f8bf57d3b674abc3d76a06035d44eecea01d134819",
+     "pcm_float32": "5680aeba9bf1fa7132717f99d764f728ae6ce8a5ae86b5b2cbe9faeba8aa818d"
+    },
+    "3": {
+     "codes": "830e49a476a7da1a7c80c2d0a211acd5a264cc32d190f391a1ce42eedcd63aea",
+     "pcm_float32": "086ad8ff97819e21ab0e8dbd378dad64fe5e4106915240ec1bfb73e867a152e9"
+    },
+    "6": {
+     "codes": "9394e60696f65a4ec992cc4d3c7f4fe84ccc73774049bed59abeef21996b51cf",
+     "pcm_float32": "b8c76a76ccf5d60d69bb0dc2c67270c254d57041ae7dee4e2a55fb1548744e02"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "cd6965c49ae001f29abf55ff4fa863ec0d3f0c26dd44693ffe396b7ea6ef0152"
+  },
+  {
+   "construction": "Gaussian noise shaped 1/sqrt(f), RMS 0.1 seed 102",
+   "continuous": {
+    "12": {
+     "codes": "fb5edbffd7242e4cea9f4c5fb78f72a7301888bc8fb07a1f4e9fa6bdf71f274e",
+     "pcm_float32": "5d8152690201ea815b862008d530202b9f3e77dcb265d51a110363bdaa64e363"
+    },
+    "3": {
+     "codes": "0d1b0b781d44cb11ae36a71336d69def642257f4d6d3ce55ddfd9fb8781c14c8",
+     "pcm_float32": "2bd1d06134e9dc9caa2168820b78bdb2ee5d81936f2a1c7df20c649079aed031"
+    },
+    "6": {
+     "codes": "71e87033d1ecd30ad3e7141a067b8a746b49a1a0c73a27e6b8f99bd1668f8f5c",
+     "pcm_float32": "54ac6c6a5269b66dd42e32af7648af308ff91ed1b1e0a8fe42899078221b50b7"
+    }
+   },
+   "kind": "noise",
+   "name": "syn-pink",
+   "renders": {
+    "12": {
+     "codes": "d9ee7e2f80b8cd00b5a831f4cb71c0ed6c5f4f1916913881c3e949f44b9948e0",
+     "pcm_float32": "634e902c65263edec61d6b21c59c479ea95e97648656265cc896d58a4a6d18eb"
+    },
+    "3": {
+     "codes": "89875900bbf5ddf11df15409f25a1dddbc779791de26f7c31bed7b093c6931c0",
+     "pcm_float32": "68c2f73f8e37acdef955e7aef6df5b20d20adb00debbbc21e48d8f6a87fba084"
+    },
+    "6": {
+     "codes": "4f603782998d4c43aa263ff6a5bfb9fa7fe19189064e939c4779782553e91edc",
+     "pcm_float32": "09fc886a6a512ceba1003ca08b77ba9092a82fc9df0203cf37d4bfb6d77edaf5"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "65d6aec72aab797b8640419c2998307ae829c357cedfca6d3bfbf6d3b0e79c71"
+  },
+  {
+   "construction": "all zeros",
+   "continuous": {
+    "12": {
+     "codes": "88f182fcdeb09d7e1d7a3cec2e07513cfe464fe6c0ce2893fecb5f5104da7fb6",
+     "pcm_float32": "246701a110fd8fd678b44bb174830e02d75f14a1ae29a0c184bc796e265e291d"
+    },
+    "3": {
+     "codes": "a86a1a2647e3b4eafe78d307bce68ab5d7c799185e1304a6f30ef5bad184695d",
+     "pcm_float32": "52eae1aa248e2e97fa5927aaddc33588d70ffc25e37338479afdc2f35715d6a9"
+    },
+    "6": {
+     "codes": "a051352c3478d58ff6e747cfcc2e4bed5fec83fb4844479cdc875b7c8e8fee50",
+     "pcm_float32": "80851dc794630d93b2d6fe891ff81695bccf7762a5c60c1624cedabd36e73722"
+    }
+   },
+   "kind": "silence",
+   "name": "syn-silence",
+   "renders": {
+    "12": {
+     "codes": "a1d630330ee31e99691f1331ca4bad22bb93309d47b866b55f1c02b737689a02",
+     "pcm_float32": "3ca4003338b6bd12a9b7cd7dd263e50e508c482c032fd2f44a796de1e85b7159"
+    },
+    "3": {
+     "codes": "42be0e4032712fe8044b23a600392bbfb4e4af71baaa45bc7fddab56e0c479bf",
+     "pcm_float32": "1ec5205f4494e19201886bdd9885654d1911b204137f9fdc9cd83ffaba0c348d"
+    },
+    "6": {
+     "codes": "5aef71c3f77a92ec3f56eb7811a243820d9bb0858c4b1212e253414c5ec506ad",
+     "pcm_float32": "e52b7ffae626e9f0d4182fc3650e8ec2931c4c86e155d294b75ced40b52b46cc"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "69cb3f12fbdd46bf2f41eaddcec48e76d6c46ad836db55c34dc23370f43acfb6"
+  },
+  {
+   "construction": "+0.9 single-sample impulses every 1117 samples from sample 500",
+   "continuous": {
+    "12": {
+     "codes": "efcfe25ee9d1a1c623b1eda729db90df6fbc68b755c9ccb6e2cea50658d64eb8",
+     "pcm_float32": "2d7a5e5fd821425b39a55e63f691243f3b3674bd256ffb73565943db0ab07f1e"
+    },
+    "3": {
+     "codes": "6d6a5ecaf817a535b27f6a30cc4f4885ed54a69fb341a1ef429f251a00b72ce3",
+     "pcm_float32": "178090d432e9aea37ba400cf5cad8d183cac740aa2cd5d3d0ab5c015795879a1"
+    },
+    "6": {
+     "codes": "9503a6970f812fc1157b40d837620a660b2425bc6b2d3df83618bc76aa8b4651",
+     "pcm_float32": "61b2985c47fcd1ed054a28200a7f424697cc3c0f4ec0675efbb8fb3ded6558bf"
+    }
+   },
+   "kind": "impulses",
+   "name": "syn-impulses",
+   "renders": {
+    "12": {
+     "codes": "ac9b224ff30080b44bcf61274f298d1c71c01505bddc5ff832496f7a5d8e9dfa",
+     "pcm_float32": "16f405e0ac9b4a8103aee2b02baf82e8cb96b03875de30dec364c1a9181929a3"
+    },
+    "3": {
+     "codes": "2e02c1d9f1b48c41ab2032c148936f5fd4a54a5f7da7e78f08e59d37a152be98",
+     "pcm_float32": "6e4b5e72c0544e14b77354603dab6a7b15fd1d9a4b7e56faad466096744952cb"
+    },
+    "6": {
+     "codes": "7aa44727b9a5a9c2c8ba2e14cad6c25a6c2b3773123f7401fb1e400beda43f4e",
+     "pcm_float32": "889f6df0bcf6911d27fde453a7d9d4bc0d243b9cf0cca60a50e6aab53ab18859"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "215bf924c0f4e48b0f88f2f1dbe8a9c4e27d8618932ec7a7cabf8585d514440b"
+  },
+  {
+   "construction": "sin 220 Hz + sin 331 Hz hard-clipped to +-0.95",
+   "continuous": {
+    "12": {
+     "codes": "f31bff31ed0fa7582c21e60760ee2af993cd4bce7b5575a2d6960e0b8c4ea064",
+     "pcm_float32": "ad44f7aada055725285c270c4e18ec4649d3ccc5862d68c60fa31fefbeedbb6a"
+    },
+    "3": {
+     "codes": "a8d695d32b8c9ec1bd53a994d1c28efeae14558fde45def1fac1176cb6cb50a1",
+     "pcm_float32": "56ede486f784b00b42e7a987890a2769832d6f931b6af65aab1a0ca8dfb6c1b5"
+    },
+    "6": {
+     "codes": "858a8b23b488984d2124d1ce9f8ed455b16d49096bb50e10f912ef9174cac156",
+     "pcm_float32": "68f723d8af908ceb030be5809f4c2c8a4754fdfdae2f98ff2f857c87de4c575d"
+    }
+   },
+   "kind": "clipping",
+   "name": "syn-clipped",
+   "renders": {
+    "12": {
+     "codes": "1590a7198b3edd24f0b7821806801bd9009c58be73598cc535a59eea31700c13",
+     "pcm_float32": "6b17b75b20e500829f8529e902bbedc42d5b0ff90d94c4dc8c4401d19643cb88"
+    },
+    "3": {
+     "codes": "9a9731316aafb8634465c8ce119eabcca54f92dc8d39bc01bd459571ec8ecd90",
+     "pcm_float32": "da70aaa7e799fa6d19d3ff87705a6fbf1be8b66316f8cd9f661157867247fdf0"
+    },
+    "6": {
+     "codes": "69b128056b421b1bcdfc6a2a13eb04c4e836e6d869f042657d97422bdea5e222",
+     "pcm_float32": "b446ccdb562ff4dedfa96f375690c6536c7ce9232fc9c865a877de03380a964a"
+    }
+   },
+   "synthetic": true,
+   "wav_sha256": "2a5ea86834996fad5ccac7ecf568e1d8136e2cc89eb9e8a2327fb2d4600b6509"
+  },
+  {
+   "construction": null,
+   "continuous": {
+    "12": {
+     "codes": "8273922d2758514a3eec6a31b8977ee590683b6e578a8cea917f6973f23a1580",
+     "pcm_float32": "f61061e7566b1c55c64bbecd3b1ad13a171cdefe9e99ab12e5cf66248258dc74"
+    },
+    "3": {
+     "codes": "d7dea7a6d3d1b010202bc4c30caf1e34f8143f3a3983f4de45d69932fad1efdf",
+     "pcm_float32": "221687773b2c79e3e946a33ba9d96ad7df3d0e1a2df6f5c8549f3723f86b8cdb"
+    },
+    "6": {
+     "codes": "b4a02b90a938c8beb5a4de75d0db9fea1a60c2f469731da1cb52409bb59dc6f8",
+     "pcm_float32": "aa65eabb8afe0f237526c6ce3b001a377b4800373fbe61411c8c8bf9c0347698"
+    }
+   },
+   "kind": "speech",
+   "name": "rec-speech-f",
+   "renders": {
+    "12": {
+     "codes": "d37c2819342d8318dd86efd8036385328e7f8f9f735c53d9058c847f708d4388",
+     "pcm_float32": "90f2baf730619ccb4e39359bb1aaacf5afd4abf374e620c35a63a3130b71b31a"
+    },
+    "3": {
+     "codes": "3b7ea8e2d2429fcc806eee25522f16ee6aa0ed651c7abedebbefb676d897b8e8",
+     "pcm_float32": "d491a7676bd50f8fa17cfd38b801331719cde64eb291d13b4af24306b7efb45b"
+    },
+    "6": {
+     "codes": "1f817bd998921f0c2454df45014a31d0401a5504c3c40ced50cf025c16f75534",
+     "pcm_float32": "415313304be408b2fe97c76ce6c92550971aa5f17220804a37fe299cc6a1f192"
+    }
+   },
+   "synthetic": false,
+   "wav_sha256": "2915cb161821c5cfa41be365470a141458da0427ef6585a3656d534ecec9754f"
+  },
+  {
+   "construction": null,
+   "continuous": {
+    "12": {
+     "codes": "6c809ffbdea56cbd78132d02890d3249bb969860737e7a8991727955431f3a62",
+     "pcm_float32": "b2996c59e17d336aa0764baa93c5cd7d539a048a4e2298e749bb9afd119ac274"
+    },
+    "3": {
+     "codes": "fe46ab390b90aa428d722ebd80ba57f12dab2de4a476de9bf7d8021143437f96",
+     "pcm_float32": "57ccb2a4b423a82ce815c6818c6c2ae1b8eb2679788c838410ce49c22049c837"
+    },
+    "6": {
+     "codes": "6d30d9d35ec4520551c1ebb581be0c120224f7be539fb0f625af0b89c29a1e96",
+     "pcm_float32": "58632ef5314df2ea7406cbf9ff0346a03ae8f375060f3184316ab634b1b8ab6d"
+    }
+   },
+   "kind": "speech",
+   "name": "rec-speech-m",
+   "renders": {
+    "12": {
+     "codes": "d111defe880122e6ef42af50dea83269a08865374e7178db7b7b20e37bda251d",
+     "pcm_float32": "ffc6ef5be99a69003c7b27232918e6b4c03ec4d6b529a5cc217c2631b1d9586f"
+    },
+    "3": {
+     "codes": "8a24a6b245ae1b8883f072ecc0dfaf5cf9e63dce60c66410b00ff497c632cf3c",
+     "pcm_float32": "a03cc6fa1eb028e9c0389943e5bf56d86411d818759880255897ab8a3e2bd630"
+    },
+    "6": {
+     "codes": "9b1337d45625d975b0c482de1d63a113ec86e15f297585a95b5946eb56a7ddd1",
+     "pcm_float32": "b843ed6319c5e1afb9b29e4de5c7730eb3d00bfbeb3ef940c6f3f84093abc319"
+    }
+   },
+   "synthetic": false,
+   "wav_sha256": "f7570b0a93e95bf8f06a26b62d0f632d6193fa62804c4466e9c4235d26f4fd06"
+  },
+  {
+   "construction": null,
+   "continuous": {
+    "12": {
+     "codes": "a8a8ccedce7613851ee775343dca1748a213189bfefde649180b472972f490cf",
+     "pcm_float32": "94659be542efd316319cc1701ce4357ead130c8b90dae961d7d108e6c161a996"
+    },
+    "3": {
+     "codes": "e65c46d219a915593243b5fe99291d20769eba648108469291b53f7d1c5bd8fa",
+     "pcm_float32": "2f2facaa7a9a8cb733c04c5b2c2825635f1c8252f1edce5b3f81839e6f7d1801"
+    },
+    "6": {
+     "codes": "92467755718ae0ecbd3950ba4acf36d578ff575c34c27a42e8ab21291b6f40e2",
+     "pcm_float32": "bc7b10e418bce7684aea3df03e0168c8aa52f1c52ce6c5c4c584d8f1a15d8e30"
+    }
+   },
+   "kind": "music",
+   "name": "rec-piano",
+   "renders": {
+    "12": {
+     "codes": "423bde58355e98260ff2a29ef4de3f2f685f52c3db68bb96a1b66aeec950f5c1",
+     "pcm_float32": "ac399f327f3c4c764829db6ee74e0f0fd1481f3fc0dc79617117be639ba065aa"
+    },
+    "3": {
+     "codes": "0fe4c97c2e2459e053889e077b801b918af648bfa29065cdaab19b62978ef2c1",
+     "pcm_float32": "4d6b41375eecfe144bc9bf886729347d13318e3422990444907568b4308e8940"
+    },
+    "6": {
+     "codes": "36d4a133fc4f2b276dfa88e4a519b9580bd6fa79b5e1389865ba884991f090e8",
+     "pcm_float32": "b3d2cc9bedfccfabd89523a396ef2ab3623737d1197a5cedcdb00509e04bde27"
+    }
+   },
+   "synthetic": false,
+   "wav_sha256": "5853723d13ac6444a3dcfe51693cd266137e5e3426d710fa4371a0c9105488c3"
+  },
+  {
+   "construction": null,
+   "continuous": {
+    "12": {
+     "codes": "1062c6bde45f05204ef56bef664863d826446d63d421d895f74e48beb82a266e",
+     "pcm_float32": "a37fd9a60d207022c79ab11f5ac22919e743f8e35e1849c758b49a7d2dfe12f0"
+    },
+    "3": {
+     "codes": "3dc177dc16b6eae1bb87197defe70d7bd233c6beec5af0c1277faadcb555b6c4",
+     "pcm_float32": "8a62ef52673e590f6bb81371057fb53a9f79f274322c019277be5f26c8e5a81e"
+    },
+    "6": {
+     "codes": "4ae6bab1e018c08efa4b01d30b25b839470f2ce2a9efe7b97320edb553dc543b",
+     "pcm_float32": "6db05cc46606921e73912736c8ed806beff39e8f81e54e4943b57a5773386960"
+    }
+   },
+   "kind": "music",
+   "name": "rec-band-1909",
+   "renders": {
+    "12": {
+     "codes": "71245a463a122890b809935d39a4b23d0567a9b1d88ab1a4e9f09153f84e9f7c",
+     "pcm_float32": "288f20bbcc88ca846bcf15fe39c83f5ebc3091072478fe0a117765bdedadbe94"
+    },
+    "3": {
+     "codes": "087f7a840a9cfe1f26d8a0ae1610e56f522ff1204ed334f635820d5b4311fe57",
+     "pcm_float32": "1080014cf1c31f3b34301f803a7d9056efcfef2b924ac2988e20bdcae545402c"
+    },
+    "6": {
+     "codes": "106361f1537ec1d09934fb3be0243c3a47d57c1d3c81939891c61355740c10d7",
+     "pcm_float32": "a2a4e2fe94d3aebb2a439a4ab654c28a984a8f6d93731b5445aba26cbc118452"
+    }
+   },
+   "synthetic": false,
+   "wav_sha256": "561d384651171d8f653b75caa4797508f10c76f2b854caac6f1eaf6752dddfa4"
+  },
+  {
+   "construction": null,
+   "continuous": {
+    "12": {
+     "codes": "ec88397f0040bc0ea21fbf2133c4c36eb7bf56836b6bfd0cffe81744551232f9",
+     "pcm_float32": "7368fe249798c8d58966b15cd55da4a5bc0baed9cddbf0945c7529e87a44ea01"
+    },
+    "3": {
+     "codes": "128377741dd46821804283a911397fe730f43c96d4d49936ad6e9532dddc753f",
+     "pcm_float32": "1a7b8963320f36e7faf600fe6448bb5c51d3e1daa20c8eda91f27979886407b2"
+    },
+    "6": {
+     "codes": "5a6f83e25c163e1206b96d426f50e5827b9d3e074cd776db01187b6cf7ceb345",
+     "pcm_float32": "203385834a3ee501b861cbed0607b1c2fcd2662b4bfc7b216072e48bae2a2d42"
+    }
+   },
+   "kind": "music",
+   "name": "rec-orchestra",
+   "renders": {
+    "12": {
+     "codes": "ef3a4ed4302792d2dd0a8cb965dc4e5a39125918ace44ffc1ae038c586a642ca",
+     "pcm_float32": "870691eb40435384f8f714d370138ae11406169d4a780205d7c04609849152b6"
+    },
+    "3": {
+     "codes": "3dd138de5d08b861a07ac47e45eb0b6d153e2b34c03e3ed4901ec8d5e268f70c",
+     "pcm_float32": "b36b1ed512145031f8930345e5005f988b118183c0ff76b615cfc6bb0d856174"
+    },
+    "6": {
+     "codes": "0d97197b8ba707235f17df1ad6b186fc8afdc41dafba65c81dc88e874b0b104f",
+     "pcm_float32": "4b4e3cf677ac9b022f358ff131a52812adf4c901324b86266f9431b28cb8c4cc"
+    }
+   },
+   "synthetic": false,
+   "wav_sha256": "0e708c3fc9dd3804d9d4480d1f5f2ce004c2134ab39e4e9531dd8a4ed131f545"
+  }
+ ],
+ "level_tolerance_db": 0.01,
+ "levels": {
+  "12": {
+   "silence_abs": {
+    "0-50": [
+     -73.03712203787157,
+     -73.78349289947016
+    ],
+    "50-100": [
+     -73.438776654875,
+     -73.50841020430595
+    ]
+   },
+   "types": {
+    "clipping": {
+     "0-50": {
+      "mean_dC": -0.08224299545917457,
+      "mean_dS": -0.2460826465248065,
+      "mean_dS_R": -0.16383965106563192,
+      "worst_dC": -0.18907109112551979,
+      "worst_dS": -0.24608264652480738
+     },
+     "50-100": {
+      "mean_dC": -0.08120673268155087,
+      "mean_dS": -0.36674537100811744,
+      "mean_dS_R": -0.28553863832656656,
+      "worst_dC": -0.17396013938612276,
+      "worst_dS": -0.3667453710081179
+     },
+     "D5": -2.3394754611312734
+    },
+    "fixture": {
+     "0-50": {
+      "mean_dC": -0.15772164855723858,
+      "mean_dS": -0.4337760598911018,
+      "mean_dS_R": -0.2760544113338632,
+      "worst_dC": -0.6980594436257963,
+      "worst_dS": -1.2017381700963146
+     },
+     "50-100": {
+      "mean_dC": -0.17545558643484327,
+      "mean_dS": -0.4346472309145284,
+      "mean_dS_R": -0.2591916444796851,
+      "worst_dC": -0.6834101570713624,
+      "worst_dS": -0.7173171765413855
+     },
+     "D5": -2.847130610184937
+    },
+    "impulses": {
+     "0-50": {
+      "mean_dC": 0.27985371564473027,
+      "mean_dS": -0.8831955852017366,
+      "mean_dS_R": -1.1630493008464668,
+      "worst_dC": -2.609306446778703,
+      "worst_dS": -5.301046326599401
+     },
+     "50-100": {
+      "mean_dC": -0.14023530028088516,
+      "mean_dS": -0.8791348632704299,
+      "mean_dS_R": -0.7388995629895447,
+      "worst_dC": -1.1379900183253362,
+      "worst_dS": -2.96354391290129
+     },
+     "D5": -39.433468944436044
+    },
+    "music": {
+     "0-50": {
+      "mean_dC": -0.2757324321554802,
+      "mean_dS": -0.4958815059495733,
+      "mean_dS_R": -0.22014907379409307,
+      "worst_dC": -1.4042400402652007,
+      "worst_dS": -2.0835882518892888
+     },
+     "50-100": {
+      "mean_dC": -0.17835826209332298,
+      "mean_dS": -0.3529127757138835,
+      "mean_dS_R": -0.17455451362056054,
+      "worst_dC": -1.1086849477301683,
+      "worst_dS": -1.3989064315071928
+     },
+     "D5": -3.8621321312292523
+    },
+    "noise": {
+     "0-50": {
+      "mean_dC": -0.4666384122136211,
+      "mean_dS": -0.9139699618640673,
+      "mean_dS_R": -0.4473315496504462,
+      "worst_dC": -1.121081714222118,
+      "worst_dS": -1.869122904239795
+     },
+     "50-100": {
+      "mean_dC": -0.4589943478125136,
+      "mean_dS": -0.9556072743706299,
+      "mean_dS_R": -0.4966129265581163,
+      "worst_dC": -0.9209268594169302,
+      "worst_dS": -1.6339288837916257
+     },
+     "D5": -3.3891844274087184
+    },
+    "silence": {
+     "0-50": {
+      "mean_dC": 0.7463708615985922,
+      "mean_dS": 26.96287796212843,
+      "mean_dS_R": 26.21650710052984,
+      "worst_dC": 0.4211169150758991,
+      "worst_dS": 26.96287796212843
+     },
+     "50-100": {
+      "mean_dC": 0.06963354943094657,
+      "mean_dS": 26.561223345125,
+      "mean_dS_R": 26.491589795694054,
+      "worst_dC": -0.3184504178006762,
+      "worst_dS": 26.561223345125
+     },
+     "D5": -1.8662113887399556
+    },
+    "speech": {
+     "0-50": {
+      "mean_dC": -0.3009415082525084,
+      "mean_dS": -0.3319588810053169,
+      "mean_dS_R": -0.03101737275280847,
+      "worst_dC": -3.0731566080380475,
+      "worst_dS": -2.5620661390155846
+     },
+     "50-100": {
+      "mean_dC": 0.04936208728475577,
+      "mean_dS": 0.031070062052460656,
+      "mean_dS_R": -0.018292025232295117,
+      "worst_dC": -2.5492604842873376,
+      "worst_dS": -1.2923492026701808
+     },
+     "D5": -7.161955073134116
+    },
+    "tones": {
+     "0-50": {
+      "mean_dC": 0.2858913532186372,
+      "mean_dS": -0.2693087510777505,
+      "mean_dS_R": -0.5552001042963877,
+      "worst_dC": -1.4646770048608566,
+      "worst_dS": -8.815088887773683
+     },
+     "50-100": {
+      "mean_dC": 0.28664129219085527,
+      "mean_dS": -0.18772215509091397,
+      "mean_dS_R": -0.47436344728176927,
+      "worst_dC": -0.5746016129328098,
+      "worst_dS": -7.850530934445391
+     },
+     "D5": -3.216610290824221
+    }
+   }
+  },
+  "3": {
+   "silence_abs": {
+    "0-50": [
+     -73.06297384725477,
+     -73.7193189646161
+    ],
+    "50-100": [
+     -73.42970916168767,
+     -73.45073112887987
+    ]
+   },
+   "types": {
+    "clipping": {
+     "0-50": {
+      "mean_dC": 0.6239913911956152,
+      "mean_dS": -0.34789556064532245,
+      "mean_dS_R": -0.9718869518409377,
+      "worst_dC": 0.4491960755839526,
+      "worst_dS": -0.347895560645322
+     },
+     "50-100": {
+      "mean_dC": 0.19213671148185751,
+      "mean_dS": -0.5256930880460198,
+      "mean_dS_R": -0.7178297995278773,
+      "worst_dC": 0.01755305546954178,
+      "worst_dS": -0.5256930880460216
+     },
+     "D5": -2.4385981252177817
+    },
+    "fixture": {
+     "0-50": {
+      "mean_dC": -0.4487951567693518,
+      "mean_dS": -0.6835614510371304,
+      "mean_dS_R": -0.23476629426777862,
+      "worst_dC": -1.131165906842103,
+      "worst_dS": -1.5404681611241102
+     },
+     "50-100": {
+      "mean_dC": -0.40541315697656977,
+      "mean_dS": -0.7019216701085593,
+      "mean_dS_R": -0.29650851313198956,
+      "worst_dC": -1.1392904078682875,
+      "worst_dS": -1.980952200205273
+     },
+     "D5": -5.88706674782612
+    },
+    "impulses": {
+     "0-50": {
+      "mean_dC": -0.2598947158033198,
+      "mean_dS": -1.7285004372704194,
+      "mean_dS_R": -1.4686057214670996,
+      "worst_dC": -6.271618401501076,
+      "worst_dS": -6.737072730048958
+     },
+     "50-100": {
+      "mean_dC": 0.2979254614689282,
+      "mean_dS": -1.2339653922925748,
+      "mean_dS_R": -1.531890853761503,
+      "worst_dC": -6.062598623066421,
+      "worst_dS": -6.486794205247133
+     },
+     "D5": -37.38434412404873
+    },
+    "music": {
+     "0-50": {
+      "mean_dC": -0.6436546908736313,
+      "mean_dS": -1.089997001734411,
+      "mean_dS_R": -0.44634231086077963,
+      "worst_dC": -2.7589037446832023,
+      "worst_dS": -2.5825904247172105
+     },
+     "50-100": {
+      "mean_dC": -0.5209010869313525,
+      "mean_dS": -0.851682696851786,
+      "mean_dS_R": -0.33078160992043354,
+      "worst_dC": -2.696080741242671,
+      "worst_dS": -2.5811690228460087
+     },
+     "D5": -7.135365631325367
+    },
+    "noise": {
+     "0-50": {
+      "mean_dC": -0.16546323220261527,
+      "mean_dS": -1.033566379882222,
+      "mean_dS_R": -0.8681031476796068,
+      "worst_dC": -1.429943537650363,
+      "worst_dS": -2.8601459297455563
+     },
+     "50-100": {
+      "mean_dC": -0.3222132952896235,
+      "mean_dS": -1.206342560595079,
+      "mean_dS_R": -0.8841292653054555,
+      "worst_dC": -1.2348987433613203,
+      "worst_dS": -2.8073493463998638
+     },
+     "D5": -5.104185101160539
+    },
+    "silence": {
+     "0-50": {
+      "mean_dC": 0.656345117361326,
+      "mean_dS": 26.937026152745233,
+      "mean_dS_R": 26.280681035383907,
+      "worst_dC": 0.4130886849576427,
+      "worst_dS": 26.937026152745233
+     },
+     "50-100": {
+      "mean_dC": 0.02102196719219762,
+      "mean_dS": 26.57029083831233,
+      "mean_dS_R": 26.549268871120134,
+      "worst_dC": -0.2748134731916849,
+      "worst_dS": 26.57029083831233
+     },
+     "D5": -1.7227442440272824
+    },
+    "speech": {
+     "0-50": {
+      "mean_dC": -0.7780970508387828,
+      "mean_dS": -0.442772078980024,
+      "mean_dS_R": 0.33532497185875876,
+      "worst_dC": -1.7655842153197128,
+      "worst_dS": -2.5949642677011333
+     },
+     "50-100": {
+      "mean_dC": -0.2705554196990736,
+      "mean_dS": -0.5768332791254611,
+      "mean_dS_R": -0.3062778594263875,
+      "worst_dC": -2.9506521388171123,
+      "worst_dS": -3.120181617774314
+     },
+     "D5": -8.91864829287439
+    },
+    "tones": {
+     "0-50": {
+      "mean_dC": 0.16400187108867334,
+      "mean_dS": -0.49237820872322696,
+      "mean_dS_R": -0.6563800798119003,
+      "worst_dC": -4.1132195023752125,
+      "worst_dS": -8.845860566493492
+     },
+     "50-100": {
+      "mean_dC": 0.17207350488216142,
+      "mean_dS": -0.3490577724281317,
+      "mean_dS_R": -0.5211312773102931,
+      "worst_dC": -5.03614148080127,
+      "worst_dS": -8.306223665775867
+     },
+     "D5": -7.3860716718816946
+    }
+   }
+  }
+ },
+ "programme": {
+  "items": 14,
+  "manifest_sha256": "3591915e187497b7d7c84b98953b9a843bff6e266a2167eeaeb094f4ea08cf87",
+  "sample_rate": 24000,
+  "samples": 288000
+ },
+ "provenance": {
+  "f101-remedy-spike-2026-09-15": {
+   "programme/manifest.json": "3591915e187497b7d7c84b98953b9a843bff6e266a2167eeaeb094f4ea08cf87",
+   "raw/items/rec-band-1909.json": "19dd61ad1cdadb1cc605ef5ab496b87ee1c55416ac56b12a00465396e461bf85",
+   "raw/items/rec-orchestra.json": "4744620803a9a752987e944c717ad87309e9cfffee6c5c53361f8dbc361ee561",
+   "raw/items/rec-piano.json": "f9ecd827eefba46a38d6907acaa0d2fa2ed3164ada262ca08ad7642b3aef5e96",
+   "raw/items/rec-speech-f.json": "706c46b11c9691cfa348c4b9230f60610d9027572bbdacfee267accbc6a15f9d",
+   "raw/items/rec-speech-m.json": "b8b0db9367424c6ad63b6e62319e8f0e7ace7f6f2dc4d248d633d703691d32ad",
+   "raw/items/syn-clipped.json": "ddf9de188572ee9bccf1a22162ca77a8fbec2e4c491a41dba357c43b2369222d",
+   "raw/items/syn-fixture.json": "72d87760d9fcd54089826cf78a82c9fb77a6ca996886a595ca6a868fdb59c933",
+   "raw/items/syn-impulses.json": "fa66c8b7b71358c690302e9c2b4c05f1ad740338d7cf64b5a87bb33f93378e9f",
+   "raw/items/syn-pink.json": "0bfef4db7a1389c2d0ae2692a03e5a034b1e76db0f3985374687ebf2a8baf90a",
+   "raw/items/syn-silence.json": "75777475647bb7207ff0fd954408f6bcc0436c6b7d91e22eca07937f5b822b24",
+   "raw/items/syn-sweep.json": "b74ed030d845a705c91783d5445921e0173da086f3f097439e0a557e25999dbb",
+   "raw/items/syn-tone100.json": "28bd346a0e83a2d66b01c1863d22d44ebe08eaec2d41881b7a41c4d1b28d4495",
+   "raw/items/syn-tone440.json": "f54602d2c767c2d71feb6c7c0cb70b42917b073cb97708766af2c968f3fc9f13",
+   "raw/items/syn-white.json": "ada9134aad87915e3f053946d9d5d87fede7feb11a0fd4bcda81a3f535314758"
+  },
+  "f101-remedy-spike-outside-check-2026-09-15": {
+   "results/items/rec-band-1909.json": "82ab17c8b42431d87f8126436ed7a6a887b42147c28a8fcd02b7fbbb5123f9a7",
+   "results/items/rec-orchestra.json": "89350ceabb4ce6948aef50937546d6952209ead7a98a6bd031e0d210945a1464",
+   "results/items/rec-piano.json": "4422c312b852b3869d41201a11af5b022bc63df2523f6f430ce6519b28bda616",
+   "results/items/rec-speech-f.json": "d1d37993a11bb19c492b6f2573daf29f3058ef0093e42195d8c51ea0289e32af",
+   "results/items/rec-speech-m.json": "aa67f76f90b8067b318efaea4cb603fde80549eca0a8888fababc23f7cba4491",
+   "results/items/syn-clipped.json": "bb4c934ee9ee9a468ec3fa2cc56865061d6bd0c6411c6f4ec9ddd14dc0a6a520",
+   "results/items/syn-fixture.json": "1134125188dd5671ed43081e7a72222c7a3cff72347b458ad67d39e6d269befb",
+   "results/items/syn-impulses.json": "a52531e2b4ed1607c2d46f06427c2cc3a5a941c391046791fec2e45c257be4b2",
+   "results/items/syn-pink.json": "ef28e33439ca0a755ae3a86885a363068a826bdc6d7f17c8aabf192e740695a3",
+   "results/items/syn-silence.json": "2a2643dd800d0bc08fc9d3e1fa8c03fc25a8461350469e1672c02303726b6477",
+   "results/items/syn-sweep.json": "4fd4016dd610be1708190eea770e23318fc9bc1b1eff0174ef796cdb1ce7f964",
+   "results/items/syn-tone100.json": "a5b4353bd17efb60fb27c8d70c4f43ca75f29033abd04691309b75d10fb69ea0",
+   "results/items/syn-tone440.json": "aa3badeaff8bc5bdb6d0e54fe025c8742d2ba0ab0a8d7c8053790838a3f7d97e",
+   "results/items/syn-white.json": "892dd8ee078e8ae2187ec735e4699a69181cd229e44592a5cf3a727bcc7331b6",
+   "results/summary.json": "6be3c444786e02241824e442d4a612c15bc2ffaa98b16701d5686403f0ba8006"
+  }
+ },
+ "rules": {
+  "continuous": "never-reset stream from an all-zero start (the check's R) at the same bitrate",
+  "levels": "outside check CHECK-PLAN sections 2.2 and 2.6; C5-R4 levels, D5 and silence dBFS within 0.01 dB (section 4)",
+  "renders": "sha256 of int64 codes [n_q, 1, T] and float32 PCM [1, 1, N]; 6 kb/s from the spike and the outside check (equal), 3 and 12 kb/s from the outside check"
+ },
+ "schema": "kilix.encodec.epoch-programme-expectations/v1"
+}
