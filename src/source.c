@@ -6,6 +6,7 @@
 struct kenc_file_source {
     kenc_file_reader *reader;
     kenc_file_info info;
+    kenc_epoch_start epoch_start;
     kenc_model *model;
     kenc_decoder *mono;
     kenc_stereo *stereo;
@@ -37,6 +38,7 @@ static kenc_result source_create(kenc_file_source **out, int descriptor,
     kenc_file_source *source = calloc(1u, sizeof(*source));
     if (source == NULL) { return KENC_ERR_MEMORY; }
     kenc_result result = kenc_file_reader_create(&source->reader, descriptor, &source->info);
+    if (result == KENC_OK) { result = kenc_file_reader_epoch_start(source->reader, &source->epoch_start); }
     if (result != KENC_OK) { goto done; }
     if (source->info.profile == KENC_FILE_PROFILE_MONO) {
         result = descriptors ? kenc_model_load_fds(&source->model, mono_fds)
@@ -46,6 +48,7 @@ static kenc_result source_create(kenc_file_source **out, int descriptor,
         options.codebooks = source->info.codebooks;
         options.threads = threads;
         result = kenc_decoder_create(&source->mono, source->model, &options);
+        if (result == KENC_OK) { result = kenc_decoder_set_epoch_start(source->mono, source->epoch_start); }
     } else {
         result = descriptors ? kenc_stereo_create_fds(&source->stereo, stereo_fds, source->info.codebooks, threads)
             : kenc_stereo_create(&source->stereo, stereo_assets, source->info.codebooks, threads);
@@ -74,6 +77,14 @@ kenc_result kenc_file_source_create_fds(kenc_file_source **out, int descriptor,
     uint8_t threads, kenc_file_info *info)
 {
     return source_create(out, descriptor, NULL, NULL, mono_assets, stereo_assets, 1, threads, info);
+}
+
+kenc_result kenc_file_source_epoch_start(const kenc_file_source *source,
+    kenc_epoch_start *epoch_start)
+{
+    if (source == NULL || epoch_start == NULL) { return KENC_ERR_INVALID; }
+    *epoch_start = source->epoch_start;
+    return KENC_OK;
 }
 
 static kenc_result decode_next(kenc_file_source *source)

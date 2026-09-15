@@ -58,7 +58,8 @@ the official safetensors model on identical latents, and every corpus/rate row
 must meet the existing end-to-end token and waveform tolerances. The separate
 `kilix_encodec_file.h` interface adds bounded local files, verified indexes,
 sealed input snapshots and shared overlap-add. [FILE-FORMAT.md](FILE-FORMAT.md)
-specifies framing, limits, padding and seek pre-roll. Live framing and consumer
+specifies framing, limits, padding, seek pre-roll and the version 2 epoch-start
+marker. Live framing and consumer
 integration remain separate work. The stereo API is never a KMX profile.
 
 ```sh
@@ -137,18 +138,50 @@ unknown flags, out-of-range values and incompatible profiles.
 
 Every regular encoder call consumes 960 samples (40 ms). The first packet and
 each configured epoch boundary carry RESET; explicit encoder reset also marks
-DISCONTINUITY. At every RESET packet both sides start from zeroed state and
-prime it with a four-packet repeat pre-roll of that packet's own input before
-processing it, so an epoch never depends on earlier packets and no latency is
-added. A decoder refuses dependent packets after loss or reordering until it
-receives a later RESET. Replayed epochs are refused. Short output buffers and
-malformed packets do not write output. The native tests exercise all rates,
-independent streams, reset recovery, asset substitution, and epoch-start
-independence. With `ORACLE=1` they also compare exact tokens/PCM against
-independent Python ORT sessions running `tools/epoch_stream.py`, including the
-programme's syn-fixture item at 6 kb/s: tokens identical and PCM within 1 LSB.
-Peers must run the same epoch start: a decoder with a different epoch start
-still decodes the packets, but not the same PCM.
+DISCONTINUITY. At every RESET packet both sides start from zeroed state, so an
+epoch never depends on earlier packets and no latency is added. A decoder
+refuses dependent packets after loss or reordering until it receives a later
+RESET. Replayed epochs are refused. Short output buffers and malformed packets
+do not write output.
+
+### Epoch-start profiles and negotiation
+
+Each stream has one epoch-start profile (owner decision OD-AT):
+
+- **C0**: the zeroed state processes the RESET packet directly. This is the
+  0.2.1 behaviour and the default of every new encoder and decoder, so a
+  stream, peer or file without a marker is C0. Its packets are byte-identical
+  to those of 3747330.
+- **C5-R4** (owner decision OD-AL): the zeroed state is first primed by running
+  the RESET packet's own input through the network four times as a discarded
+  lead-in, which costs five network runs for that packet. Every RESET packet
+  of a C5-R4 stream carries flag `0x08` (`KENC_PACKET_FLAG_EPOCH_PREROLL`).
+
+Peers exchange `kenc_epoch_start_supported()` in their own handshake, then call
+`kenc_epoch_start_negotiate(local, peer, &profile)`. It selects C5-R4 only when
+both advertise it; a peer without an advertisement (0) gets C0, and a nonzero
+advertisement without C0 is refused. Both sides then call
+`kenc_encoder_set_epoch_start` or `kenc_decoder_set_epoch_start` before their
+first packet, or after an explicit reset. A decoder refuses a RESET whose
+marker differs from its profile with `KENC_ERR_EPOCH_START`, without output or
+state change. A pre-marker decoder refuses the marked flag as a protocol error.
+Mixed peers therefore either decode matching PCM or refuse; they never decode
+silently different audio. Files carry the profile in format version 2
+([FILE-FORMAT.md](FILE-FORMAT.md)), and `kenc encode --epoch-start C5-R4`
+writes one. `tools/epoch_stream.py` offers the same profiles, markers,
+negotiation and file-header reading in Python.
+
+The native tests exercise both profiles at all rates, independent streams,
+reset recovery, asset substitution, epoch-start independence, negotiation,
+marker refusal and profile selection rules. With `ORACLE=1` they compare exact
+tokens and PCM against independent Python ORT sessions running
+`tools/epoch_stream.py` with the same profile, including the programme's
+syn-fixture item at 6 kb/s: tokens identical and PCM within 1 LSB, and the
+Python renders equal the checked C5-R4 render and the 3747330 C0 reference.
+`C0_REFERENCE_LIBRARY` names a library built from a git archive of 3747330.
+C0 packets and PCM must then be byte-identical at all rates, each library must
+decode the other's C0 stream with matching PCM, and 3747330 must refuse a
+C5-R4 stream. Without it those 18 controls are printed and counted as SKIPPED.
 
 ## Export controls
 
@@ -171,8 +204,9 @@ identity at all 3/3 rates, decoder parity, all 8/8 fixed-shape refusals and
 all 6/6 profile timing pipelines. These graph checks use the graphs' all-zero
 initial state; streams use the epoch start below.
 
-Every epoch of 25 packets, and the stream start, begins with a repeat pre-roll
-(`tools/epoch_stream.py`; the native runtime does the same). Encoder and
+A C5-R4 stream begins every epoch of 25 packets, and the stream start, with a
+repeat pre-roll (`tools/epoch_stream.py` with `profile="C5-R4"`; the native
+runtime does the same once C5-R4 is selected). Encoder and
 decoder zero all state, run the epoch's first packet through the unchanged
 per-packet graph 4 times as a discarded lead-in (its 960 samples, or its 3
 code frames through the RVQ decoder), and then process that packet. Only the
@@ -197,7 +231,12 @@ remedy programme recorded in `tests/fixtures/f101-c5r4-programme.json`: the
 14 programme items' codes and float32 PCM identities at 6, 3 and 12 kb/s,
 fresh-encoder and fresh-decoder identity for epochs 1-11 at each rate, the
 never-reset rendering's identity, and the 3 and 12 kb/s boundary level tables
-within 0.01 dB. The 9 synthetic items are regenerated and must hash to the
+within 0.01 dB. Its `legacy-c0` check renders every available item with the
+C0 profile and requires codes and PCM identical, at all three rates, to
+`tests/fixtures/f101-c0-3747330-reference.json`. That reference was rendered by
+the streaming functions of a git archive of 3747330
+(`tests/fixtures/build_c0_reference.py`). The 9 synthetic items are regenerated
+and must hash to the
 programme manifest. The 5 recorded excerpts are read from the directory named
 by `KENC_F101_PROGRAMME_DIR`; when it is unset, every control that needs them
 is reported and counted as SKIPPED, never as passed:

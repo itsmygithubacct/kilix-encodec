@@ -79,8 +79,8 @@ kenc_result kenc_packet_write(const kenc_wire_packet *value,
     if (value == NULL || buffer == NULL || !valid_codebooks(value->codebooks)
         || (value->samples != 320u && value->samples != 640u
             && value->samples != 960u)
-        || (value->flags & UINT8_C(248)) != 0u
-        || ((value->flags & KENC_PACKET_FLAG_DISCONTINUITY) != 0u
+        || (value->flags & UINT8_C(240)) != 0u
+        || ((value->flags & (KENC_PACKET_FLAG_DISCONTINUITY | KENC_PACKET_FLAG_EPOCH_PREROLL)) != 0u
             && (value->flags & KENC_PACKET_FLAG_RESET) == 0u)
         || ((value->flags & KENC_PACKET_FLAG_RESET) != 0u && value->index != 0u)) {
         return KENC_ERR_INVALID;
@@ -148,8 +148,8 @@ kenc_result kenc_packet_read(kenc_wire_packet *value,
     READ_FIELD(payload_size);
 #undef READ_FIELD
     if (profile != 1u || (samples != 320u && samples != 640u && samples != 960u)
-        || (result.flags & UINT8_C(248)) != 0u
-        || ((result.flags & KENC_PACKET_FLAG_DISCONTINUITY) != 0u
+        || (result.flags & UINT8_C(240)) != 0u
+        || ((result.flags & (KENC_PACKET_FLAG_DISCONTINUITY | KENC_PACKET_FLAG_EPOCH_PREROLL)) != 0u
             && (result.flags & KENC_PACKET_FLAG_RESET) == 0u)
         || ((result.flags & KENC_PACKET_FLAG_RESET) != 0u && result.index != 0u)) {
         return KENC_ERR_PROTOCOL;

@@ -2,10 +2,30 @@
 
 ## Unreleased
 
-- Start every 24 kHz epoch, and the stream, with a four-packet repeat pre-roll
-  on both sides (owner decision OD-AL, arm C5-R4) in the Python streaming
-  runtime and the native runtime. Graph bytes and the export manifest are
-  unchanged.
+- Add the C5-R4 epoch-start profile (owner decision OD-AL): every 24 kHz epoch,
+  and the stream, starts with a four-packet repeat pre-roll on both sides, in
+  the Python streaming runtime and the native runtime. Graph bytes and the
+  export manifest are unchanged.
+- Mark the epoch-start profile and negotiate it (owner decision OD-AT). New
+  encoders and decoders use C0, which is byte-identical to 3747330. Peers
+  select C5-R4 per stream only after `kenc_epoch_start_negotiate` finds it on
+  both sides. RESET packets of C5-R4 streams carry `KENC_PACKET_FLAG_EPOCH_PREROLL`,
+  and a decoder refuses a mismatched marker with the new `KENC_ERR_EPOCH_START`.
+  New API: `kenc_epoch_start_supported`, `kenc_epoch_start_negotiate`,
+  `kenc_epoch_start_from_marker`, `kenc_epoch_start_name`,
+  `kenc_encoder_set_epoch_start`, `kenc_decoder_set_epoch_start`.
+- Bump the packet file format to version 2: C5-R4 files carry the marker at
+  header byte 42, and C0 files stay version 1 so pre-marker readers still read
+  them. New file API: `kenc_file_header_write_epoch_start`,
+  `kenc_file_header_read_epoch_start`, `kenc_file_writer_create_epoch_start`,
+  `kenc_file_reader_epoch_start`, `kenc_file_source_epoch_start`.
+  `kenc encode` gains `--epoch-start C0|C5-R4`; `kenc decode` follows the file.
+- Give `tools/epoch_stream.py` explicit profiles (default C0), markers,
+  advertisements, negotiation and file-header reading. Product verification and
+  `tools/bench_native.py` select C5-R4 explicitly.
+- Hold C0 to 3747330: a recorded C0 render reference for the 14 programme items
+  (`legacy-c0`), plus native and file-command comparisons against a 3747330
+  build when `C0_REFERENCE_LIBRARY` and `C0_REFERENCE_COMMAND` are given.
 - Replace the constant-cold-start post-reset golden with a successor that holds
   each epoch to the pre-roll checkpoint definition and refuses the cold start.
 - Add epoch independence, added-latency and native syn-fixture parity controls,

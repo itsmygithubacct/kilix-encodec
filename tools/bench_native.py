@@ -5,6 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 from test_native import Native,Info
+
+EPOCH_START_MARKERS={'C0':0,'C5-R4':1}
 from capacity_fixture import inspect_h1
 
 
@@ -55,6 +57,10 @@ def measure(args):
                 options=native.options_default();options.codebooks=books;options.threads=args.threads
                 require(native.encoder_create(c.byref(encoder),model,c.byref(options)))
                 require(native.decoder_create(c.byref(decoder),model,c.byref(options)))
+                # Measure the selected epoch-start profile explicitly; new contexts are C0.
+                marker=EPOCH_START_MARKERS[args.epoch_start]
+                require(native.encoder_set_epoch_start(encoder,marker))
+                require(native.decoder_set_epoch_start(decoder,marker))
                 encoded=[];decoded=[];size=c.c_size_t();count=c.c_size_t();info=Info()
                 for index in range(args.warmup+args.samples):
                     before=time.perf_counter_ns()
@@ -87,7 +93,7 @@ def measure(args):
                 row('decode',books*1.5,decoded,990.)
             finally:lib.kenc_stereo_free(codec)
     runtime_files=sorted({line.split()[-1] for line in Path('/proc/self/maps').read_text().splitlines() if '/libonnxruntime.so.' in line and line.split()[-1].startswith('/')})
-    result={'schema':'kilix.encodec.native-capacity/v1','scope':'native-library-pipelines','release_qualified':False,'fixture':fixture,'profile':args.profile,'library_sha256':sha(args.library),'manifest_sha256':sha(args.assets/'manifest.json'),'runtime_libraries':[{'file':Path(path).name,'sha256':sha(Path(path))} for path in runtime_files],'harness_sha256':sha(Path(__file__)),'ffi_helper_sha256':sha(Path(__file__).resolve().parents[1]/'tests'/'test_native.py'),'samples_per_row':args.samples,'warmup_per_row':args.warmup,'elapsed_seconds':time.monotonic()-started,'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'rows':rows,'capacity_thresholds_met':all(value['capacity_threshold_met'] for value in rows),'remaining_scope':['concurrent KMX workload','integrated transport/consumer latency and wire cost','four-hour healthy and fault soaks','listening acceptance']}
+    result={'schema':'kilix.encodec.native-capacity/v1','scope':'native-library-pipelines','release_qualified':False,'fixture':fixture,'profile':args.profile,'epoch_start':args.epoch_start if args.profile=='24k' else None,'library_sha256':sha(args.library),'manifest_sha256':sha(args.assets/'manifest.json'),'runtime_libraries':[{'file':Path(path).name,'sha256':sha(Path(path))} for path in runtime_files],'harness_sha256':sha(Path(__file__)),'ffi_helper_sha256':sha(Path(__file__).resolve().parents[1]/'tests'/'test_native.py'),'samples_per_row':args.samples,'warmup_per_row':args.warmup,'elapsed_seconds':time.monotonic()-started,'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'rows':rows,'capacity_thresholds_met':all(value['capacity_threshold_met'] for value in rows),'remaining_scope':['concurrent KMX workload','integrated transport/consumer latency and wire cost','four-hour healthy and fault soaks','listening acceptance']}
     if args.output:
         descriptor=os.open(args.output,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC,0o600)
         with os.fdopen(descriptor,'w') as file:json.dump(result,file,indent=2,allow_nan=False,sort_keys=True);file.write('\n')
@@ -101,6 +107,7 @@ if __name__=='__main__':
     parser.add_argument('--assets',type=Path,required=True)
     parser.add_argument('--profile',choices=('24k','48k'),default='24k')
     parser.add_argument('--threads',type=int,choices=(1,2),default=1)
+    parser.add_argument('--epoch-start',choices=tuple(EPOCH_START_MARKERS),default='C5-R4')
     parser.add_argument('--samples',type=int)
     parser.add_argument('--warmup',type=int)
     parser.add_argument('--fixture-tier',choices=('unfrozen','h1'),default='unfrozen')

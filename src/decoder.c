@@ -9,9 +9,24 @@ struct kenc_decoder {
     uint64_t epoch;
     uint64_t next_index;
     uint64_t last_pts;
+    kenc_epoch_start epoch_start;
     int has_epoch;
     int needs_reset;
 };
+
+kenc_result kenc_decoder_set_epoch_start(kenc_decoder *decoder, kenc_epoch_start profile)
+{
+    kenc_epoch_start known;
+    if (decoder == NULL) { return KENC_ERR_INVALID; }
+    if (kenc_epoch_start_from_marker((uint32_t)profile, &known) != KENC_OK) {
+        return KENC_ERR_EPOCH_START;
+    }
+    if (decoder->has_epoch) { return KENC_ERR_PROTOCOL; }
+    decoder->epoch_start = known;
+    kenc_native_set_preroll(decoder->native,
+        known == KENC_EPOCH_START_C5_R4 ? KENC_PREROLL_PACKETS : 0u);
+    return KENC_OK;
+}
 
 kenc_result kenc_decoder_create(kenc_decoder **out, kenc_model *model,
     const kenc_options *options)
@@ -28,6 +43,7 @@ kenc_result kenc_decoder_create(kenc_decoder **out, kenc_model *model,
     result = kenc_native_create(&decoder->native, model, options, 0);
     if (result != KENC_OK) { free(decoder); return result; }
     decoder->options = *options;
+    decoder->epoch_start = KENC_EPOCH_START_C0;
     decoder->needs_reset = 1;
     *out = decoder;
     return KENC_OK;
@@ -66,6 +82,10 @@ kenc_result kenc_decoder_pull_s16(kenc_decoder *decoder, const uint8_t *packet,
     if (value.index >= decoder->options.epoch_packets
         || (value.samples != KENC_PACKET_SAMPLES && (value.flags & KENC_PACKET_FLAG_END) == 0u)) {
         return KENC_ERR_PROTOCOL;
+    }
+    if (reset && ((value.flags & KENC_PACKET_FLAG_EPOCH_PREROLL) != 0u)
+            != (decoder->epoch_start == KENC_EPOCH_START_C5_R4)) {
+        return KENC_ERR_EPOCH_START;
     }
     if (reset) {
         if (decoder->has_epoch && value.epoch <= decoder->epoch) { return KENC_ERR_PROTOCOL; }

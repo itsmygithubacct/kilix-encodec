@@ -9,9 +9,28 @@ struct kenc_encoder {
     uint64_t index;
     uint64_t last_pts;
     uint8_t flags;
+    kenc_epoch_start epoch_start;
     int emitted;
     int exhausted;
 };
+
+kenc_result kenc_encoder_set_epoch_start(kenc_encoder *encoder, kenc_epoch_start profile)
+{
+    kenc_epoch_start known;
+    if (encoder == NULL) { return KENC_ERR_INVALID; }
+    if (kenc_epoch_start_from_marker((uint32_t)profile, &known) != KENC_OK) {
+        return KENC_ERR_EPOCH_START;
+    }
+    /* Only before the first packet or at an explicit discontinuity, whose
+     * RESET carries the new marker; never inside a running epoch sequence. */
+    if (encoder->emitted && (encoder->flags & KENC_PACKET_FLAG_DISCONTINUITY) == 0u) {
+        return KENC_ERR_PROTOCOL;
+    }
+    encoder->epoch_start = known;
+    kenc_native_set_preroll(encoder->native,
+        known == KENC_EPOCH_START_C5_R4 ? KENC_PREROLL_PACKETS : 0u);
+    return KENC_OK;
+}
 
 kenc_result kenc_encoder_create(kenc_encoder **out, kenc_model *model,
     const kenc_options *options)
@@ -29,6 +48,7 @@ kenc_result kenc_encoder_create(kenc_encoder **out, kenc_model *model,
     if (result != KENC_OK) { free(encoder); return result; }
     encoder->options = *options;
     encoder->flags = KENC_PACKET_FLAG_RESET;
+    encoder->epoch_start = KENC_EPOCH_START_C0;
     *out = encoder;
     return KENC_OK;
 }
@@ -69,6 +89,10 @@ kenc_result kenc_encoder_push_s16(kenc_encoder *encoder, const int16_t *pcm,
     value.index = boundary ? 0u : encoder->index;
     value.pts_ms = pts_ms;
     value.flags = boundary ? KENC_PACKET_FLAG_RESET : encoder->flags;
+    if ((value.flags & KENC_PACKET_FLAG_RESET) != 0u
+        && encoder->epoch_start == KENC_EPOCH_START_C5_R4) {
+        value.flags |= KENC_PACKET_FLAG_EPOCH_PREROLL;
+    }
     value.samples = KENC_PACKET_SAMPLES;
     value.codebooks = encoder->options.codebooks;
     /* Check the complete variable-width header before touching stream state. */

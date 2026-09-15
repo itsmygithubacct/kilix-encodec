@@ -16,8 +16,9 @@
 typedef struct {
     const char *assets, *input, *output;
     uint8_t profile, books, threads;
+    kenc_epoch_start epoch_start;
     uint64_t seek;
-    int encoding, seek_set;
+    int encoding, seek_set, epoch_start_set;
 } command_options;
 
 typedef struct {
@@ -31,10 +32,12 @@ void kenc_file_usage(void)
 {
     fprintf(stderr,
         "usage: kenc encode --model-dir DIR [--profile 24k|48k] [--bitrate 3|6|12|24]\n"
-        "                   [--threads 1|2] INPUT.wav OUTPUT.kenc\n"
+        "                   [--threads 1|2] [--epoch-start C0|C5-R4] INPUT.wav OUTPUT.kenc\n"
         "       kenc decode --model-dir DIR [--threads 1|2] [--seek-sample N]\n"
         "                   INPUT.kenc OUTPUT.wav\n"
         "Input WAV must be PCM16, 24 kHz mono or 48 kHz stereo for the selected profile.\n"
+        "Encoding writes C0 unless --epoch-start C5-R4 (24k only) is selected; decoding\n"
+        "follows the file's epoch-start marker.\n"
         "Existing output files are preserved. Failed new outputs remain incomplete.\n");
 }
 
@@ -82,6 +85,11 @@ static int parse(command_options *options, int argc, char **argv)
                 if (!integer(value, &number) || (number != 1u && number != 2u)) { return 0; }
                 options->threads = (uint8_t)number;
                 seen_threads = 1;
+            } else if (strcmp(name, "--epoch-start") == 0 && options->encoding && !options->epoch_start_set) {
+                if (strcmp(value, "C0") == 0) { options->epoch_start = KENC_EPOCH_START_C0; }
+                else if (strcmp(value, "C5-R4") == 0) { options->epoch_start = KENC_EPOCH_START_C5_R4; }
+                else { return 0; }
+                options->epoch_start_set = 1;
             } else if (strcmp(name, "--seek-sample") == 0 && !options->encoding && !options->seek_set) {
                 if (!integer(value, &options->seek)) { return 0; }
                 options->seek_set = 1;
@@ -94,6 +102,7 @@ static int parse(command_options *options, int argc, char **argv)
         }
     }
     if (options->profile == KENC_FILE_PROFILE_MONO && bitrate == 24u) { return 0; }
+    if (options->epoch_start != KENC_EPOCH_START_C0 && options->profile != KENC_FILE_PROFILE_MONO) { return 0; }
     options->books = (uint8_t)(options->profile == KENC_FILE_PROFILE_MONO ? bitrate * 4u / 3u : bitrate * 2u / 3u);
     return positional == 2 && options->assets != NULL;
 }
@@ -224,13 +233,14 @@ static kenc_result encode(const command_options *options, int input, int *output
         if (result != KENC_OK) { goto done; }
         kenc_options native = kenc_options_default(); native.codebooks = options->books; native.threads = options->threads;
         result = kenc_encoder_create(&mono, model, &native);
+        if (result == KENC_OK) { result = kenc_encoder_set_epoch_start(mono, options->epoch_start); }
     } else { result = kenc_stereo_create(&stereo, options->assets, options->books, options->threads); }
     if (result != KENC_OK) { goto done; }
     raw = malloc(scalars * 2u); frame = malloc(scalars * sizeof(*frame));
     if (raw == NULL || frame == NULL) { result = KENC_ERR_MEMORY; goto done; }
     *output = open(options->output, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (*output < 0) { result = KENC_ERR_RUNTIME; goto done; }
-    result = kenc_file_writer_create(&writer, *output, &info);
+    result = kenc_file_writer_create_epoch_start(&writer, *output, &info, options->epoch_start);
     if (result != KENC_OK) { goto done; }
     double began = monotonic_seconds(), last = began;
     for (uint64_t position = 0u; position < wave.samples; position += stride) {
@@ -285,6 +295,12 @@ static kenc_result decode(const command_options *options, int input, int *output
     uint64_t start = 0u;
     kenc_result result = kenc_file_source_create(&source, input, options->assets, options->assets, options->threads, &info);
     if (result != KENC_OK) { goto done; }
+    if (info.profile == KENC_FILE_PROFILE_MONO) {
+        kenc_epoch_start epoch_start = KENC_EPOCH_START_C0;
+        result = kenc_file_source_epoch_start(source, &epoch_start);
+        if (result != KENC_OK) { goto done; }
+        fprintf(stderr, "kenc: epoch start %s\n", kenc_epoch_start_name(epoch_start));
+    }
     if (options->seek_set) {
         result = kenc_file_source_seek(source, options->seek, &start);
         if (result != KENC_OK) { goto done; }

@@ -4,8 +4,9 @@
 #include "kilix_encodec.h"
 
 #define KENC_LATENT_FRAMES 3u
-/* Every epoch start primes zeroed stream state by running the network over
- * the epoch's first packet this many times, discarding those outputs. */
+/* A C5-R4 epoch start primes zeroed stream state by running the network over
+ * the epoch's first packet this many times, discarding those outputs. C0 runs
+ * no lead-in. */
 #define KENC_PREROLL_PACKETS 4u
 #define KENC_MAX_CODEBOOKS 16u
 #define KENC_MAX_TOKENS (KENC_LATENT_FRAMES * KENC_MAX_CODEBOOKS)
@@ -31,6 +32,8 @@ typedef struct kenc_native_stream kenc_native_stream;
 kenc_result kenc_native_create(kenc_native_stream **out, kenc_model *model,
     const kenc_options *options, int encoding);
 void kenc_native_reset(kenc_native_stream *stream);
+/* Lead-in runs at every later epoch start: 0 (C0) or KENC_PREROLL_PACKETS. */
+void kenc_native_set_preroll(kenc_native_stream *stream, unsigned int packets);
 void kenc_native_free(kenc_native_stream *stream);
 kenc_result kenc_native_encode(kenc_native_stream *stream,
     const int16_t *pcm, uint16_t *codes);

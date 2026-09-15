@@ -19,6 +19,7 @@ typedef struct { uint64_t sample, record, offset; } file_index;
 typedef struct {
     int fd;
     kenc_file_info info;
+    kenc_epoch_start epoch_start;
     uint64_t records;
     size_t index_count;
     file_index *index;
@@ -116,12 +117,26 @@ static kenc_result validate_info(const kenc_file_info *info)
         ? KENC_OK : KENC_ERR_INVALID;
 }
 
-kenc_result kenc_file_header_write(const kenc_file_info *info,
+static int known_epoch_start(kenc_epoch_start epoch_start)
+{
+    return epoch_start == KENC_EPOCH_START_C0 || epoch_start == KENC_EPOCH_START_C5_R4;
+}
+
+/* Version 1 has no marker and is C0. Version 2 differs only in byte 4 and the
+ * marker at byte 42, which must name a non-C0 profile; C0 is always written as
+ * version 1 so that each state has exactly one canonical header. */
+static kenc_result header_write(const kenc_file_info *info, kenc_epoch_start epoch_start,
     uint8_t *header, size_t capacity)
 {
     uint8_t value[KENC_FILE_HEADER_BYTES] = {'K', 'E', 'N', 'C', 1u, 13u, 10u, 26u};
     if (header == NULL || validate_info(info) != KENC_OK) { return KENC_ERR_INVALID; }
+    if (!known_epoch_start(epoch_start)) { return KENC_ERR_EPOCH_START; }
+    if (epoch_start != KENC_EPOCH_START_C0 && info->profile != KENC_FILE_PROFILE_MONO) { return KENC_ERR_INVALID; }
     if (capacity < sizeof(value)) { return KENC_ERR_TRUNCATED; }
+    if (epoch_start != KENC_EPOCH_START_C0) {
+        value[4] = 2u;
+        value[42] = (uint8_t)epoch_start;
+    }
     value[8] = info->profile; value[9] = info->codebooks;
     value[10] = info->profile == KENC_FILE_PROFILE_MONO ? 1u : 2u;
     value[11] = info->flags;
@@ -137,20 +152,52 @@ kenc_result kenc_file_header_write(const kenc_file_info *info,
     return KENC_OK;
 }
 
-kenc_result kenc_file_header_read(kenc_file_info *info,
+static kenc_result header_read(kenc_file_info *info, kenc_epoch_start *epoch_start,
     const uint8_t *header, size_t length)
 {
     uint8_t canonical[KENC_FILE_HEADER_BYTES];
     kenc_file_info value;
+    kenc_epoch_start profile = KENC_EPOCH_START_C0;
     if (info == NULL || header == NULL) { return KENC_ERR_INVALID; }
     if (length < KENC_FILE_HEADER_BYTES) { return KENC_ERR_TRUNCATED; }
     if (length != KENC_FILE_HEADER_BYTES) { return KENC_ERR_PROTOCOL; }
+    if (memcmp(header, "KENC\2\r\n\32", 8u) == 0
+        && (kenc_epoch_start_from_marker(header[42], &profile) != KENC_OK
+            || profile == KENC_EPOCH_START_C0)) {
+        return KENC_ERR_EPOCH_START; /* unknown marker, or C0 spelled as version 2 */
+    }
     value.profile = header[8]; value.codebooks = header[9]; value.flags = header[11];
     value.samples = read_le(header + 24u, 8u);
-    if (kenc_file_header_write(&value, canonical, sizeof(canonical)) != KENC_OK
+    if (header_write(&value, profile, canonical, sizeof(canonical)) != KENC_OK
         || memcmp(header, canonical, sizeof(canonical)) != 0) { return KENC_ERR_PROTOCOL; }
     *info = value;
+    if (epoch_start != NULL) { *epoch_start = profile; }
     return KENC_OK;
+}
+
+kenc_result kenc_file_header_write(const kenc_file_info *info,
+    uint8_t *header, size_t capacity)
+{
+    return header_write(info, KENC_EPOCH_START_C0, header, capacity);
+}
+
+kenc_result kenc_file_header_write_epoch_start(const kenc_file_info *info,
+    kenc_epoch_start epoch_start, uint8_t *header, size_t capacity)
+{
+    return header_write(info, epoch_start, header, capacity);
+}
+
+kenc_result kenc_file_header_read(kenc_file_info *info,
+    const uint8_t *header, size_t length)
+{
+    return header_read(info, NULL, header, length);
+}
+
+kenc_result kenc_file_header_read_epoch_start(kenc_file_info *info,
+    kenc_epoch_start *epoch_start, const uint8_t *header, size_t length)
+{
+    if (epoch_start == NULL) { return KENC_ERR_INVALID; }
+    return header_read(info, epoch_start, header, length);
 }
 
 kenc_result kenc_stereo_record_write(const uint16_t *codes, size_t code_count,
@@ -268,9 +315,17 @@ static kenc_result validate_record(const file_state *file, const uint8_t *record
         kenc_wire_packet packet;
         kenc_result result = kenc_packet_read(&packet, record, length, file->info.codebooks);
         if (result != KENC_OK) { return result; }
+        uint8_t expected = file->position % 25u != 0u ? 0u
+            : (uint8_t)(KENC_PACKET_FLAG_RESET | (file->epoch_start == KENC_EPOCH_START_C5_R4
+                ? KENC_PACKET_FLAG_EPOCH_PREROLL : 0u));
         if (packet.samples != 960u || packet.epoch != file->position / 25u
-            || packet.index != file->position % 25u || packet.pts_ms != file->position * 40u
-            || packet.flags != (file->position % 25u == 0u ? KENC_PACKET_FLAG_RESET : 0u)) { return KENC_ERR_PROTOCOL; }
+            || packet.index != file->position % 25u || packet.pts_ms != file->position * 40u) { return KENC_ERR_PROTOCOL; }
+        if (packet.flags != expected) {
+            /* A RESET record whose only difference is the marker disagrees
+             * with the header's epoch-start profile. */
+            return (uint8_t)(packet.flags ^ expected) == KENC_PACKET_FLAG_EPOCH_PREROLL
+                ? KENC_ERR_EPOCH_START : KENC_ERR_PROTOCOL;
+        }
     } else {
         uint16_t codes[16u * KENC_STEREO_LATENT_FRAMES]; float scale;
         return kenc_stereo_record_read(record, length, file->info.codebooks,
@@ -331,7 +386,7 @@ kenc_result kenc_file_reader_create(kenc_file_reader **out, int descriptor, kenc
         || (uint64_t)reader->identity.st_size > MAX_FILE_BYTES) { result = KENC_ERR_INVALID; goto done; }
     result = transfer(file->fd, header, sizeof(header), 0u, 0);
     if (result != KENC_OK) { goto done; }
-    result = kenc_file_header_read(&file->info, header, sizeof(header));
+    result = header_read(&file->info, &file->epoch_start, header, sizeof(header));
     if (result != KENC_OK) { goto done; }
     if (file->info.flags == KENC_FILE_LIVE) { result = KENC_ERR_PROTOCOL; goto done; }
     result = snapshot_source(file, &reader->identity);
@@ -341,10 +396,12 @@ kenc_result kenc_file_reader_create(kenc_file_reader **out, int descriptor, kenc
     result = transfer(file->fd, header, sizeof(header), 0u, 0);
     if (result != KENC_OK) { goto done; }
     kenc_file_info copied_info;
-    result = kenc_file_header_read(&copied_info, header, sizeof(header));
+    kenc_epoch_start copied_epoch_start = KENC_EPOCH_START_C0;
+    result = header_read(&copied_info, &copied_epoch_start, header, sizeof(header));
     if (result != KENC_OK || copied_info.profile != file->info.profile
         || copied_info.codebooks != file->info.codebooks || copied_info.flags != file->info.flags
-        || copied_info.samples != file->info.samples) { result = KENC_ERR_PROTOCOL; goto done; }
+        || copied_info.samples != file->info.samples
+        || copied_epoch_start != file->epoch_start) { result = KENC_ERR_PROTOCOL; goto done; }
     file->records = records_for(&file->info); file->index_count = indexes_for(&file->info);
     file->offset = KENC_FILE_HEADER_BYTES + file->index_count * INDEX_BYTES;
     file->index = calloc(file->index_count, sizeof(*file->index));
@@ -368,6 +425,14 @@ kenc_result kenc_file_reader_create(kenc_file_reader **out, int descriptor, kenc
     *info = file->info; *out = reader; reader = NULL;
 done:
     kenc_file_reader_free(reader); return result;
+}
+
+kenc_result kenc_file_reader_epoch_start(const kenc_file_reader *reader,
+    kenc_epoch_start *epoch_start)
+{
+    if (reader == NULL || epoch_start == NULL) { return KENC_ERR_INVALID; }
+    *epoch_start = reader->file.epoch_start;
+    return KENC_OK;
 }
 
 kenc_result kenc_file_reader_next(kenc_file_reader *reader,
@@ -403,17 +468,26 @@ kenc_result kenc_file_reader_seek(kenc_file_reader *reader,
 
 kenc_result kenc_file_writer_create(kenc_file_writer **out, int descriptor, const kenc_file_info *info)
 {
+    return kenc_file_writer_create_epoch_start(out, descriptor, info, KENC_EPOCH_START_C0);
+}
+
+kenc_result kenc_file_writer_create_epoch_start(kenc_file_writer **out, int descriptor,
+    const kenc_file_info *info, kenc_epoch_start epoch_start)
+{
     struct stat status; kenc_file_writer *writer;
     if (out == NULL) { return KENC_ERR_INVALID; }
     *out = NULL;
     if (validate_info(info) != KENC_OK || info->flags == KENC_FILE_LIVE
         || fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) || status.st_size != 0) { return KENC_ERR_INVALID; }
+    if (!known_epoch_start(epoch_start)) { return KENC_ERR_EPOCH_START; }
+    if (epoch_start != KENC_EPOCH_START_C0 && info->profile != KENC_FILE_PROFILE_MONO) { return KENC_ERR_INVALID; }
     int flags = fcntl(descriptor, F_GETFL);
     if (flags < 0 || (flags & O_ACCMODE) == O_RDONLY || (flags & O_APPEND) != 0) { return KENC_ERR_INVALID; }
     writer = calloc(1u, sizeof(*writer));
     if (writer == NULL) { return KENC_ERR_MEMORY; }
     file_state *file = &writer->file;
     file->fd = fcntl(descriptor, F_DUPFD_CLOEXEC, 3);
+    file->epoch_start = epoch_start;
     file->info = *info; file->records = records_for(info); file->index_count = indexes_for(info);
     file->index = calloc(file->index_count, sizeof(*file->index));
     if (file->fd < 0 || file->index == NULL) {
@@ -450,7 +524,7 @@ kenc_result kenc_file_writer_finish(kenc_file_writer *writer)
     file_state *file = &writer->file;
     if (fstat(file->fd, &status) != 0 || status.st_size < 0
         || (uint64_t)status.st_size != file->offset) { return KENC_ERR_PROTOCOL; }
-    kenc_result result = kenc_file_header_write(&file->info, header, sizeof(header));
+    kenc_result result = header_write(&file->info, file->epoch_start, header, sizeof(header));
     if (result != KENC_OK) { return result; }
     for (size_t i = 0u; i < file->index_count; ++i) {
         write_le(bytes, file->index[i].sample, 8u); write_le(bytes + 8u, file->index[i].record, 8u); write_le(bytes + 16u, file->index[i].offset, 8u);

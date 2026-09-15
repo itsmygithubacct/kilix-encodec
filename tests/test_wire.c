@@ -100,6 +100,36 @@ int main(void)
     memcpy(changed, golden, 4u);
     memset(changed + 4u, 0xff, 10u); /* overflowing 64-bit varint */
     TEST_CHECK(kenc_packet_read(&output, changed, 14u, 4u) == KENC_ERR_PROTOCOL);
+    /* Epoch-start marker (OD-AT): valid only on RESET packets, round-trips,
+     * and leaves every unmarked (C0) packet byte-identical to the golden. */
+    memset(&input, 0, sizeof(input));
+    input.samples = 960u;
+    input.codebooks = 8u;
+    input.flags = KENC_PACKET_FLAG_RESET | KENC_PACKET_FLAG_EPOCH_PREROLL;
+    TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_OK);
+    TEST_CHECK(kenc_packet_read(&output, buffer, written, 8u) == KENC_OK && output.flags == input.flags);
+    kenc_options marked_options = kenc_options_default();
+    TEST_CHECK(kenc_packet_metadata_read(&metadata, buffer, written, &marked_options) == KENC_OK
+        && metadata.packet.flags == (KENC_PACKET_FLAG_RESET | KENC_PACKET_FLAG_EPOCH_PREROLL));
+    input.flags = KENC_PACKET_FLAG_RESET | KENC_PACKET_FLAG_DISCONTINUITY | KENC_PACKET_FLAG_EPOCH_PREROLL;
+    TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_OK);
+    TEST_CHECK(kenc_packet_read(&output, buffer, written, 8u) == KENC_OK && output.flags == input.flags);
+    input.flags = KENC_PACKET_FLAG_EPOCH_PREROLL; /* marker without RESET */
+    TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_ERR_INVALID);
+    input.index = 3u;
+    TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_ERR_INVALID);
+    input.index = 0u;
+    input.flags = KENC_PACKET_FLAG_RESET | 0x10u; /* still-reserved bit */
+    TEST_CHECK(kenc_packet_write(&input, buffer, sizeof(buffer), &written) == KENC_ERR_INVALID);
+    memcpy(changed, golden, sizeof(golden));
+    changed[8] = KENC_PACKET_FLAG_END | KENC_PACKET_FLAG_EPOCH_PREROLL;
+    TEST_CHECK(kenc_packet_read(&output, changed, sizeof(golden), 4u) == KENC_ERR_PROTOCOL);
+    changed[8] = KENC_PACKET_FLAG_RESET | KENC_PACKET_FLAG_END | 0x10u;
+    TEST_CHECK(kenc_packet_read(&output, changed, sizeof(golden), 4u) == KENC_ERR_PROTOCOL);
+    changed[8] = KENC_PACKET_FLAG_RESET | KENC_PACKET_FLAG_END | KENC_PACKET_FLAG_EPOCH_PREROLL;
+    TEST_CHECK(kenc_packet_read(&output, changed, sizeof(golden), 4u) == KENC_OK
+        && output.flags == changed[8]);
+
     uint32_t random = 0x4193ca71u;
     for (unsigned int trial = 0u; trial < 50000u; ++trial) {
         random = random * UINT32_C(1664525) + UINT32_C(1013904223);

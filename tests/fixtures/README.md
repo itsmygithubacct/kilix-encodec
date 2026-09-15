@@ -23,4 +23,5 @@ from a git archive of kilix-encodec `3747330` whose Git tree it recomputes.
 the pinned `02201a5a` graph population. The file records the reference commit
 and tree, the programme manifest sha256, the NumPy and ONNX Runtime versions,
 and a cross-check against the F101 remedy spike's own C0 arm at 6 kb/s. It
-contains no audio, graph or weight bytes.
+contains no audio, graph or weight bytes. `tools/verify_epoch_programme.py`
+binds it to the same programme items and WAV hashes before use.

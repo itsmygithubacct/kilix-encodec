@@ -66,6 +66,10 @@ kenc_result kenc_native_create(kenc_native_stream **out, kenc_model *model,
     return KENC_ERR_RUNTIME;
 }
 void kenc_native_reset(kenc_native_stream *stream) { (void)stream; }
+void kenc_native_set_preroll(kenc_native_stream *stream, unsigned int packets)
+{
+    (void)stream; (void)packets;
+}
 void kenc_native_free(kenc_native_stream *stream) { free(stream); }
 kenc_result kenc_native_encode(kenc_native_stream *stream,
     const int16_t *pcm, uint16_t *codes)
@@ -122,6 +126,7 @@ struct kenc_native_stream {
     OrtIoBinding *network_bindings[2];
     OrtIoBinding *quantizer_binding;
     unsigned int bank;
+    unsigned int preroll_packets;
     uint8_t codebooks;
     int encoding;
     int preroll;
@@ -477,7 +482,8 @@ kenc_result kenc_native_create(kenc_native_stream **out, kenc_model *model,
         encoding ? stream->latent.tensor : stream->codes.tensor));
     ORT_TRY(api->BindOutput(stream->quantizer_binding, kenc_graphs[quantizer_index].outputs[0].name,
         encoding ? stream->codes.tensor : stream->latent.tensor));
-    /* The stream start is an epoch start: calloc zeroed every state. */
+    /* The stream start is an epoch start: calloc zeroed every state. New
+     * streams are C0 (preroll_packets 0) until a profile is selected. */
     stream->preroll = 1;
     *out = stream;
     stream = NULL;
@@ -498,17 +504,22 @@ void kenc_native_reset(kenc_native_stream *stream)
     stream->preroll = 1;
 }
 
-/* Repeat pre-roll at an epoch start. The network input buffer already holds
- * the epoch's first packet (audio, or its RVQ-decoded codes), so running the
- * unchanged per-packet graph over it KENC_PREROLL_PACKETS times from zeroed
+void kenc_native_set_preroll(kenc_native_stream *stream, unsigned int packets)
+{
+    if (stream != NULL) { stream->preroll_packets = packets; }
+}
+
+/* Repeat pre-roll at a C5-R4 epoch start. The network input buffer already
+ * holds the epoch's first packet (audio, or its RVQ-decoded codes), so running
+ * the unchanged per-packet graph over it preroll_packets times from zeroed
  * state is the tiled lead-in. Each lead-in output is overwritten by the next
- * run; no future packet is read, so no latency is added. A failure leaves the
- * flag set; callers reset the stream before it is used again. */
+ * run; no future packet is read, so no latency is added. C0 runs none. A
+ * failure leaves the flag set; callers reset the stream before reuse. */
 static kenc_result preroll(kenc_native_stream *stream)
 {
     const OrtApi *api = stream->model->api;
     kenc_result result = KENC_OK;
-    for (unsigned int i = 0u; i < KENC_PREROLL_PACKETS; ++i) {
+    for (unsigned int i = 0u; i < stream->preroll_packets; ++i) {
         ORT_TRY(api->RunWithBinding(stream->network, NULL, stream->network_bindings[stream->bank]));
         stream->bank = 1u - stream->bank;
     }

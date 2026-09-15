@@ -24,6 +24,9 @@ extern "C" {
 #define KENC_PACKET_FLAG_RESET UINT8_C(0x01)
 #define KENC_PACKET_FLAG_END UINT8_C(0x02)
 #define KENC_PACKET_FLAG_DISCONTINUITY UINT8_C(0x04)
+/* Epoch-start marker: set on every RESET packet of a C5-R4 stream and only
+ * there. Unmarked RESET packets are C0. Pre-marker decoders refuse it. */
+#define KENC_PACKET_FLAG_EPOCH_PREROLL UINT8_C(0x08)
 
 typedef struct kenc_model kenc_model;
 typedef struct kenc_encoder kenc_encoder;
@@ -37,8 +40,24 @@ typedef enum {
     KENC_ERR_RUNTIME,
     KENC_ERR_TRUNCATED,
     KENC_ERR_PROTOCOL,
-    KENC_ERR_MEMORY
+    KENC_ERR_MEMORY,
+    KENC_ERR_EPOCH_START
 } kenc_result;
+
+/* Epoch-start profiles (owner decision OD-AT). A stream, file or peer without
+ * a marker is C0. The values are the marker values used in handshakes and in
+ * file format version 2.
+ * - C0: every epoch starts from zeroed state (the 0.2.1 behaviour).
+ * - C5-R4: zeroed state is primed by running the epoch's first packet through
+ *   the network four times as a discarded lead-in (owner decision OD-AL). */
+typedef enum {
+    KENC_EPOCH_START_C0 = 0,
+    KENC_EPOCH_START_C5_R4 = 1
+} kenc_epoch_start;
+
+#define KENC_EPOCH_START_BIT(profile) (UINT32_C(1) << (unsigned int)(profile))
+#define KENC_EPOCH_START_ALL \
+    (KENC_EPOCH_START_BIT(KENC_EPOCH_START_C0) | KENC_EPOCH_START_BIT(KENC_EPOCH_START_C5_R4))
 
 typedef struct {
     uint32_t sample_rate;
@@ -64,6 +83,22 @@ typedef struct {
 kenc_options kenc_options_default(void);
 kenc_result kenc_options_validate(const kenc_options *options);
 const char *kenc_result_string(kenc_result result);
+
+/* Advertisement: one KENC_EPOCH_START_BIT per supported profile. Every
+ * conforming peer supports C0. */
+uint32_t kenc_epoch_start_supported(void);
+/* Select the profile both sides use. local must include C0 and only known
+ * profiles (KENC_ERR_INVALID otherwise). peer 0 means the peer sent no
+ * advertisement: C0. A nonzero peer advertisement without C0 is malformed
+ * (KENC_ERR_EPOCH_START). Peer bits for profiles unknown to this library are
+ * ignored. C5-R4 is selected only when both advertise it; otherwise C0.
+ * On refusal *selected is unchanged. */
+kenc_result kenc_epoch_start_negotiate(uint32_t local, uint32_t peer,
+    kenc_epoch_start *selected);
+/* Parse one selected-profile marker: unknown values are KENC_ERR_EPOCH_START. */
+kenc_result kenc_epoch_start_from_marker(uint32_t marker, kenc_epoch_start *profile);
+/* "C0" or "C5-R4"; NULL for an unknown value. */
+const char *kenc_epoch_start_name(kenc_epoch_start profile);
 
 /* Parse the complete opaque KMA2 packet without a model or inference. Validates
  * the selected profile, epoch index bound and short-final-packet rule, but not
@@ -102,14 +137,20 @@ kenc_result kenc_model_load_fds(kenc_model **out, const kenc_asset_set *assets);
  * can be shared by independent contexts. PCM is signed native-endian mono at
  * 24 kHz; each push consumes exactly 960 samples. PTS advances by 40 ms until an
  * explicit reset. The encoder alone owns RESET and the configured epoch cadence.
- * At each RESET packet the encoder and decoder zero their stream state and run
- * that packet's own input through the network four times as a discarded
- * lead-in before processing it: epochs are independent and no latency is
- * added, at the cost of five network runs for that packet.
+ * At each RESET packet the encoder and decoder zero their stream state; epochs
+ * are independent and no latency is added. New contexts use C0. After both
+ * peers negotiate C5-R4, each side selects it: every RESET packet then carries
+ * KENC_PACKET_FLAG_EPOCH_PREROLL, and both sides run that packet's own input
+ * through the network four times as a discarded lead-in before processing it
+ * (five network runs for that packet).
  * A buffer of KENC_MAX_PACKET_BYTES always holds a supported packet. A short
  * output buffer produces no bytes and does not advance the stream. */
 kenc_result kenc_encoder_create(
     kenc_encoder **out, kenc_model *model, const kenc_options *options);
+/* Select the epoch-start profile before the first packet, or after an explicit
+ * kenc_encoder_reset; otherwise KENC_ERR_PROTOCOL and nothing changes.
+ * Unknown profiles are KENC_ERR_EPOCH_START. */
+kenc_result kenc_encoder_set_epoch_start(kenc_encoder *encoder, kenc_epoch_start profile);
 void kenc_encoder_reset(kenc_encoder *encoder);
 kenc_result kenc_encoder_push_s16(
     kenc_encoder *encoder, const int16_t *pcm, size_t sample_count,
@@ -119,9 +160,14 @@ void kenc_encoder_free(kenc_encoder *encoder);
 /* Loss or reordering requires a later RESET packet. A newly created/reset
  * decoder joins at any RESET; a running decoder refuses replayed epochs.
  * Malformed packets and short output buffers do not write PCM. The decoder
- * returns only verified packet metadata and at most KENC_PACKET_SAMPLES. */
+ * returns only verified packet metadata and at most KENC_PACKET_SAMPLES.
+ * A RESET packet whose epoch-start marker differs from the selected profile is
+ * refused with KENC_ERR_EPOCH_START, without output or state change. */
 kenc_result kenc_decoder_create(
     kenc_decoder **out, kenc_model *model, const kenc_options *options);
+/* Select the epoch-start profile of a new or explicitly reset decoder;
+ * otherwise KENC_ERR_PROTOCOL. The selection survives kenc_decoder_reset. */
+kenc_result kenc_decoder_set_epoch_start(kenc_decoder *decoder, kenc_epoch_start profile);
 void kenc_decoder_reset(kenc_decoder *decoder);
 kenc_result kenc_decoder_pull_s16(
     kenc_decoder *decoder, const uint8_t *packet, size_t packet_size,

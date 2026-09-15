@@ -39,10 +39,24 @@ void kenc_stereo_overlap_reset(kenc_stereo_overlap *state);
 kenc_result kenc_stereo_overlap_apply(kenc_stereo_overlap *state,
     float *frame, size_t scalar_count);
 
+/* File format version 2 (FILE-FORMAT.md) adds the epoch-start profile marker.
+ * A C0 file or header is always version 1, byte-identical to the pre-marker
+ * format, so pre-marker readers still accept it. A C5-R4 header (mono only,
+ * local or live) is version 2 with marker 1, which pre-marker readers refuse.
+ * The plain functions write C0 and read both versions without reporting the
+ * marker. Anyone decoding records itself must read the marker and select that
+ * profile on its decoder: a C0 decoder refuses a marked RESET record with
+ * KENC_ERR_EPOCH_START. An unknown marker, or a version 2 header naming C0,
+ * is refused with KENC_ERR_EPOCH_START. */
+#define KENC_FILE_FORMAT_VERSION 2u
 kenc_result kenc_file_header_write(const kenc_file_info *info,
     uint8_t *header, size_t capacity);
+kenc_result kenc_file_header_write_epoch_start(const kenc_file_info *info,
+    kenc_epoch_start epoch_start, uint8_t *header, size_t capacity);
 kenc_result kenc_file_header_read(kenc_file_info *info,
     const uint8_t *header, size_t length);
+kenc_result kenc_file_header_read_epoch_start(kenc_file_info *info,
+    kenc_epoch_start *epoch_start, const uint8_t *header, size_t length);
 
 /* The file reader copies a bounded regular file into a sealed private snapshot.
  * Source mutation after loading cannot change its validated records. Before
@@ -52,6 +66,9 @@ kenc_result kenc_file_header_read(kenc_file_info *info,
  * the indexed position at or before the request, never an arbitrary record. */
 kenc_result kenc_file_reader_create(kenc_file_reader **out, int descriptor,
     kenc_file_info *info);
+/* The validated header's epoch-start profile; every RESET record matches it. */
+kenc_result kenc_file_reader_epoch_start(const kenc_file_reader *reader,
+    kenc_epoch_start *epoch_start);
 kenc_result kenc_file_reader_next(kenc_file_reader *reader,
     uint8_t *record, size_t capacity, size_t *written, uint64_t *sample_position);
 kenc_result kenc_file_reader_seek(kenc_file_reader *reader,
@@ -76,6 +93,9 @@ kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
 kenc_result kenc_file_source_create_fds(kenc_file_source **out, int descriptor,
     const kenc_asset_set *mono_assets, const kenc_asset_set *stereo_assets,
     uint8_t threads, kenc_file_info *info);
+/* The source decodes with the file's own epoch-start profile. */
+kenc_result kenc_file_source_epoch_start(const kenc_file_source *source,
+    kenc_epoch_start *epoch_start);
 kenc_result kenc_file_source_pull_f32(kenc_file_source *source, float *pcm,
     size_t scalar_capacity, size_t *samples_written, uint64_t *sample_position);
 kenc_result kenc_file_source_seek(kenc_file_source *source,
@@ -88,6 +108,10 @@ void kenc_file_source_free(kenc_file_source *source);
  * publication/removal of the output file. No path is ever deleted here. */
 kenc_result kenc_file_writer_create(kenc_file_writer **out, int descriptor,
     const kenc_file_info *info);
+/* As above for a selected epoch-start profile; C5-R4 requires mono. Every
+ * appended RESET record must carry exactly that profile's marker. */
+kenc_result kenc_file_writer_create_epoch_start(kenc_file_writer **out, int descriptor,
+    const kenc_file_info *info, kenc_epoch_start epoch_start);
 kenc_result kenc_file_writer_append(kenc_file_writer *writer,
     const uint8_t *record, size_t length);
 kenc_result kenc_file_writer_finish(kenc_file_writer *writer);

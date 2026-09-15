@@ -4,6 +4,7 @@
 #include "test.h"
 
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -85,5 +86,64 @@ int main(int argc, char **argv)
         TEST_CHECK(kenc_file_source_seek(source, info.samples, &position) == KENC_ERR_INVALID && position == 99u);
         free(pcm); free(complete); kenc_file_source_free(source);
     }
+
+    /* Epoch-start marker: the source decodes with the file's own profile, a
+     * C5-R4 file stays seek-exact, and the same codes decode differently as C0. */
+    float *first_blocks = calloc(2u * 960u, sizeof(float));
+    TEST_CHECK(first_blocks != NULL);
+    if (first_blocks == NULL) { return 1; }
+    for (int marked = 0; marked <= 1; ++marked) {
+        FILE *handle = tmpfile();
+        int fd = handle != NULL ? fileno(handle) : -1;
+        TEST_CHECK(fd >= 0);
+        if (fd < 0) { if (handle != NULL) { (void)fclose(handle); } free(first_blocks); return 1; }
+        kenc_epoch_start profile = marked ? KENC_EPOCH_START_C5_R4 : KENC_EPOCH_START_C0;
+        kenc_epoch_start found = (kenc_epoch_start)9;
+        kenc_file_info info = {1u, 4u, 0u, 26003u}, actual_info;
+        kenc_file_writer *writer = NULL;
+        kenc_file_source *source = NULL;
+        TEST_CHECK(kenc_file_writer_create_epoch_start(&writer, fd, &info, profile) == KENC_OK);
+        if (writer == NULL) { (void)fclose(handle); free(first_blocks); return 1; }
+        for (size_t number = 0u; number < 28u; ++number) {
+            uint8_t record[KENC_FILE_MAX_RECORD_BYTES]; size_t bytes = 0u;
+            kenc_wire_packet packet = {0};
+            packet.samples = 960u; packet.codebooks = 4u;
+            packet.epoch = number / 25u; packet.index = number % 25u; packet.pts_ms = number * 40u;
+            packet.flags = number % 25u == 0u
+                ? (uint8_t)(KENC_PACKET_FLAG_RESET | (marked ? KENC_PACKET_FLAG_EPOCH_PREROLL : 0u)) : 0u;
+            for (size_t i = 0u; i < 12u; ++i) { packet.codes[i] = (uint16_t)((i + number * 31u) % 1024u); }
+            TEST_CHECK(kenc_packet_write(&packet, record, sizeof(record), &bytes) == KENC_OK);
+            TEST_CHECK(kenc_file_writer_append(writer, record, bytes) == KENC_OK);
+        }
+        TEST_CHECK(kenc_file_writer_finish(writer) == KENC_OK);
+        kenc_file_writer_free(writer);
+        TEST_CHECK(kenc_file_source_create(&source, fd, argv[1], argv[2], 1u, &actual_info) == KENC_OK);
+        (void)fclose(handle); /* the source owns a sealed snapshot */
+        if (source == NULL) { free(first_blocks); return 1; }
+        TEST_CHECK(kenc_file_source_epoch_start(source, &found) == KENC_OK && found == profile);
+        TEST_CHECK(kenc_file_source_epoch_start(NULL, &found) == KENC_ERR_INVALID);
+        float *pcm = malloc(96000u * sizeof(*pcm));
+        float *complete = malloc(26003u * sizeof(*complete));
+        TEST_CHECK(pcm != NULL && complete != NULL);
+        if (pcm == NULL || complete == NULL) {
+            free(pcm); free(complete); free(first_blocks); kenc_file_source_free(source); return 1;
+        }
+        size_t count = 0u; uint64_t position = 0u, completed = 0u;
+        while (completed < 26003u) {
+            TEST_CHECK(kenc_file_source_pull_f32(source, pcm, 96000u, &count, &position) == KENC_OK);
+            if (count == 0u || count > 26003u - completed) { break; }
+            memcpy(complete + completed, pcm, count * sizeof(*pcm));
+            completed += count;
+        }
+        TEST_CHECK(completed == 26003u);
+        memcpy(first_blocks + (size_t)marked * 960u, complete, 960u * sizeof(*complete));
+        TEST_CHECK(kenc_file_source_seek(source, 24001u, &position) == KENC_OK && position == 24000u);
+        TEST_CHECK(kenc_file_source_pull_f32(source, pcm, 96000u, &count, &position) == KENC_OK
+            && position == 24000u && count == 960u
+            && memcmp(pcm, complete + 24000u, count * sizeof(*pcm)) == 0);
+        free(pcm); free(complete); kenc_file_source_free(source);
+    }
+    TEST_CHECK(memcmp(first_blocks, first_blocks + 960u, 960u * sizeof(float)) != 0);
+    free(first_blocks);
     return test_summary("file_source", passed, total);
 }

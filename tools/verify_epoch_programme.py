@@ -23,8 +23,14 @@ Checks, all through ``tools/epoch_stream.py`` on the exported graphs:
 - levels: the continuous rendering's identity, and the 3 and 12 kb/s
   boundary level tables (0-50 and 50-100 ms against continuous and source,
   deepest 5 ms, silence dBFS) within 0.01 dB.
+- legacy-c0: the C0 epoch-start profile (unmarked streams, owner decision
+  OD-AT) renders codes and float32 PCM identical to the reference recorded in
+  ``tests/fixtures/f101-c0-3747330-reference.json``, which was rendered by the
+  streaming functions of a git archive of kilix-encodec 3747330 at 6, 3 and
+  12 kb/s (``tests/fixtures/build_c0_reference.py``).
 
-No audio or graph is written.
+The product checks use the C5-R4 profile explicitly. No audio or graph is
+written.
 """
 
 from __future__ import annotations
@@ -44,8 +50,11 @@ from typing import Any
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 DEFAULT_EXPECTATIONS = REPOSITORY / "tests" / "fixtures" / "f101-c5r4-programme.json"
+DEFAULT_C0_REFERENCE = REPOSITORY / "tests" / "fixtures" / "f101-c0-3747330-reference.json"
 PROGRAMME_ENVIRONMENT = "KENC_F101_PROGRAMME_DIR"
 SCHEMA = "kilix.encodec.epoch-programme-expectations/v1"
+C0_REFERENCE_SCHEMA = "kilix.encodec.c0-legacy-reference/v1"
+C0_REFERENCE_COMMIT = "3747330ec7236931096eefc1e84100ad027c2444"
 SAMPLE_RATE = 24_000
 ITEM_SAMPLES = 12 * SAMPLE_RATE
 EPOCH_SAMPLES = SAMPLE_RATE
@@ -60,7 +69,7 @@ LEVEL_BITRATES = ("3", "12")
 TYPES = ("fixture", "tones", "noise", "silence", "impulses", "clipping", "speech", "music")
 WINDOWS = ("0-50", "50-100")
 TYPE_FIELDS = ("mean_dC", "worst_dC", "mean_dS", "worst_dS", "mean_dS_R")
-CHECKS = ("identity", "determinism", "levels")
+CHECKS = ("identity", "determinism", "levels", "legacy-c0")
 
 
 # ---------------------------------------------------------------- programme audio
@@ -220,14 +229,14 @@ def measure_item(bundle: str, name: str, pcm_bytes: bytes, checks: tuple[str, ..
     for kbps in BITRATES:
         encode_key, decode_key = f"rvq_encode_{kbps}kbps", f"rvq_decode_{kbps}kbps"
 
-        def encoder(preroll: int = stream.PREROLL_PACKETS) -> Any:
+        def encoder(profile: str = stream.EPOCH_START_C5_R4) -> Any:
             return stream.StreamEncoder(
-                session("encoder"), records["encoder"], session(encode_key), records[encode_key], preroll
+                session("encoder"), records["encoder"], session(encode_key), records[encode_key], profile=profile
             )
 
-        def decoder(preroll: int = stream.PREROLL_PACKETS) -> Any:
+        def decoder(profile: str = stream.EPOCH_START_C5_R4) -> Any:
             return stream.StreamDecoder(
-                session(decode_key), records[decode_key], session("decoder"), records["decoder"], preroll
+                session(decode_key), records[decode_key], session("decoder"), records["decoder"], profile=profile
             )
 
         _, codes = stream.encode_stream(encoder(), audio)
@@ -254,9 +263,14 @@ def measure_item(bundle: str, name: str, pcm_bytes: bytes, checks: tuple[str, ..
                     )
                 )
             row["D_tx"], row["D_rx"] = tx, rx
+        if "legacy-c0" in checks:
+            _, c0_codes = stream.encode_stream(encoder(stream.EPOCH_START_C0), audio)
+            c0_pcm = stream.decode_stream(decoder(stream.EPOCH_START_C0), c0_codes)
+            row["c0_hashes"] = render_hashes(c0_codes, c0_pcm)
         if "levels" in checks and kbps in LEVEL_BITRATES:
-            _, continuous_codes = stream.encode_stream(encoder(0), audio, None)
-            continuous = stream.decode_stream(decoder(0), continuous_codes, None)
+            # Never reset: a C0 stream without epochs starts once from zero state.
+            _, continuous_codes = stream.encode_stream(encoder(stream.EPOCH_START_C0), audio, None)
+            continuous = stream.decode_stream(decoder(stream.EPOCH_START_C0), continuous_codes, None)
             row["continuous_hashes"] = render_hashes(continuous_codes, continuous)
             candidate_q, continuous_q = qdomain(rendered), qdomain(continuous)
             row["boundaries"] = [
@@ -343,6 +357,24 @@ def load_expectations(path: Path) -> dict[str, Any]:
     return document
 
 
+def load_c0_reference(path: Path, expectations: dict[str, Any]) -> dict[str, Any]:
+    """The 3747330 C0 reference, bound to the same 14 programme WAVs."""
+
+    document = json.loads(path.read_bytes())
+    if document.get("schema") != C0_REFERENCE_SCHEMA or document.get("reference", {}).get("commit") != C0_REFERENCE_COMMIT:
+        raise ValueError("C0 reference schema or reference commit differs")
+    if document.get("epoch_packets") != 25 or document.get("programme_manifest_sha256") != expectations["programme"]["manifest_sha256"]:
+        raise ValueError("C0 reference epoch length or programme differs")
+    items = document.get("items", {})
+    if sorted(items) != sorted(item["name"] for item in expectations["items"]):
+        raise ValueError("C0 reference must list the 14 programme items")
+    for item in expectations["items"]:
+        row = items[item["name"]]
+        if row.get("wav_sha256") != item["wav_sha256"] or sorted(row.get("renders", {})) != sorted(BITRATES):
+            raise ValueError(f"C0 reference for {item['name']} differs from the programme item")
+    return document
+
+
 def gather_programme(
     expectations: dict[str, Any], directory: str | None, tally: Tally
 ) -> dict[str, bytes]:
@@ -385,10 +417,25 @@ def evaluate(
     measured: dict[str, dict[str, Any]],
     checks: tuple[str, ...],
     tally: Tally,
+    c0_reference: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     items = {item["name"]: item for item in expectations["items"]}
     missing = [name for name in items if name not in measured]
     report: dict[str, Any] = {"determinism": {}, "levels": {}}
+
+    if "legacy-c0" in checks:
+        if c0_reference is None:
+            raise ValueError("the legacy-c0 check needs the C0 reference")
+        for name, row in measured.items():
+            for kbps in BITRATES:
+                for field in ("codes", "pcm_float32"):
+                    tally.check(
+                        row["bitrates"][kbps]["c0_hashes"][field]
+                        == c0_reference["items"][name]["renders"][kbps][field],
+                        f"{name} {kbps} kb/s C0 {field} equals the 3747330 reference",
+                    )
+        if missing:
+            tally.skip(len(missing) * len(BITRATES) * 2, f"legacy C0 identity controls for absent items {missing}")
 
     if "identity" in checks:
         for name, row in measured.items():
@@ -456,8 +503,11 @@ def evaluate(
     return report
 
 
-def verify(bundle: Path, expectations_path: Path, jobs: int, checks: tuple[str, ...]) -> int:
+def verify(
+    bundle: Path, expectations_path: Path, jobs: int, checks: tuple[str, ...], c0_reference_path: Path
+) -> int:
     expectations = load_expectations(expectations_path)
+    c0_reference = load_c0_reference(c0_reference_path, expectations)
     directory = os.environ.get(PROGRAMME_ENVIRONMENT) or None
     tally = Tally()
     programme = gather_programme(expectations, directory, tally)
@@ -487,7 +537,7 @@ def verify(bundle: Path, expectations_path: Path, jobs: int, checks: tuple[str, 
             print(f"  measured {name}", flush=True)
     # Preserve the programme order for reporting.
     measured = {item["name"]: measured[item["name"]] for item in expectations["items"] if item["name"] in measured}
-    report = evaluate(expectations, measured, checks, tally)
+    report = evaluate(expectations, measured, checks, tally, c0_reference)
     for kbps, row in report["determinism"].items():
         print(f"  {kbps} kb/s D-rx {row['D_rx']}/{row['total']} D-tx {row['D_tx']}/{row['total']}")
     for label in tally.failed[:40]:
@@ -507,12 +557,13 @@ def verify(bundle: Path, expectations_path: Path, jobs: int, checks: tuple[str, 
     return 0 if not tally.failed else 1
 
 
-def self_test(expectations_path: Path) -> int:
+def self_test(expectations_path: Path, c0_reference_path: Path) -> int:
     """Model-free controls: synthetic regeneration, level metric plants, skip accounting."""
 
     import numpy as np
 
     expectations = load_expectations(expectations_path)
+    c0_reference = load_c0_reference(c0_reference_path, expectations)
     passed = total = 0
 
     def check(ok: bool, reason: str) -> None:
@@ -542,8 +593,12 @@ def self_test(expectations_path: Path) -> int:
     check(abs(dip["50-100"]["pooled_dC"]) < 0.01, "x0.5 plant leaves 50-100 ms at 0 dB")
     check(abs(dip["D5"] + 6.0206) < 0.01, "x0.5 plant reads -6.02 dB in the deepest 5 ms block")
 
+    check(
+        c0_reference["reference"]["commit"] == C0_REFERENCE_COMMIT and len(c0_reference["items"]) == 14,
+        "C0 reference covers the 14 programme items from 3747330",
+    )
     tally = Tally()
-    evaluate(expectations, {}, CHECKS, tally)
+    evaluate(expectations, {}, CHECKS, tally, c0_reference)
     check(tally.passed == 0 and not tally.failed and tally.skipped > 0, "absent items are counted as skipped, never passed")
     print(f"epoch programme self-test: {passed}/{total} {'PASS' if passed == total else 'FAIL'}")
     return 0 if passed == total else 1
@@ -555,6 +610,7 @@ def main() -> int:
     modes.add_argument("--bundle", type=Path)
     modes.add_argument("--self-test", action="store_true")
     parser.add_argument("--expectations", type=Path, default=DEFAULT_EXPECTATIONS)
+    parser.add_argument("--c0-reference", type=Path, default=DEFAULT_C0_REFERENCE)
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--checks", default=",".join(CHECKS))
     args = parser.parse_args()
@@ -563,10 +619,10 @@ def main() -> int:
         parser.error(f"--checks must be a subset of {','.join(CHECKS)}")
     try:
         if args.self_test:
-            return self_test(args.expectations)
+            return self_test(args.expectations, args.c0_reference)
         if args.bundle.is_symlink() or not (args.bundle / "manifest.json").is_file():
             parser.error("--bundle must be an exported 24 kHz bundle directory")
-        return verify(args.bundle, args.expectations, args.jobs, checks)
+        return verify(args.bundle, args.expectations, args.jobs, checks, args.c0_reference)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"epoch programme verification refused: {error}\n")
 

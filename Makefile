@@ -110,13 +110,17 @@ export-env:
 
 # MODEL_DIR must be an explicit, previously exported local bundle. This target
 # neither downloads assets nor marks them release-qualified.
+# C0_REFERENCE_LIBRARY (test-native) and C0_REFERENCE_COMMAND (test-file-cli)
+# name a library and kenc built from a git archive of 3747330; when unset the
+# C0 reference controls are printed and counted as SKIPPED.
 test-native-c: all $(BUILD)/test-native
 	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
 	@test -n "$(MODEL_DIR)" || { printf '%s\n' 'MODEL_DIR is required'; exit 2; }
 	$(BUILD)/test-native "$(MODEL_DIR)"
 
 test-native: test-native-c
-	$(PYTHON) tests/test_native.py "$(SHARED_LIB)" "$(MODEL_DIR)" $(if $(filter 1,$(ORACLE)),--oracle,)
+	$(PYTHON) tests/test_native.py "$(SHARED_LIB)" "$(MODEL_DIR)" $(if $(filter 1,$(ORACLE)),--oracle,) \
+		$(if $(C0_REFERENCE_LIBRARY),--c0-reference-library "$(C0_REFERENCE_LIBRARY)",)
 
 test-stereo-c: all $(BUILD)/test-stereo
 	@test "$(ONNX)" = 1 || { printf '%s\n' 'ONNX=1 is required'; exit 2; }
@@ -141,7 +145,8 @@ test-asset-fds: all $(BUILD)/test-asset_fds
 	$(BUILD)/test-asset_fds "$(MODEL_DIR)" "$(STEREO_MODEL_DIR)"
 
 test-file-cli: all
-	$(PYTHON) tests/test_file_cli.py "$(COMMAND)" $(if $(MODEL_DIR),--mono-assets "$(MODEL_DIR)",) $(if $(STEREO_MODEL_DIR),--stereo-assets "$(STEREO_MODEL_DIR)",)
+	$(PYTHON) tests/test_file_cli.py "$(COMMAND)" $(if $(MODEL_DIR),--mono-assets "$(MODEL_DIR)",) $(if $(STEREO_MODEL_DIR),--stereo-assets "$(STEREO_MODEL_DIR)",) \
+		$(if $(C0_REFERENCE_COMMAND),--c0-reference-command "$(C0_REFERENCE_COMMAND)",)
 
 test-content-python:
 	PYTHONPATH=python:$(CONTENT_SOURCE)/src $(PYTHON) -m unittest discover -s tests -p 'test_content_*.py' -v

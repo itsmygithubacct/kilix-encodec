@@ -452,9 +452,9 @@ def product_encoder(
     bandwidth: float,
     preroll: int | None = None,
 ) -> object:
-    """The product epoch-start encoder (tools/epoch_stream.py) on these graphs."""
+    """The C5-R4 epoch-start encoder (tools/epoch_stream.py) on these graphs."""
 
-    from epoch_stream import PREROLL_PACKETS, StreamEncoder
+    from epoch_stream import EPOCH_START_C5_R4, StreamEncoder
 
     key = rvq_graph_key("encode", bandwidth)
     return StreamEncoder(
@@ -462,7 +462,8 @@ def product_encoder(
         records["encoder"],
         runtimes[key],
         records[key],
-        PREROLL_PACKETS if preroll is None else preroll,
+        profile=EPOCH_START_C5_R4,
+        preroll=preroll,
     )
 
 
@@ -472,7 +473,7 @@ def product_decoder(
     bandwidth: float,
     preroll: int | None = None,
 ) -> object:
-    from epoch_stream import PREROLL_PACKETS, StreamDecoder
+    from epoch_stream import EPOCH_START_C5_R4, StreamDecoder
 
     key = rvq_graph_key("decode", bandwidth)
     return StreamDecoder(
@@ -480,7 +481,8 @@ def product_decoder(
         records[key],
         runtimes["decoder"],
         records["decoder"],
-        PREROLL_PACKETS if preroll is None else preroll,
+        profile=EPOCH_START_C5_R4,
+        preroll=preroll,
     )
 
 
