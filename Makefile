@@ -97,6 +97,7 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/verify_export.py --skeleton \
 		models/encodec-24khz-v1/manifest.json; \
 	$(PYTHON) tools/verify_export.py --self-test; \
+	$(PYTHON) tools/epoch_stream.py --self-test; \
 	$(PYTHON) tools/export_24khz.py --version; \
 	$(PYTHON) tools/export_48khz.py --version; \
 	$(PYTHON) tools/export_48khz.py --self-test; \
