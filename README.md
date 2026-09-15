@@ -160,16 +160,30 @@ The 24 kHz scratch bundle contains graphs 8/8 for all 3/3 required bandwidth
 profiles (3/6/12 kb/s), a canonical manifest 1/1, a canonical
 verification result 1/1 and synthetic listening fixtures 3/3. Verification
 checks every graph contract, exact nested RVQ prefixes, continuous-oracle token
-identity at all 3/3 rates, decoder parity, deterministic epoch recovery, all
-8/8 fixed-shape refusals and all 6/6 profile timing pipelines. A four-epoch
-stream with a zero-state reset every 25 packets must match the constant-padded
-checkpoint rendering each epoch from a cold start: latent parity 4/4 epochs
-including the first 6 latent frames, token identity 4/4, waveform parity 4/4
-including the first 150 ms, and each of 3/3 reset epochs bit-identical to a cold
-start. The same comparison must refuse a reflect-padded reference at 8/8 epoch
-heads, so it distinguishes the two padding conventions. The timing result
-is labelled unfrozen-host measurement and receives measured H1 gate credit 0/1.
-Blind listening and pinned offline delivery remain 0/1 each.
+identity at all 3/3 rates, decoder parity, all 8/8 fixed-shape refusals and
+all 6/6 profile timing pipelines. These graph checks use the graphs' all-zero
+initial state; streams use the epoch start below.
+
+Every epoch of 25 packets, and the stream start, begins with a repeat pre-roll
+(`tools/epoch_stream.py`; the native runtime does the same). Encoder and
+decoder zero all state, run the epoch's first packet through the unchanged
+per-packet graph 4 times as a discarded lead-in (its 960 samples, or its 3
+code frames through the RVQ decoder), and then process that packet. Only the
+packet itself is used, so no latency is added; an epoch start costs 5 network
+runs. A four-epoch stream must match the checkpoint rendering each epoch as
+the lead-in followed by the epoch, with the lead-in's 12 latent frames or 3840
+samples dropped: latent parity 4/4 epochs including the first 6 latent frames,
+token identity 4/4, waveform parity 4/4 including the first 150 ms, and each
+of 3/3 reset epochs bit-identical to a fresh stream over that epoch. The same
+comparison must refuse the previous constant cold start and a reflect-padded
+pre-roll at 16/16 epoch heads. Corrupting all audio, or all codes, before
+epoch 1 or 2 must leave every later packet bit-identical (4/4); a repeated
+stream must be identical (1/1). A perturbation probe must find 0 packets of
+added lookahead, and 1 for a planted one-packet lookahead (2/2). The listening
+pair shares the same stream start and is identical before its epoch boundary
+(1/1). The timing result is labelled unfrozen-host measurement and receives
+measured H1 gate credit 0/1. Blind listening and pinned offline delivery
+remain 0/1 each.
 
 For a frozen-fixture measurement, both verifiers accept `--fixture-tier h1`
 together with the frozen `fixture.sh` path. They fail closed unless the guest
@@ -183,7 +197,9 @@ measured packets in every one of 6/6 encode/decode pipelines and p99 below
 ### Blinded epoch-boundary trial
 
 The verifier's `listening/` directory is input to a facilitator-operated,
-paired forced-choice trial. Preparation copies randomized `A`/`B` pairs into a
+paired forced-choice trial. Both renderings start with the same pre-roll; the
+epoch-reset rendering also restarts at 1 s, so the pair differs only from that
+boundary. Preparation copies randomized `A`/`B` pairs into a
 public directory while keeping the answer key in a separate private file:
 
 ```sh

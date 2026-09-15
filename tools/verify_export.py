@@ -39,6 +39,8 @@ GOLDEN_EPOCHS = 4
 POST_RESET_LATENT_FRAMES = 6
 #: Decoded samples counted as the head of an epoch: 150 ms at 24 kHz.
 POST_RESET_AUDIO_SAMPLES = 3_600
+#: Added-latency probe packets: an epoch start and a mid-epoch packet.
+LATENCY_PROBES = (25, 37)
 
 
 def rvq_graph_key(direction: str, bandwidth: float) -> str:
@@ -444,23 +446,90 @@ def epochs_within(rows: list[dict[str, float]], tolerance: float) -> int:
     )
 
 
-def verify_post_reset_golden(
+def product_encoder(
+    runtimes: dict[str, object],
+    records: dict[str, Any],
+    bandwidth: float,
+    preroll: int | None = None,
+) -> object:
+    """The product epoch-start encoder (tools/epoch_stream.py) on these graphs."""
+
+    from epoch_stream import PREROLL_PACKETS, StreamEncoder
+
+    key = rvq_graph_key("encode", bandwidth)
+    return StreamEncoder(
+        runtimes["encoder"],
+        records["encoder"],
+        runtimes[key],
+        records[key],
+        PREROLL_PACKETS if preroll is None else preroll,
+    )
+
+
+def product_decoder(
+    runtimes: dict[str, object],
+    records: dict[str, Any],
+    bandwidth: float,
+    preroll: int | None = None,
+) -> object:
+    from epoch_stream import PREROLL_PACKETS, StreamDecoder
+
+    key = rvq_graph_key("decode", bandwidth)
+    return StreamDecoder(
+        runtimes[key],
+        records[key],
+        runtimes["decoder"],
+        records["decoder"],
+        PREROLL_PACKETS if preroll is None else preroll,
+    )
+
+
+def product_render(
+    runtimes: dict[str, object],
+    records: dict[str, Any],
+    bandwidth: float,
+    audio: object,
+    epoch_packets: int | None = EPOCH_PACKETS,
+) -> tuple[object, object, object]:
+    """Latent, codes and decoded audio of one product stream."""
+
+    from epoch_stream import decode_stream, encode_stream
+
+    latent, codes = encode_stream(
+        product_encoder(runtimes, records, bandwidth), audio, epoch_packets
+    )
+    audio_out = decode_stream(
+        product_decoder(runtimes, records, bandwidth), codes, epoch_packets
+    )
+    return latent, codes, audio_out
+
+
+def verify_post_reset_preroll_golden(
     oracle: object, runtimes: dict[str, object], records: dict[str, Any]
 ) -> tuple[int, dict[str, Any]]:
-    """Hold the streaming graphs to a constant-padded cold start at every reset.
+    """Hold every epoch start to the repeat pre-roll checkpoint definition.
+
+    Successor of verify_post_reset_golden, which held a zero-state reset to a
+    constant-padded cold start per epoch. Owner decision OD-AL replaced that
+    behaviour with a four-packet repeat pre-roll at every epoch start,
+    including the stream start.
 
     The reference renders each epoch separately with the checkpoint's own
-    modules, so its first frames are what a stream start produces under
-    constant padding.  The graph renders the same audio as one stream with a
-    zero-state reset at every epoch boundary, which is what the native runtime
-    does.  A reflect-padded reference must be refused by the same comparison;
-    otherwise the comparison could not tell the two conventions apart.
+    modules and constant padding: the encoder over the epoch's first packet
+    tiled four times followed by the epoch, without the first 12 latent
+    frames, then the quantizer; the decoder over the quantized lead-in codes
+    (the epoch's first 3 code frames tiled four times) followed by the epoch's
+    codes, without the first 3840 samples. The product runtime renders the
+    same audio as one stream. Two alternative references must be refused by
+    the same comparison at every epoch head: the constant cold start the
+    product used before, and a reflect-padded pre-roll.
     """
 
     import numpy as np
     import torch
     from encodec.modules import SConv1d
 
+    from epoch_stream import PREROLL_PACKETS
     from stateful_graph import (
         DEFAULT_BANDWIDTH,
         PACKET_LATENT_FRAMES,
@@ -468,10 +537,8 @@ def verify_post_reset_golden(
         constant_padding,
     )
 
-    # The reflect reference is rendered by switching the oracle's own padding
-    # sites and switching them back, not by copying the model: weight-normed
-    # modules cannot be deep-copied until a no-grad forward has replaced their
-    # derived weights, so a copy would depend on what ran before this check.
+    # Padding sites are switched and restored rather than copying the model:
+    # weight-normed modules cannot be deep-copied before a no-grad forward.
     padding_sites = [
         child
         for network in (oracle.encoder, oracle.decoder)
@@ -499,51 +566,56 @@ def verify_post_reset_golden(
         source[..., index * epoch_samples : (index + 1) * epoch_samples]
         for index in range(epochs)
     ]
-    encode_key = rvq_graph_key("encode", DEFAULT_BANDWIDTH)
-    decode_key = rvq_graph_key("decode", DEFAULT_BANDWIDTH)
 
-    def render_epochs() -> tuple[object, object]:
-        latent = torch.cat(
-            [oracle.encoder(segment) for segment in segments], dim=-1
-        )
-        audio = torch.cat(
-            [
-                oracle.decoder(
-                    oracle.quantizer.decode(
-                        reference_codes[
-                            ..., index * epoch_frames : (index + 1) * epoch_frames
-                        ]
-                    )
-                )
-                for index in range(epochs)
-            ],
-            dim=-1,
-        )
-        return latent, audio
+    def render_latent(preroll: int) -> object:
+        pieces = []
+        for segment in segments:
+            joined = torch.cat(
+                [segment[..., :PACKET_SAMPLES]] * preroll + [segment], dim=-1
+            )
+            pieces.append(
+                oracle.encoder(joined)[..., preroll * PACKET_LATENT_FRAMES :]
+            )
+        return torch.cat(pieces, dim=-1)
+
+    def render_audio(codes: object, preroll: int) -> object:
+        pieces = []
+        for index in range(epochs):
+            epoch_codes = codes[..., index * epoch_frames : (index + 1) * epoch_frames]
+            joined = torch.cat(
+                [epoch_codes[..., :PACKET_LATENT_FRAMES]] * preroll + [epoch_codes],
+                dim=-1,
+            )
+            start = preroll * PACKET_SAMPLES
+            pieces.append(
+                oracle.decoder(oracle.quantizer.decode(joined))[
+                    ..., start : start + epoch_samples
+                ]
+            )
+        return torch.cat(pieces, dim=-1)
 
     with torch.no_grad():
-        reference_latent = torch.cat(
-            [oracle.encoder(segment) for segment in segments], dim=-1
-        )
+        reference_latent = render_latent(PREROLL_PACKETS)
         reference_codes = oracle.quantizer.encode(
             reference_latent, oracle.frame_rate, DEFAULT_BANDWIDTH
         )
-        reference_latent, reference_audio = render_epochs()
+        reference_audio = render_audio(reference_codes, PREROLL_PACKETS)
+        cold_latent = render_latent(0)
+        cold_audio = render_audio(reference_codes, 0)
         try:
             select_padding("reflect")
-            reflect_latent, reflect_audio = render_epochs()
+            reflect_latent = render_latent(PREROLL_PACKETS)
+            reflect_audio = render_audio(reference_codes, PREROLL_PACKETS)
         finally:
             select_padding("constant")
     if any(child.pad_mode != "constant" for child in padding_sites):
         raise AssertionError("oracle padding sites were not restored")
     reference_latent = reference_latent.numpy()
-    reflect_latent = reflect_latent.numpy()
     reference_codes = reference_codes.numpy()
-    reference_audio = reference_audio.numpy()[..., : epochs * epoch_samples]
-    reflect_audio = reflect_audio.numpy()[..., : epochs * epoch_samples]
+    reference_audio = reference_audio.numpy()
 
-    actual_latent = run_stateful_stream(
-        runtimes["encoder"], records["encoder"], source.numpy(), PACKET_SAMPLES, resets
+    actual_latent, actual_codes, actual_audio = product_render(
+        runtimes, records, DEFAULT_BANDWIDTH, source.numpy()
     )
     latent_rows = epoch_parity_rows(
         reference_latent, actual_latent, epoch_frames, POST_RESET_LATENT_FRAMES
@@ -551,21 +623,18 @@ def verify_post_reset_golden(
     latent_passed = epochs_within(latent_rows, LATENT_TOLERANCE)
     if latent_passed != epochs:
         raise AssertionError(
-            f"post-reset encoder latent parity exceeds tolerance: "
+            f"pre-roll encoder latent parity exceeds tolerance: "
             f"{latent_passed}/{epochs} epochs within "
             f"{[round(row['head_max_abs_difference'], 6) for row in latent_rows]}"
         )
     print(
-        f"post-reset encoder latent parity: {latent_passed}/{epochs} epochs PASS "
+        f"pre-roll encoder latent parity: {latent_passed}/{epochs} epochs PASS "
         f"head{POST_RESET_LATENT_FRAMES}_max="
         f"{max(row['head_max_abs_difference'] for row in latent_rows):.3e} "
         f"steady_max="
         f"{max(row['steady_max_abs_difference'] for row in latent_rows):.3e}"
     )
 
-    actual_codes = run_stateless_stream(
-        runtimes[encode_key], records[encode_key], actual_latent, PACKET_LATENT_FRAMES
-    )
     token_rows = [
         int(
             np.count_nonzero(
@@ -578,36 +647,26 @@ def verify_post_reset_golden(
     tokens_passed = sum(count == 0 for count in token_rows)
     if tokens_passed != epochs:
         raise AssertionError(
-            f"post-reset token identity differs: {tokens_passed}/{epochs} epochs "
+            f"pre-roll token identity differs: {tokens_passed}/{epochs} epochs "
             f"mismatches={token_rows}"
         )
     print(
-        f"post-reset token identity: {tokens_passed}/{epochs} epochs PASS "
+        f"pre-roll token identity: {tokens_passed}/{epochs} epochs PASS "
         f"token_mismatches={sum(token_rows)}/{reference_codes.size}"
     )
 
-    actual_quantized = run_stateless_stream(
-        runtimes[decode_key], records[decode_key], actual_codes, PACKET_LATENT_FRAMES
-    )
-    actual_audio = run_stateful_stream(
-        runtimes["decoder"],
-        records["decoder"],
-        actual_quantized,
-        PACKET_LATENT_FRAMES,
-        resets,
-    )
     audio_rows = epoch_parity_rows(
         reference_audio, actual_audio, epoch_samples, POST_RESET_AUDIO_SAMPLES
     )
     audio_passed = epochs_within(audio_rows, WAVEFORM_TOLERANCE)
     if audio_passed != epochs:
         raise AssertionError(
-            f"post-reset decoder waveform parity exceeds tolerance: "
+            f"pre-roll decoder waveform parity exceeds tolerance: "
             f"{audio_passed}/{epochs} epochs within "
             f"{[round(row['head_max_abs_difference'], 6) for row in audio_rows]}"
         )
     print(
-        f"post-reset decoder waveform parity: {audio_passed}/{epochs} epochs PASS "
+        f"pre-roll decoder waveform parity: {audio_passed}/{epochs} epochs PASS "
         f"head150ms_max="
         f"{max(row['head_max_abs_difference'] for row in audio_rows):.3e} "
         f"steady_max="
@@ -617,75 +676,83 @@ def verify_post_reset_golden(
     recovered = 0
     for reset in sorted(resets):
         index = reset // EPOCH_PACKETS
-        cold_codes = encode(
-            runtimes["encoder"],
-            runtimes[encode_key],
+        _, fresh_codes, _ = product_render(
+            runtimes,
             records,
+            DEFAULT_BANDWIDTH,
             source.numpy()[..., index * epoch_samples : (index + 1) * epoch_samples],
-            DEFAULT_BANDWIDTH,
         )
-        cold_audio = decode(
-            runtimes[decode_key],
-            runtimes["decoder"],
-            records,
-            cold_codes,
-            DEFAULT_BANDWIDTH,
+        stream_codes = np.ascontiguousarray(
+            actual_codes[..., index * epoch_frames : (index + 1) * epoch_frames]
+        )
+        from epoch_stream import decode_stream
+
+        fresh_audio = decode_stream(
+            product_decoder(runtimes, records, DEFAULT_BANDWIDTH), stream_codes
         )
         recovered += int(
-            np.array_equal(
-                actual_codes[..., index * epoch_frames : (index + 1) * epoch_frames],
-                cold_codes,
-            )
+            np.array_equal(stream_codes, fresh_codes)
             and np.array_equal(
                 actual_audio[..., index * epoch_samples : (index + 1) * epoch_samples],
-                cold_audio,
+                fresh_audio,
             )
         )
     if recovered != len(resets):
         raise AssertionError(
-            f"reset epoch differs from a cold start: {recovered}/{len(resets)}"
-        )
-    print(f"epoch recovery equals cold start: {recovered}/{len(resets)} resets PASS")
-
-    reflect_latent_rows = epoch_parity_rows(
-        reference_latent, reflect_latent, epoch_frames, POST_RESET_LATENT_FRAMES
-    )
-    reflect_audio_rows = epoch_parity_rows(
-        reference_audio, reflect_audio, epoch_samples, POST_RESET_AUDIO_SAMPLES
-    )
-    refused = sum(
-        row["head_max_abs_difference"] >= LATENT_TOLERANCE
-        for row in reflect_latent_rows
-    ) + sum(
-        row["head_max_abs_difference"] >= WAVEFORM_TOLERANCE
-        for row in reflect_audio_rows
-    )
-    if refused != 2 * epochs:
-        raise AssertionError(
-            f"reflect-padded reference was not refused at every epoch head: "
-            f"{refused}/{2 * epochs}"
+            f"epoch differs from a fresh stream over that epoch: {recovered}/{len(resets)}"
         )
     print(
-        f"reflect-padding negative control: {refused}/{2 * epochs} epoch heads "
-        f"refused latent_head_min="
-        f"{min(row['head_max_abs_difference'] for row in reflect_latent_rows):.3e} "
-        f"waveform_head_min="
-        f"{min(row['head_max_abs_difference'] for row in reflect_audio_rows):.3e}"
+        f"epoch recovery equals a fresh pre-rolled stream: "
+        f"{recovered}/{len(resets)} resets PASS"
     )
+
+    alternatives = {
+        "constant_cold_start": (cold_latent.numpy(), cold_audio.numpy()),
+        "reflect_pre_roll": (reflect_latent.numpy(), reflect_audio.numpy()),
+    }
+    refusal: dict[str, Any] = {}
+    refused = 0
+    for label, (latent, audio) in alternatives.items():
+        latent_heads = epoch_parity_rows(
+            reference_latent, latent, epoch_frames, POST_RESET_LATENT_FRAMES
+        )
+        audio_heads = epoch_parity_rows(
+            reference_audio, audio, epoch_samples, POST_RESET_AUDIO_SAMPLES
+        )
+        count = sum(
+            row["head_max_abs_difference"] >= LATENT_TOLERANCE for row in latent_heads
+        ) + sum(
+            row["head_max_abs_difference"] >= WAVEFORM_TOLERANCE for row in audio_heads
+        )
+        refused += count
+        refusal[label] = {
+            "latent": latent_heads,
+            "waveform": audio_heads,
+            "refused_epoch_heads": count,
+        }
+        print(
+            f"{label.replace('_', '-')} negative control: {count}/{2 * epochs} epoch "
+            f"heads refused latent_head_min="
+            f"{min(row['head_max_abs_difference'] for row in latent_heads):.3e} "
+            f"waveform_head_min="
+            f"{min(row['head_max_abs_difference'] for row in audio_heads):.3e}"
+        )
+    if refused != 2 * 2 * epochs:
+        raise AssertionError(
+            f"an alternative epoch-start reference was not refused at every "
+            f"epoch head: {refused}/{4 * epochs}"
+        )
 
     controls = latent_passed + tokens_passed + audio_passed + recovered + refused
     return controls, {
         "epochs": epochs,
         "reset_packets": sorted(resets),
+        "preroll_packets": PREROLL_PACKETS,
         "latent": latent_rows,
         "token_mismatches": token_rows,
         "waveform": audio_rows,
         "recovered_resets": recovered,
-        "reflect_control": {
-            "latent": reflect_latent_rows,
-            "waveform": reflect_audio_rows,
-            "refused_epoch_heads": refused,
-        },
+        "negative_controls": refusal,
     }
 
 
@@ -919,68 +986,98 @@ def verify_bundle(
         raise AssertionError("RVQ profile nesting differs")
     print("RVQ nested-profile controls: 2/2 PASS")
 
-    first_a = signal(1, seed=7)
-    first_b = signal(1, seed=8)
-    shared = signal(1, seed=9)
-    stream_a = torch.cat((first_a, shared), dim=-1).numpy()
-    stream_b = torch.cat((first_b, shared), dim=-1).numpy()
-    resets = {EPOCH_PACKETS}
-    default_encode_key = rvq_graph_key("encode", DEFAULT_BANDWIDTH)
-    default_decode_key = rvq_graph_key("decode", DEFAULT_BANDWIDTH)
-    codes_a = encode(
-        runtimes["encoder"],
-        runtimes[default_encode_key],
-        records,
-        stream_a,
-        DEFAULT_BANDWIDTH,
-        resets,
-    )
-    audio_a = decode(
-        runtimes[default_decode_key],
-        runtimes["decoder"],
-        records,
-        codes_a,
-        DEFAULT_BANDWIDTH,
-        resets,
-    )
-    codes_b = encode(
-        runtimes["encoder"],
-        runtimes[default_encode_key],
-        records,
-        stream_b,
-        DEFAULT_BANDWIDTH,
-        resets,
-    )
-    audio_b = decode(
-        runtimes[default_decode_key],
-        runtimes["decoder"],
-        records,
-        codes_b,
-        DEFAULT_BANDWIDTH,
-        resets,
-    )
+    from epoch_stream import EPOCH_START, added_lookahead_packets, decode_stream
+
     epoch_code_offset = EPOCH_PACKETS * PACKET_LATENT_FRAMES
     epoch_audio_offset = EPOCH_PACKETS * PACKET_SAMPLES
-    if not np.array_equal(
-        codes_a[..., epoch_code_offset:], codes_b[..., epoch_code_offset:]
-    ):
-        raise AssertionError("reset encoder retained prior-epoch state")
-    if not np.array_equal(
-        audio_a[..., epoch_audio_offset:], audio_b[..., epoch_audio_offset:]
-    ):
-        raise AssertionError("reset decoder retained prior-epoch state")
-    repeated_codes = encode(
-        runtimes["encoder"],
-        runtimes[default_encode_key],
-        records,
-        stream_a,
-        DEFAULT_BANDWIDTH,
-        resets,
+    leak_source = signal(3, seed=11).numpy()
+    _, leak_codes, leak_audio = product_render(
+        runtimes, records, DEFAULT_BANDWIDTH, leak_source
     )
-    if not np.array_equal(codes_a, repeated_codes):
-        raise AssertionError("identical reset stream was not deterministic")
-    print("epoch reset and recovery controls: 3/3 PASS")
-    golden_controls, golden = verify_post_reset_golden(oracle, runtimes, records)
+    independence_rows = []
+    for epoch in (1, 2):
+        corrupted_audio = leak_source.copy()
+        corrupted_audio[..., : epoch * epoch_audio_offset] = (
+            np.random.default_rng(31 + epoch)
+            .standard_normal(epoch * epoch_audio_offset)
+            .astype(np.float32)
+            * np.float32(0.1)
+        )
+        _, audio_codes, _ = product_render(
+            runtimes, records, DEFAULT_BANDWIDTH, corrupted_audio
+        )
+        split = epoch * epoch_code_offset
+        if np.array_equal(audio_codes[..., :split], leak_codes[..., :split]):
+            raise AssertionError("audio corruption control is vacuous")
+        if not np.array_equal(audio_codes[..., split:], leak_codes[..., split:]):
+            raise AssertionError(
+                f"corrupted audio before epoch {epoch} changed its codes: "
+                "the encoder epoch start retained prior-epoch state"
+            )
+        corrupted_codes = leak_codes.copy()
+        corrupted_codes[..., :split] = np.random.default_rng(41 + epoch).integers(
+            0, 1024, size=corrupted_codes[..., :split].shape
+        )
+        codes_audio = decode_stream(
+            product_decoder(runtimes, records, DEFAULT_BANDWIDTH), corrupted_codes
+        )
+        cut = epoch * epoch_audio_offset
+        if np.array_equal(codes_audio[..., :cut], leak_audio[..., :cut]):
+            raise AssertionError("code corruption control is vacuous")
+        if not np.array_equal(codes_audio[..., cut:], leak_audio[..., cut:]):
+            raise AssertionError(
+                f"corrupted codes before epoch {epoch} changed its audio: "
+                "the decoder epoch start retained prior-epoch state"
+            )
+        independence_rows.append(
+            {"epoch": epoch, "audio_corruption_codes_identical": True,
+             "code_corruption_audio_identical": True}
+        )
+    _, repeated_codes, repeated_audio = product_render(
+        runtimes, records, DEFAULT_BANDWIDTH, leak_source
+    )
+    if not (
+        np.array_equal(leak_codes, repeated_codes)
+        and np.array_equal(leak_audio, repeated_audio)
+    ):
+        raise AssertionError("identical epoch-start stream was not deterministic")
+    print("epoch-start independence and determinism controls: 5/5 PASS")
+
+    probe_source = signal(2, seed=1).numpy()
+
+    def probe_noise(count: int) -> object:
+        return np.random.default_rng(777).standard_normal(count).astype(
+            np.float32
+        ) * np.float32(0.1)
+
+    def render_probe(value: object) -> object:
+        return product_render(runtimes, records, DEFAULT_BANDWIDTH, value)[2]
+
+    def lookahead_plant(value: object) -> object:
+        shifted = np.zeros_like(value)
+        shifted[..., :-PACKET_SAMPLES] = value[..., PACKET_SAMPLES:]
+        return render_probe(shifted)
+
+    measured_lookahead = added_lookahead_packets(
+        render_probe, probe_source, LATENCY_PROBES, probe_noise
+    )
+    planted_lookahead = added_lookahead_packets(
+        lookahead_plant, probe_source, LATENCY_PROBES, probe_noise
+    )
+    if measured_lookahead != 0:
+        raise AssertionError(
+            f"epoch-start runtime adds lookahead: {measured_lookahead} packets"
+        )
+    if planted_lookahead != 1:
+        raise AssertionError(
+            f"latency probe missed a one-packet lookahead plant: {planted_lookahead}"
+        )
+    print(
+        f"added algorithmic latency probe: {measured_lookahead} packets at "
+        f"packets {list(LATENCY_PROBES)}; one-packet lookahead plant reads "
+        f"{planted_lookahead}: 2/2 PASS"
+    )
+    golden_controls, golden = verify_post_reset_preroll_golden(oracle, runtimes, records)
 
     def require_shape_refusal(label: str, operation: Callable[[], object]) -> None:
         try:
@@ -1039,24 +1136,27 @@ def verify_bundle(
 
     listening = bundle / "listening"
     listening.mkdir(mode=0o700, exist_ok=False)
-    continuous_codes = encode(
-        runtimes["encoder"],
-        runtimes[default_encode_key],
-        records,
-        stream_a,
-        DEFAULT_BANDWIDTH,
+    stream_a = torch.cat((signal(1, seed=7), signal(1, seed=9)), dim=-1).numpy()
+    _, _, audio_a = product_render(runtimes, records, DEFAULT_BANDWIDTH, stream_a)
+    # The continuous fixture starts the same way (pre-roll at the stream start)
+    # and never resets again, so the pair differs only from the epoch boundary.
+    _, _, continuous_audio = product_render(
+        runtimes, records, DEFAULT_BANDWIDTH, stream_a, epoch_packets=None
     )
-    continuous_audio = decode(
-        runtimes[default_decode_key],
-        runtimes["decoder"],
-        records,
-        continuous_codes,
-        DEFAULT_BANDWIDTH,
-    )
+    epoch_audio_offset = EPOCH_PACKETS * PACKET_SAMPLES
+    if not np.array_equal(
+        continuous_audio[..., :epoch_audio_offset], audio_a[..., :epoch_audio_offset]
+    ) or np.array_equal(
+        continuous_audio[..., epoch_audio_offset:], audio_a[..., epoch_audio_offset:]
+    ):
+        raise AssertionError("listening pair must differ only from the epoch boundary")
     write_wav(listening / "continuous.wav", continuous_audio)
     write_wav(listening / "epoch-reset.wav", audio_a)
     write_wav(listening / "synthetic-source.wav", stream_a)
-    print("scratch-only listening fixtures: 3/3 generated; blind verdict 0/1")
+    print(
+        "scratch-only listening fixtures: 3/3 generated; pair identical before "
+        "the epoch boundary 1/1; blind verdict 0/1"
+    )
 
     encoder_packet = stream_a[..., :PACKET_SAMPLES]
     measurements: dict[str, dict[str, Any]] = {}
@@ -1119,10 +1219,18 @@ def verify_bundle(
             "token_mismatches": total_token_mismatches,
             "token_population": total_token_population,
         },
-        "post_reset_golden": golden,
-        "schema": "kilix.encodec.export-verification/v2",
+        "epoch_independence": independence_rows,
+        "epoch_start": EPOCH_START,
+        "latency_probe": {
+            "measured_packets": measured_lookahead,
+            "one_packet_plant_packets": planted_lookahead,
+            "probe_packets": list(LATENCY_PROBES),
+        },
+        "post_reset_preroll_golden": golden,
+        "schema": "kilix.encodec.export-verification/v3",
         "verification_sources": {
             "capacity_fixture.py": sha256(REPOSITORY / "tools/capacity_fixture.py"),
+            "epoch_stream.py": sha256(REPOSITORY / "tools/epoch_stream.py"),
             "verify_export.py": sha256(Path(__file__).resolve()),
         },
         "threads": threads,
@@ -1145,13 +1253,19 @@ def verify_bundle(
         f"maximum_decode_p99_ms={maximum_decode_p99:.3f} "
         f"measured_H1_gate={int(h1_measured_pass)}/1"
     )
-    # Post-reset golden controls: latent, token and waveform parity per epoch,
-    # recovery per reset, and the reflect refusal for each latent and waveform
-    # epoch head.
-    golden_total = 3 * GOLDEN_EPOCHS + (GOLDEN_EPOCHS - 1) + 2 * GOLDEN_EPOCHS
+    # Controls before the golden: bundle identity 8, runtime contracts 8,
+    # encoder parity 1, profile parity 9, RVQ nesting 2, epoch-start
+    # independence and determinism 5, latency probe and its plant 2,
+    # fixed-shape refusals 8, listening fixtures 3 and their boundary-only
+    # pair 1, profile timing pipelines 6.
+    base_controls = 8 + 8 + 1 + 9 + 2 + 5 + 2 + 8 + 3 + 1 + 6
+    # Pre-roll golden controls: latent, token and waveform parity per epoch,
+    # recovery per reset, and two refused alternative references for each
+    # latent and waveform epoch head.
+    golden_total = 3 * GOLDEN_EPOCHS + (GOLDEN_EPOCHS - 1) + 4 * GOLDEN_EPOCHS
     print(
         "stateful multi-rate export technical controls: "
-        f"{48 + golden_controls}/{48 + golden_total} PASS"
+        f"{base_controls + golden_controls}/{base_controls + golden_total} PASS"
     )
     if fixture is not None and not h1_measured_pass:
         raise AssertionError(
