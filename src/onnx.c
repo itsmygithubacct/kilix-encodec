@@ -124,6 +124,7 @@ struct kenc_native_stream {
     unsigned int bank;
     uint8_t codebooks;
     int encoding;
+    int preroll;
 };
 
 static kenc_result ort_result(const OrtApi *api, OrtStatus *status)
@@ -476,6 +477,8 @@ kenc_result kenc_native_create(kenc_native_stream **out, kenc_model *model,
         encoding ? stream->latent.tensor : stream->codes.tensor));
     ORT_TRY(api->BindOutput(stream->quantizer_binding, kenc_graphs[quantizer_index].outputs[0].name,
         encoding ? stream->codes.tensor : stream->latent.tensor));
+    /* The stream start is an epoch start: calloc zeroed every state. */
+    stream->preroll = 1;
     *out = stream;
     stream = NULL;
 done:
@@ -492,6 +495,26 @@ void kenc_native_reset(kenc_native_stream *stream)
         }
     }
     stream->bank = 0u;
+    stream->preroll = 1;
+}
+
+/* Repeat pre-roll at an epoch start. The network input buffer already holds
+ * the epoch's first packet (audio, or its RVQ-decoded codes), so running the
+ * unchanged per-packet graph over it KENC_PREROLL_PACKETS times from zeroed
+ * state is the tiled lead-in. Each lead-in output is overwritten by the next
+ * run; no future packet is read, so no latency is added. A failure leaves the
+ * flag set; callers reset the stream before it is used again. */
+static kenc_result preroll(kenc_native_stream *stream)
+{
+    const OrtApi *api = stream->model->api;
+    kenc_result result = KENC_OK;
+    for (unsigned int i = 0u; i < KENC_PREROLL_PACKETS; ++i) {
+        ORT_TRY(api->RunWithBinding(stream->network, NULL, stream->network_bindings[stream->bank]));
+        stream->bank = 1u - stream->bank;
+    }
+    stream->preroll = 0;
+done:
+    return result;
 }
 
 kenc_result kenc_native_encode(kenc_native_stream *stream,
@@ -502,6 +525,10 @@ kenc_result kenc_native_encode(kenc_native_stream *stream,
     const int64_t *tokens = stream->codes.data;
     kenc_result result;
     for (size_t i = 0u; i < KENC_PACKET_SAMPLES; ++i) { audio[i] = (float)pcm[i] / 32768.0f; }
+    if (stream->preroll) {
+        result = preroll(stream);
+        if (result != KENC_OK) { goto done; }
+    }
     ORT_TRY(api->RunWithBinding(stream->network, NULL, stream->network_bindings[stream->bank]));
     ORT_TRY(api->RunWithBinding(stream->quantizer, NULL, stream->quantizer_binding));
     for (size_t i = 0u; i < (size_t)stream->codebooks * KENC_LATENT_FRAMES; ++i) {
@@ -527,6 +554,10 @@ kenc_result kenc_native_decode(kenc_native_stream *stream,
         tokens[i] = codes[i];
     }
     ORT_TRY(api->RunWithBinding(stream->quantizer, NULL, stream->quantizer_binding));
+    if (stream->preroll) {
+        result = preroll(stream);
+        if (result != KENC_OK) { goto done; }
+    }
     ORT_TRY(api->RunWithBinding(stream->network, NULL, stream->network_bindings[stream->bank]));
     for (size_t i = 0u; i < KENC_PACKET_SAMPLES; ++i) {
         if (!isfinite(audio[i])) { result = KENC_ERR_RUNTIME; goto done; }

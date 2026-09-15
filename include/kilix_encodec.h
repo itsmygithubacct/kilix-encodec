@@ -102,6 +102,10 @@ kenc_result kenc_model_load_fds(kenc_model **out, const kenc_asset_set *assets);
  * can be shared by independent contexts. PCM is signed native-endian mono at
  * 24 kHz; each push consumes exactly 960 samples. PTS advances by 40 ms until an
  * explicit reset. The encoder alone owns RESET and the configured epoch cadence.
+ * At each RESET packet the encoder and decoder zero their stream state and run
+ * that packet's own input through the network four times as a discarded
+ * lead-in before processing it: epochs are independent and no latency is
+ * added, at the cost of five network runs for that packet.
  * A buffer of KENC_MAX_PACKET_BYTES always holds a supported packet. A short
  * output buffer produces no bytes and does not advance the stream. */
 kenc_result kenc_encoder_create(

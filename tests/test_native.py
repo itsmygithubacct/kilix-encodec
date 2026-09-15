@@ -2,17 +2,24 @@
 
 Run with the locked export environment to compare independent ORT Python and
 native C sessions. All PCM in this test is synthetic; no model is downloaded.
+The Python oracle is the product epoch-start runtime (tools/epoch_stream.py):
+every epoch start primes zeroed state with a four-packet repeat pre-roll.
 """
 from __future__ import annotations
 
 import argparse
 import ctypes as c
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
+
+TOOLS = Path(__file__).resolve().parents[1] / 'tools'
+FIXTURE = Path(__file__).resolve().parent / 'fixtures' / 'f101-c5r4-programme.json'
 
 
 class Options(c.Structure):
@@ -89,10 +96,15 @@ def parse_wire(packet, books):
 
 
 class Oracle:
+    """Independent ORT Python sessions driven by the product epoch-start runtime."""
+
     def __init__(self, assets, books):
         import numpy as np
         import onnxruntime as ort
+        sys.path.insert(0, str(TOOLS))
+        import epoch_stream
         self.np = np
+        self.stream = epoch_stream
         manifest = json.loads((assets / 'manifest.json').read_text())
         rate = {4:3, 8:6, 16:12}[books]
         self.records = {name:manifest['graphs'][key] for name,key in [
@@ -101,32 +113,127 @@ class Oracle:
         options = ort.SessionOptions()
         options.intra_op_num_threads = 1
         options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         self.sessions = {name:ort.InferenceSession(str(assets / record['file']),
             sess_options=options, providers=['CPUExecutionProvider'])
             for name,record in self.records.items()}
-        self.reset()
+        self.encoder = epoch_stream.StreamEncoder(self.sessions['encoder'], self.records['encoder'],
+            self.sessions['encode'], self.records['encode'])
+        self.decoder = epoch_stream.StreamDecoder(self.sessions['decode'], self.records['decode'],
+            self.sessions['decoder'], self.records['decoder'])
 
     def reset(self):
-        self.states = {name:[self.np.zeros(row['shape'], dtype='float32')
-            for row in self.records[name]['state_inputs']] for name in ('encoder','decoder')}
-
-    def stateful(self, name, value):
-        record = self.records[name]
-        inputs = {record['input_name']: value}
-        inputs.update({row['name']:state for row,state in zip(record['state_inputs'],self.states[name])})
-        result = self.sessions[name].run(None, inputs)
-        self.states[name] = result[1:]
-        return result[0]
+        self.encoder.reset()
+        self.decoder.reset()
 
     def run(self, pcm):
         np = self.np
-        audio = np.asarray(pcm, dtype='float32').reshape(1,1,960) / 32768
-        latent = self.stateful('encoder', audio)
-        codes = self.sessions['encode'].run(None, {'latent':latent})[0]
-        quantized = self.sessions['decode'].run(None, {'codes':codes})[0]
-        decoded = self.stateful('decoder', quantized)
+        audio = np.asarray(pcm, dtype='float32').reshape(1,1,960) / np.float32(32768)
+        _, codes = self.encoder.push(audio)
+        decoded = self.decoder.pull(codes)
         samples = np.clip(np.rint(decoded.reshape(-1)*32768), -32768, 32767).astype('int16')
         return codes[:,0,:].tolist(), samples.tolist()
+
+
+def tone(frame, first, second):
+    return [round(12000*math.sin(2*math.pi*first*(frame*960+i)/24000)
+                  + 3000*math.sin(2*math.pi*second*(frame*960+i)/24000)) for i in range(960)]
+
+
+def native_stream(native, model, books, frames):
+    """Encode then decode frames through fresh native contexts; returns packets and PCM."""
+    options = native.options_default()
+    options.codebooks = books
+    options.threads = 1
+    encoder, decoder = c.c_void_p(), c.c_void_p()
+    try:
+        if native.encoder_create(c.byref(encoder), model, c.byref(options)) != 0 or \
+                native.decoder_create(c.byref(decoder), model, c.byref(options)) != 0:
+            raise AssertionError('native epoch-control contexts were not created')
+        packets, pcm = [], []
+        for index, samples in enumerate(frames):
+            result, packet, _, _ = native.encode(encoder, samples, index*40)
+            if result != 0:
+                raise AssertionError('native epoch-control encode failed')
+            result, output, written, _ = native.decode(decoder, packet)
+            if result != 0 or written != 960:
+                raise AssertionError('native epoch-control decode failed')
+            packets.append(packet)
+            pcm.append(output)
+        return packets, pcm
+    finally:
+        native.encoder_free(encoder)
+        native.decoder_free(decoder)
+
+
+def epoch_controls(native, assets, use_oracle):
+    """Epoch-start independence of the native runtime, and C5-R4 parity on syn-fixture."""
+    checks = 0
+    def check(value, description):
+        nonlocal checks
+        if not value:
+            raise AssertionError(description)
+        checks += 1
+    model = c.c_void_p()
+    check(native.model_load(c.byref(model), os.fsencode(assets)) == 0 and model.value,
+          'validated model loaded for epoch controls')
+    try:
+        # Two streams whose second and third epochs carry the same audio but
+        # whose first epochs differ: every packet and PCM sample from epoch 1
+        # on must be identical, so no state crosses an epoch start.
+        shared = [tone(frame, 437, 113) for frame in range(25, 75)]
+        first_a = [tone(frame, 211, 59) for frame in range(25)]
+        first_b = [[(i * 7919 + frame * 104729) % 20001 - 10000 for i in range(960)] for frame in range(25)]
+        packets_a, pcm_a = native_stream(native, model, 8, first_a + shared)
+        packets_b, pcm_b = native_stream(native, model, 8, first_b + shared)
+        check(packets_a[:25] != packets_b[:25] and pcm_a[:25] != pcm_b[:25],
+              'epoch independence control has differing first epochs')
+        check(packets_a[25:] == packets_b[25:],
+              'native encoder epoch start retains no prior-epoch state')
+        check(pcm_a[25:] == pcm_b[25:],
+              'native decoder epoch start retains no prior-epoch state')
+        print(f'native epoch-start independence: 50/50 packets and PCM blocks identical after differing epoch 0: {checks}/{checks} PASS', flush=True)
+        if not use_oracle:
+            print('native C5-R4 syn-fixture parity: not run (requires --oracle and the locked export environment)')
+            return checks
+        import numpy as np
+        sys.path.insert(0, str(TOOLS))
+        import verify_epoch_programme as programme
+        expectations = json.loads(FIXTURE.read_bytes())
+        item = next(row for row in expectations['items'] if row['name'] == 'syn-fixture')
+        source = programme.to_int16(programme.synthetic_float('syn-fixture'))
+        check(hashlib.sha256(programme.wav_bytes(source)).hexdigest() == item['wav_sha256'],
+              'regenerated syn-fixture equals the programme item')
+        frames = [[int(v) for v in source[i*960:(i+1)*960]] for i in range(source.shape[0] // 960)]
+        packets, pcm = native_stream(native, model, 8, frames)
+        oracle = Oracle(assets, 8)
+        audio = (source.astype(np.float32) / np.float32(32768.0)).reshape(1, 1, -1)
+        _, codes = oracle.stream.encode_stream(oracle.encoder, audio)
+        decoded = oracle.stream.decode_stream(oracle.decoder, codes)
+        check(hashlib.sha256(np.ascontiguousarray(codes).tobytes()).hexdigest() == item['renders']['6']['codes']
+              and hashlib.sha256(np.ascontiguousarray(decoded, dtype=np.float32).tobytes()).hexdigest()
+              == item['renders']['6']['pcm_float32'],
+              'Python oracle reproduces the checked C5-R4 syn-fixture render')
+        native_codes = np.concatenate([np.array(parse_wire(packet, 8)[4], dtype=np.int64).reshape(8, 1, 3)
+                                       for packet in packets], axis=-1)
+        mismatches = int(np.count_nonzero(native_codes != codes))
+        check(mismatches == 0, f'native C5-R4 tokens equal the Python ORT runtime ({mismatches}/{codes.size} differ)')
+        native_pcm = np.array(pcm, dtype=np.int32).reshape(-1)
+        flat = decoded.reshape(-1)
+        rows = {}
+        for label, expected in (('rint_x32768', np.clip(np.rint(flat * 32768.0), -32768, 32767)),
+                                ('round_x32767', np.clip(np.round(flat * 32767.0), -32768, 32767))):
+            difference = np.abs(native_pcm - expected.astype(np.int32))
+            rows[label] = {'max_abs_lsb': int(difference.max()),
+                           'identical_samples': int(np.count_nonzero(difference == 0)),
+                           'compared': int(difference.size)}
+            check(rows[label]['max_abs_lsb'] <= 1,
+                  f'native C5-R4 PCM within 1 LSB of the Python ORT runtime ({label}: {rows[label]})')
+        print(f'native C5-R4 syn-fixture parity at 6 kb/s: tokens 0/{codes.size} differ; '
+              f'PCM {json.dumps(rows, sort_keys=True)}: {checks}/{checks} PASS', flush=True)
+        return checks
+    finally:
+        native.model_free(model)
 
 
 def exercise(library, assets, use_oracle):
@@ -241,6 +348,7 @@ def exercise(library, assets, use_oracle):
             for mode,ptr in reversed(handles):
                 getattr(native,mode+'_free')(ptr)
             native.model_free(model)
+    checks += epoch_controls(native, assets, use_oracle)
     timings.sort()
     print(f'native ABI controls: {checks}/{checks} PASS')
     print(f'unfrozen functional-run timing: calls={len(timings)} p99_ms={timings[int((len(timings)-1)*.99)]/1e6:.3f}')

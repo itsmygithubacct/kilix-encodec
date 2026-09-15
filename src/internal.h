@@ -4,6 +4,9 @@
 #include "kilix_encodec.h"
 
 #define KENC_LATENT_FRAMES 3u
+/* Every epoch start primes zeroed stream state by running the network over
+ * the epoch's first packet this many times, discarding those outputs. */
+#define KENC_PREROLL_PACKETS 4u
 #define KENC_MAX_CODEBOOKS 16u
 #define KENC_MAX_TOKENS (KENC_LATENT_FRAMES * KENC_MAX_CODEBOOKS)
 #define KENC_PACKET_CAPACITY KENC_MAX_PACKET_BYTES

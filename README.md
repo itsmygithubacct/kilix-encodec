@@ -137,11 +137,18 @@ unknown flags, out-of-range values and incompatible profiles.
 
 Every regular encoder call consumes 960 samples (40 ms). The first packet and
 each configured epoch boundary carry RESET; explicit encoder reset also marks
-DISCONTINUITY. A decoder refuses dependent packets after loss or reordering
-until it receives a later RESET. Replayed epochs are refused. Short output
-buffers and malformed packets do not write output. The native tests exercise
-all rates, independent streams, reset recovery, asset substitution, and exact
-tokens/PCM against independent Python ORT sessions when `ORACLE=1` is set.
+DISCONTINUITY. At every RESET packet both sides start from zeroed state and
+prime it with a four-packet repeat pre-roll of that packet's own input before
+processing it, so an epoch never depends on earlier packets and no latency is
+added. A decoder refuses dependent packets after loss or reordering until it
+receives a later RESET. Replayed epochs are refused. Short output buffers and
+malformed packets do not write output. The native tests exercise all rates,
+independent streams, reset recovery, asset substitution, and epoch-start
+independence. With `ORACLE=1` they also compare exact tokens/PCM against
+independent Python ORT sessions running `tools/epoch_stream.py`, including the
+programme's syn-fixture item at 6 kb/s: tokens identical and PCM within 1 LSB.
+Peers must run the same epoch start: a decoder with a different epoch start
+still decodes the packets, but not the same PCM.
 
 ## Export controls
 

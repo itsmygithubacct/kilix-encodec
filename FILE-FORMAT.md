@@ -79,7 +79,9 @@ before a new source. A later indexed stereo seek must decode one preceding
 frame without emitting it to prime this state; then the requested frame's
 overlap matches continuous playback exactly. The reader exposes frame
 boundaries so a consumer can perform this pre-roll. Mono seeks instead reset
-the decoder and begin at the returned verified RESET epoch. File duration
+the decoder and begin at the returned verified RESET epoch; the decoder's own
+epoch-start pre-roll of that RESET packet makes the sought epoch decode exactly
+as in continuous playback. File duration
 always trims padding; a caller must never emit unbounded tail samples.
 
 The default C suite covers malformed headers and lengths, indexes, all stereo
