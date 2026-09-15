@@ -1,0 +1,261 @@
+{
+ "bundle_manifest_sha256": "02201a5a947dc0a0b9cce84d585eca35fb8a7e57aee4d404d5cb14f495f40b6c",
+ "epoch_packets": 25,
+ "hash_fields": "codes: sha256 of int64 [n_q, 1, frames]; pcm_float32: sha256 of float32 [1, 1, samples]",
+ "items": {
+  "rec-band-1909": {
+   "renders": {
+    "12": {
+     "codes": "219dffbcad771d63a0c810b606f34d80245f3be1aca85855e86e376712120c18",
+     "pcm_float32": "fb9f171322cf9415f32b3b5817cee2dcb48620f80cda24b81d7cbaf4a5b3a771"
+    },
+    "3": {
+     "codes": "48e8735e77ec809aa2b782ab40fc1aa53fe9d9856f06c89a4af6fd63d59c1fca",
+     "pcm_float32": "29d3f3dc9e3af181e86da6d261a3bb39627181591f373330e6c62ae8d9ec87c7"
+    },
+    "6": {
+     "codes": "b906d56b2390aa7208cb6b8072e3e7b8a91f156adb9398f94c3bb17e88ec9cc7",
+     "pcm_float32": "5735032bd16705a5531841e656224ac8eaaeb0638d9f83d349dfdc014abed40f"
+    }
+   },
+   "wav_sha256": "561d384651171d8f653b75caa4797508f10c76f2b854caac6f1eaf6752dddfa4"
+  },
+  "rec-orchestra": {
+   "renders": {
+    "12": {
+     "codes": "1273f687c40a74cf1a172b4bc5521c2318214aaa8c56902e4a8b2d3b50715549",
+     "pcm_float32": "1d1fb1b8c25d32963b74edcd01612ae94c3a0b45a1d4808bca53ea7945795905"
+    },
+    "3": {
+     "codes": "6112a5ce4be0937e90128a2bf7b9a309934af6be09cf2d77bd3e7fe34bb250d4",
+     "pcm_float32": "d589c4d5bd7328285a465965e5ba02143d211301acd3eb85515d1d03814f8956"
+    },
+    "6": {
+     "codes": "039a777b51bb9d351a3e6527bd320dc25056938f9ef87d8aed067597a0f3e02c",
+     "pcm_float32": "5152b0ce693ea73a37c2c677254b5ae074ae7eaaaeeed7c0d36ad11932d16a30"
+    }
+   },
+   "wav_sha256": "0e708c3fc9dd3804d9d4480d1f5f2ce004c2134ab39e4e9531dd8a4ed131f545"
+  },
+  "rec-piano": {
+   "renders": {
+    "12": {
+     "codes": "a8c8b346259c712948977186f51c70923d131a09530f629995d25550a4e2b4ef",
+     "pcm_float32": "200d00930fe82ab876f91aecf7cab2b2b800330f4ba76beceed39eb4e198d180"
+    },
+    "3": {
+     "codes": "3949043cf615e3e56aa52163241d12e13100ab0d2a44d481755d8c480cbb4a24",
+     "pcm_float32": "0f0a4f6c412e2cecfe37291c2e1deffda8845a6b70df97d6f9d2dd4463f1e144"
+    },
+    "6": {
+     "codes": "e746894bfa7112758f3fa464411b375e0522181c0d4fb1600bab659c51dcb0fd",
+     "pcm_float32": "9f22e563b18770a0b5b632f4b2a592e021d8d99b768cb60d6cb324c7dfc28f35"
+    }
+   },
+   "wav_sha256": "5853723d13ac6444a3dcfe51693cd266137e5e3426d710fa4371a0c9105488c3"
+  },
+  "rec-speech-f": {
+   "renders": {
+    "12": {
+     "codes": "6c4702032d8a8d25063ca1e5a07db686e63f04c33899a684384645ffa55bf35a",
+     "pcm_float32": "4f795a5fb47a73e545de1855c4896938dd12efcb8b24e794a28cb224992823f5"
+    },
+    "3": {
+     "codes": "6ccbdf48624d2b040ece6dfb2d6af38b31c88a9bbed622fc69cb9688b62d2518",
+     "pcm_float32": "f84362bddcbe3b69749528897c1b6719583713a0690ccc49548df97fb3ca0ecf"
+    },
+    "6": {
+     "codes": "433c5dec562c7c500a747287198903d03150681aa1516cd90f56c322e037c876",
+     "pcm_float32": "d74743db6dc97c267be68eed85a63e3efd6f98bd691b7b27e5211ddc6c69e007"
+    }
+   },
+   "wav_sha256": "2915cb161821c5cfa41be365470a141458da0427ef6585a3656d534ecec9754f"
+  },
+  "rec-speech-m": {
+   "renders": {
+    "12": {
+     "codes": "24a7c6d2dcc9f3a066a11cb3af5de2f893f3aaad2463fa60fb967018d9148bb0",
+     "pcm_float32": "5cb2ab61cbe138c98db00f4b17649b99d782f369f54673811588e4f179f70e79"
+    },
+    "3": {
+     "codes": "bf7277e3d9873e14e59e534563bf5cd27f832033b100824783549e9f67716c9b",
+     "pcm_float32": "937116348a07e3ee10503931f2d874c509e44405923887199a1c1d9dcc474646"
+    },
+    "6": {
+     "codes": "34e9f852255741070ea784b16fa22875e0a57e1c2e5b7e03a888b74344ce0604",
+     "pcm_float32": "f7cc85cf6f205715fb21a49ec929b59e32663db208bdf6978c051e93c9217d93"
+    }
+   },
+   "wav_sha256": "f7570b0a93e95bf8f06a26b62d0f632d6193fa62804c4466e9c4235d26f4fd06"
+  },
+  "syn-clipped": {
+   "renders": {
+    "12": {
+     "codes": "44c94db3bb0e451b0afe4098d69aedd6050b0113b3007d2b597209c92627a723",
+     "pcm_float32": "c3aa7bc48387e76619b8ff53baedb7d7bab11dc314d45fde3afc7b7687b20337"
+    },
+    "3": {
+     "codes": "3649be32d57abab551c7747378baeb52dd5490023b1730e1a0d272d03d9e2811",
+     "pcm_float32": "4e46394b644b894b6ee077c3672ba3392571f70f14b02d8af06c6f0edab8da4a"
+    },
+    "6": {
+     "codes": "fa511bdc74c933c4014b4a7a50202574cb1909313eb2ec84378e0ae0cc625e01",
+     "pcm_float32": "6a2b92e56dc6a6f2ea1ba29b5d4f80b3a1ad564febb15b63acaf947b05329690"
+    }
+   },
+   "wav_sha256": "2a5ea86834996fad5ccac7ecf568e1d8136e2cc89eb9e8a2327fb2d4600b6509"
+  },
+  "syn-fixture": {
+   "renders": {
+    "12": {
+     "codes": "e0d40657359b62e7a4a33a5a81cbd67ce75c6d75134e78516d12b46afea4c02e",
+     "pcm_float32": "bec8f750277dcee56cd9821ceb8d2a4d9cdff304fcc1c7b5f74f7c8c0184f00a"
+    },
+    "3": {
+     "codes": "7b42b76837fc2781c27aba0e4b4682e64620995339a284a3e76fee382857c924",
+     "pcm_float32": "5d801000d29fd0af7f641a9bd6d59a741e5cb36290fa5b445713d75beb1ff20f"
+    },
+    "6": {
+     "codes": "81d9a1878634d1f466b36a01cc52f13b5c0b114d17f18890fda981ebb3024b15",
+     "pcm_float32": "1c84970aa0bb74a74eba6a6d689010f43000753f76139d66521b4baebba480e6"
+    }
+   },
+   "wav_sha256": "32e868af8138c26e551549d2afdc44869180c23729b71a9aafd47833af2256f8"
+  },
+  "syn-impulses": {
+   "renders": {
+    "12": {
+     "codes": "0ab8f2ef2f114ab1fe2769125b83749546e62efa31c49e98eba3fb3873cc7a5b",
+     "pcm_float32": "2886c2449bc525b8538c1c6c824f59ccd76ba2596d88f68ac0bd9e3bc4311efe"
+    },
+    "3": {
+     "codes": "47d6c3522dc01ce2a656a15b7b920bf7221dcab2cf9f102c71651f7d43865d3b",
+     "pcm_float32": "c828f4dc294bb6b0a0927150918118d12f84858c739f53321957670d4b31a337"
+    },
+    "6": {
+     "codes": "16d351607efe2ba1db11f56ba365e5e9c0644db455566e496520bf011135b6ec",
+     "pcm_float32": "70549030a8001adb05663b6a8d084f74a68c26e0e2ad233824b882381f1bf51e"
+    }
+   },
+   "wav_sha256": "215bf924c0f4e48b0f88f2f1dbe8a9c4e27d8618932ec7a7cabf8585d514440b"
+  },
+  "syn-pink": {
+   "renders": {
+    "12": {
+     "codes": "b4a6dce3071785150c77364a1c8b6012db521faa8f42169f27f180a93f9c1426",
+     "pcm_float32": "7a39ecbb26348cd6589af4fea1447f68eac1975366d7c7fea16934346dabca46"
+    },
+    "3": {
+     "codes": "5d27a0035389170b95141ab514ec794b85cbd4532af9d9605238c334ab1e18d3",
+     "pcm_float32": "547214126e37da3effa649cea1393d2f3ad81ac333be3f7d7d4635a06840d4b2"
+    },
+    "6": {
+     "codes": "6d89543283e1b70c3ae6cc3a1d49298cd3aba0bd90a132720dc15ed7788adcde",
+     "pcm_float32": "e6477b7cbfec53d9c4547ef93335436b949c719e9dd93f28a41f90f1128960f4"
+    }
+   },
+   "wav_sha256": "65d6aec72aab797b8640419c2998307ae829c357cedfca6d3bfbf6d3b0e79c71"
+  },
+  "syn-silence": {
+   "renders": {
+    "12": {
+     "codes": "c681f1147791f4c51f900da59d6d3bb7422d5dca613452e652e62e98b1d936b4",
+     "pcm_float32": "d2b30275b0b15a47293b6c2905c3f3689d9b61c59fb8edb498ecff22c51f3301"
+    },
+    "3": {
+     "codes": "423619fba41027bffc7edc8d6555465f13ba80f5f6f6d204290ed5579a7d1a4a",
+     "pcm_float32": "2815a78f934875c00cfed9a0d83a0c5aec238c3cf3d67b15ea4faf7b3005facc"
+    },
+    "6": {
+     "codes": "dc094576eab17b07aa791d2f58d5549084569cc0f4b35d4aa7d56bcf3523e269",
+     "pcm_float32": "c8788bed813339a302a9f19dba85b6487fd84e4474099d484ccdb7c266669832"
+    }
+   },
+   "wav_sha256": "69cb3f12fbdd46bf2f41eaddcec48e76d6c46ad836db55c34dc23370f43acfb6"
+  },
+  "syn-sweep": {
+   "renders": {
+    "12": {
+     "codes": "6542f3254691b6e92e74cd8f7c46692440940703f05f2570ab89e4c0b62cfd2d",
+     "pcm_float32": "df6779312e3fd70eefb077050e81f667cc36f828feb1910fbc34448e60300a44"
+    },
+    "3": {
+     "codes": "749cec898545804a8a021765e6c611b85716f59dcdf0cc83aebdd2ac7ccb73b4",
+     "pcm_float32": "abf9564d322672e1d07c23366846803600f3fe888c58e420cf4803feab6dd741"
+    },
+    "6": {
+     "codes": "be0376b9643dc01510ab17c922ed0cf6d46372534f088e62f25b36166f7063c4",
+     "pcm_float32": "f42e1c30f0373bc28dc8fe13e55804eca78321e995e8c943bf660d668bb49149"
+    }
+   },
+   "wav_sha256": "bb1cafe595434cacf3c0cee9ae0eca4da93eb31fdd30b915df13a7782b38abf9"
+  },
+  "syn-tone100": {
+   "renders": {
+    "12": {
+     "codes": "89d2b760abf081e04b29952e6a826f98f36fcdcf6b409f0682f640398c9d4ba0",
+     "pcm_float32": "5b4e70078ce9849d5358bd83f1bbea240c943ae821cfe6a8c54ece86c8d18d9d"
+    },
+    "3": {
+     "codes": "2f17c8bba52b86ff1d0ad6a21411906f5bf86a311974a2c57a0b50b3e7cb351c",
+     "pcm_float32": "fd4a9fc5664a4a98040f968787d20ec79f3578fad0ee1a1e1c44aebd9f6da98b"
+    },
+    "6": {
+     "codes": "13c753f9564fb2703e3f87653dc0daaac57b10fb2a15b0b1d9b0cb24435db867",
+     "pcm_float32": "71e1e6107da931d9bbc89d281bb160aab10b37f5e7218dfb2aee535facc7bc98"
+    }
+   },
+   "wav_sha256": "a7054639bc5a5ee753a7a711642f8db92a5207a98812814e74371615a3691ca5"
+  },
+  "syn-tone440": {
+   "renders": {
+    "12": {
+     "codes": "6d251e7037b455981a81d21bcd853e29c0f197358a112a1bb8cd66c6d4c31643",
+     "pcm_float32": "7f8c7ed17c71fc6cfa50807b9746465dad3dac9d308b9941642e86b0350404c3"
+    },
+    "3": {
+     "codes": "b73c7fc5d5cf65d16dbe9c1c42b42b0ba5f340c3f71ad0d6e709d07a01b847d2",
+     "pcm_float32": "4130a7d311a463d4d46848519262edb62751d599853dc470bf3309c4e4ee0a21"
+    },
+    "6": {
+     "codes": "3c25b2e783a4f593366d128956953fae82dc6e4131d7adfc109f8988f276443f",
+     "pcm_float32": "84d97c9d63c05242532faf790a6d60f3b43fc15787694aea847b67169a9e4264"
+    }
+   },
+   "wav_sha256": "d0786cd08385433582c5e73cc8ed65712ffcbe753a05aaaedc6be1ab41a29436"
+  },
+  "syn-white": {
+   "renders": {
+    "12": {
+     "codes": "000539464090c0b5ea0107eb26a9d2b9f0e3b6502375300173c5b975579676cd",
+     "pcm_float32": "217a1981a01d716679f61c9031896666c3ba0b716835efe914e06eb4672a54b7"
+    },
+    "3": {
+     "codes": "fde685d0c19df38f8bbcfa54b7bd6fab9e7249daa60391a3028d15e2756e387c",
+     "pcm_float32": "eb2946904564e0aecaf3af9ab5359e209449403214c7797357dc4fdc2ad80098"
+    },
+    "6": {
+     "codes": "879bd233cca5602105573c62da067da0dd362245c6c2de4d87833b214f54b495",
+     "pcm_float32": "f26710c042089d5ab8af661ae0a09a778b1c9d0accd4e8ee0cd7907a7c72adc6"
+    }
+   },
+   "wav_sha256": "cd6965c49ae001f29abf55ff4fa863ec0d3f0c26dd44693ffe396b7ea6ef0152"
+  }
+ },
+ "programme_manifest_sha256": "3591915e187497b7d7c84b98953b9a843bff6e266a2167eeaeb094f4ea08cf87",
+ "reference": {
+  "commit": "3747330ec7236931096eefc1e84100ad027c2444",
+  "generator": "tests/fixtures/build_c0_reference.py",
+  "numpy": "2.1.3",
+  "onnxruntime": "1.29.0",
+  "renderer": "tools/verify_export.py encode() and decode() with resets at every 25th packet; session(path, 1)",
+  "source": "git archive of the reference commit; tree id recomputed from the extracted files",
+  "tree": "837dec0624e73a2709b5f34334ffdd25f99a146c"
+ },
+ "schema": "kilix.encodec.c0-legacy-reference/v1",
+ "spike_c0_cross_check": {
+  "compared": 14,
+  "equal": 14,
+  "source": "F101 remedy spike raw/items/<item>.json arms.C0.render_sha256 at 6 kb/s"
+ }
+}
