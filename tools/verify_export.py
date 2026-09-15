@@ -33,6 +33,9 @@ WAVEFORM_TOLERANCE = 1e-4
 EPOCH_PACKETS = 25
 #: Epochs in the golden post-reset stream: a cold start plus three resets.
 GOLDEN_EPOCHS = 4
+#: C5-R4 lead-in length, pinned here independently of tools/epoch_stream.py so
+#: that the checkpoint reference cannot move with a changed runtime constant.
+GOLDEN_PREROLL_PACKETS = 4
 #: Latent frames counted as the head of an epoch.  Under reflect padding the
 #: stock encoder diverges from a short stream start for latent frames 0-3, so
 #: six frames cover that transient with margin.
@@ -525,18 +528,48 @@ def verify_post_reset_preroll_golden(
     same audio as one stream. Two alternative references must be refused by
     the same comparison at every epoch head: the constant cold start the
     product used before, and a reflect-padded pre-roll.
+
+    The lead-in length of the reference is GOLDEN_PREROLL_PACKETS, a literal 4
+    pinned in this file, never the runtime's own constant. The product's
+    lead-in run count at a stream start is also counted on the graph sessions
+    and must equal that literal on both sides.
     """
 
     import numpy as np
     import torch
     from encodec.modules import SConv1d
 
-    from epoch_stream import PREROLL_PACKETS
     from stateful_graph import (
         DEFAULT_BANDWIDTH,
         PACKET_LATENT_FRAMES,
         PACKET_SAMPLES,
         constant_padding,
+    )
+
+    class CountingSession:
+        def __init__(self, session: object) -> None:
+            self.session = session
+            self.runs = 0
+
+        def run(self, outputs: object, feed: dict[str, object]) -> object:
+            self.runs += 1
+            return self.session.run(outputs, feed)
+
+    counted = dict(runtimes)
+    counted["encoder"] = CountingSession(runtimes["encoder"])
+    counted["decoder"] = CountingSession(runtimes["decoder"])
+    lead_in_probe = signal(1, seed=17).numpy()[..., : 2 * PACKET_SAMPLES]
+    product_render(counted, records, DEFAULT_BANDWIDTH, lead_in_probe)
+    lead_in_runs = (counted["encoder"].runs - 2, counted["decoder"].runs - 2)
+    if lead_in_runs != (GOLDEN_PREROLL_PACKETS, GOLDEN_PREROLL_PACKETS):
+        raise AssertionError(
+            f"C5-R4 lead-in run count differs from the pinned {GOLDEN_PREROLL_PACKETS}: "
+            f"encoder {lead_in_runs[0]}, decoder {lead_in_runs[1]}"
+        )
+    print(
+        f"pre-roll lead-in length: encoder {lead_in_runs[0]} and decoder "
+        f"{lead_in_runs[1]} runs at the stream start, pinned "
+        f"{GOLDEN_PREROLL_PACKETS}: 2/2 PASS"
     )
 
     # Padding sites are switched and restored rather than copying the model:
@@ -597,17 +630,17 @@ def verify_post_reset_preroll_golden(
         return torch.cat(pieces, dim=-1)
 
     with torch.no_grad():
-        reference_latent = render_latent(PREROLL_PACKETS)
+        reference_latent = render_latent(GOLDEN_PREROLL_PACKETS)
         reference_codes = oracle.quantizer.encode(
             reference_latent, oracle.frame_rate, DEFAULT_BANDWIDTH
         )
-        reference_audio = render_audio(reference_codes, PREROLL_PACKETS)
+        reference_audio = render_audio(reference_codes, GOLDEN_PREROLL_PACKETS)
         cold_latent = render_latent(0)
         cold_audio = render_audio(reference_codes, 0)
         try:
             select_padding("reflect")
-            reflect_latent = render_latent(PREROLL_PACKETS)
-            reflect_audio = render_audio(reference_codes, PREROLL_PACKETS)
+            reflect_latent = render_latent(GOLDEN_PREROLL_PACKETS)
+            reflect_audio = render_audio(reference_codes, GOLDEN_PREROLL_PACKETS)
         finally:
             select_padding("constant")
     if any(child.pad_mode != "constant" for child in padding_sites):
@@ -745,11 +778,12 @@ def verify_post_reset_preroll_golden(
             f"epoch head: {refused}/{4 * epochs}"
         )
 
-    controls = latent_passed + tokens_passed + audio_passed + recovered + refused
+    controls = 2 + latent_passed + tokens_passed + audio_passed + recovered + refused
     return controls, {
         "epochs": epochs,
         "reset_packets": sorted(resets),
-        "preroll_packets": PREROLL_PACKETS,
+        "preroll_packets": GOLDEN_PREROLL_PACKETS,
+        "lead_in_runs": {"encoder": lead_in_runs[0], "decoder": lead_in_runs[1]},
         "latent": latent_rows,
         "token_mismatches": token_rows,
         "waveform": audio_rows,
@@ -1264,7 +1298,7 @@ def verify_bundle(
     # Pre-roll golden controls: latent, token and waveform parity per epoch,
     # recovery per reset, and two refused alternative references for each
     # latent and waveform epoch head.
-    golden_total = 3 * GOLDEN_EPOCHS + (GOLDEN_EPOCHS - 1) + 4 * GOLDEN_EPOCHS
+    golden_total = 2 + 3 * GOLDEN_EPOCHS + (GOLDEN_EPOCHS - 1) + 4 * GOLDEN_EPOCHS
     print(
         "stateful multi-rate export technical controls: "
         f"{base_controls + golden_controls}/{base_controls + golden_total} PASS"

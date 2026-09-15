@@ -211,7 +211,10 @@ decoder zero all state, run the epoch's first packet through the unchanged
 per-packet graph 4 times as a discarded lead-in (its 960 samples, or its 3
 code frames through the RVQ decoder), and then process that packet. Only the
 packet itself is used, so no latency is added; an epoch start costs 5 network
-runs. A four-epoch stream must match the checkpoint rendering each epoch as
+runs. The lead-in run count at a stream start is counted on the graph sessions
+and must equal a literal 4 pinned in `tools/verify_export.py`, independently of
+the runtime's own constant (2/2). A four-epoch stream must match the checkpoint
+rendering each epoch as
 the lead-in followed by the epoch, with the lead-in's 12 latent frames or 3840
 samples dropped: latent parity 4/4 epochs including the first 6 latent frames,
 token identity 4/4, waveform parity 4/4 including the first 150 ms, and each

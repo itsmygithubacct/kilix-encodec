@@ -26,6 +26,8 @@
 - Hold C0 to 3747330: a recorded C0 render reference for the 14 programme items
   (`legacy-c0`), plus native and file-command comparisons against a 3747330
   build when `C0_REFERENCE_LIBRARY` and `C0_REFERENCE_COMMAND` are given.
+- Pin the C5-R4 golden's lead-in length to a literal 4 and count the product's
+  lead-in runs, so a changed runtime constant fails `verify_export` on its own.
 - Replace the constant-cold-start post-reset golden with a successor that holds
   each epoch to the pre-roll checkpoint definition and refuses the cold start.
 - Add epoch independence, added-latency and native syn-fixture parity controls,
