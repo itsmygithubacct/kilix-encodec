@@ -161,7 +161,13 @@ profiles (3/6/12 kb/s), a canonical manifest 1/1, a canonical
 verification result 1/1 and synthetic listening fixtures 3/3. Verification
 checks every graph contract, exact nested RVQ prefixes, continuous-oracle token
 identity at all 3/3 rates, decoder parity, deterministic epoch recovery, all
-8/8 fixed-shape refusals and all 6/6 profile timing pipelines. The timing result
+8/8 fixed-shape refusals and all 6/6 profile timing pipelines. A four-epoch
+stream with a zero-state reset every 25 packets must match the constant-padded
+checkpoint rendering each epoch from a cold start: latent parity 4/4 epochs
+including the first 6 latent frames, token identity 4/4, waveform parity 4/4
+including the first 150 ms, and each of 3/3 reset epochs bit-identical to a cold
+start. The same comparison must refuse a reflect-padded reference at 8/8 epoch
+heads, so it distinguishes the two padding conventions. The timing result
 is labelled unfrozen-host measurement and receives measured H1 gate credit 0/1.
 Blind listening and pinned offline delivery remain 0/1 each.
 

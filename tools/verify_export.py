@@ -31,6 +31,14 @@ EXPECTED_GRAPHS = {
 LATENT_TOLERANCE = 1e-4
 WAVEFORM_TOLERANCE = 1e-4
 EPOCH_PACKETS = 25
+#: Epochs in the golden post-reset stream: a cold start plus three resets.
+GOLDEN_EPOCHS = 4
+#: Latent frames counted as the head of an epoch.  Under reflect padding the
+#: stock encoder diverges from a short stream start for latent frames 0-3, so
+#: six frames cover that transient with margin.
+POST_RESET_LATENT_FRAMES = 6
+#: Decoded samples counted as the head of an epoch: 150 ms at 24 kHz.
+POST_RESET_AUDIO_SAMPLES = 3_600
 
 
 def rvq_graph_key(direction: str, bandwidth: float) -> str:
@@ -397,6 +405,290 @@ def decode(
     )
 
 
+def epoch_parity_rows(
+    reference: object, actual: object, epoch_length: int, head_length: int
+) -> list[dict[str, float]]:
+    """Maximum absolute difference in each epoch's head and remainder."""
+
+    import numpy as np
+
+    if reference.shape != actual.shape:
+        raise AssertionError(
+            f"epoch parity shapes differ: {reference.shape} != {actual.shape}"
+        )
+    length = reference.shape[-1]
+    if length == 0 or length % epoch_length or head_length >= epoch_length:
+        raise AssertionError("epoch parity population differs")
+    rows = []
+    for start in range(0, length, epoch_length):
+        difference = np.abs(
+            reference[..., start : start + epoch_length]
+            - actual[..., start : start + epoch_length]
+        )
+        rows.append(
+            {
+                "head_max_abs_difference": float(difference[..., :head_length].max()),
+                "steady_max_abs_difference": float(
+                    difference[..., head_length:].max()
+                ),
+            }
+        )
+    return rows
+
+
+def epochs_within(rows: list[dict[str, float]], tolerance: float) -> int:
+    return sum(
+        row["head_max_abs_difference"] < tolerance
+        and row["steady_max_abs_difference"] < tolerance
+        for row in rows
+    )
+
+
+def verify_post_reset_golden(
+    oracle: object, runtimes: dict[str, object], records: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Hold the streaming graphs to a constant-padded cold start at every reset.
+
+    The reference renders each epoch separately with the checkpoint's own
+    modules, so its first frames are what a stream start produces under
+    constant padding.  The graph renders the same audio as one stream with a
+    zero-state reset at every epoch boundary, which is what the native runtime
+    does.  A reflect-padded reference must be refused by the same comparison;
+    otherwise the comparison could not tell the two conventions apart.
+    """
+
+    import numpy as np
+    import torch
+    from encodec.modules import SConv1d
+
+    from stateful_graph import (
+        DEFAULT_BANDWIDTH,
+        PACKET_LATENT_FRAMES,
+        PACKET_SAMPLES,
+        constant_padding,
+    )
+
+    # The reflect reference is rendered by switching the oracle's own padding
+    # sites and switching them back, not by copying the model: weight-normed
+    # modules cannot be deep-copied until a no-grad forward has replaced their
+    # derived weights, so a copy would depend on what ran before this check.
+    padding_sites = [
+        child
+        for network in (oracle.encoder, oracle.decoder)
+        for child in network.modules()
+        if isinstance(child, SConv1d)
+    ]
+
+    def select_padding(mode: str) -> None:
+        for child in padding_sites:
+            child.pad_mode = mode
+
+    constant_padding(oracle.encoder)
+    constant_padding(oracle.decoder)
+    if not padding_sites or any(
+        child.pad_mode != "constant" for child in padding_sites
+    ):
+        raise AssertionError("oracle padding sites are not all constant")
+
+    epochs = GOLDEN_EPOCHS
+    resets = {EPOCH_PACKETS * index for index in range(1, epochs)}
+    epoch_samples = EPOCH_PACKETS * PACKET_SAMPLES
+    epoch_frames = EPOCH_PACKETS * PACKET_LATENT_FRAMES
+    source = signal(epochs, seed=13)
+    segments = [
+        source[..., index * epoch_samples : (index + 1) * epoch_samples]
+        for index in range(epochs)
+    ]
+    encode_key = rvq_graph_key("encode", DEFAULT_BANDWIDTH)
+    decode_key = rvq_graph_key("decode", DEFAULT_BANDWIDTH)
+
+    def render_epochs() -> tuple[object, object]:
+        latent = torch.cat(
+            [oracle.encoder(segment) for segment in segments], dim=-1
+        )
+        audio = torch.cat(
+            [
+                oracle.decoder(
+                    oracle.quantizer.decode(
+                        reference_codes[
+                            ..., index * epoch_frames : (index + 1) * epoch_frames
+                        ]
+                    )
+                )
+                for index in range(epochs)
+            ],
+            dim=-1,
+        )
+        return latent, audio
+
+    with torch.no_grad():
+        reference_latent = torch.cat(
+            [oracle.encoder(segment) for segment in segments], dim=-1
+        )
+        reference_codes = oracle.quantizer.encode(
+            reference_latent, oracle.frame_rate, DEFAULT_BANDWIDTH
+        )
+        reference_latent, reference_audio = render_epochs()
+        try:
+            select_padding("reflect")
+            reflect_latent, reflect_audio = render_epochs()
+        finally:
+            select_padding("constant")
+    if any(child.pad_mode != "constant" for child in padding_sites):
+        raise AssertionError("oracle padding sites were not restored")
+    reference_latent = reference_latent.numpy()
+    reflect_latent = reflect_latent.numpy()
+    reference_codes = reference_codes.numpy()
+    reference_audio = reference_audio.numpy()[..., : epochs * epoch_samples]
+    reflect_audio = reflect_audio.numpy()[..., : epochs * epoch_samples]
+
+    actual_latent = run_stateful_stream(
+        runtimes["encoder"], records["encoder"], source.numpy(), PACKET_SAMPLES, resets
+    )
+    latent_rows = epoch_parity_rows(
+        reference_latent, actual_latent, epoch_frames, POST_RESET_LATENT_FRAMES
+    )
+    latent_passed = epochs_within(latent_rows, LATENT_TOLERANCE)
+    if latent_passed != epochs:
+        raise AssertionError(
+            f"post-reset encoder latent parity exceeds tolerance: "
+            f"{latent_passed}/{epochs} epochs within "
+            f"{[round(row['head_max_abs_difference'], 6) for row in latent_rows]}"
+        )
+    print(
+        f"post-reset encoder latent parity: {latent_passed}/{epochs} epochs PASS "
+        f"head{POST_RESET_LATENT_FRAMES}_max="
+        f"{max(row['head_max_abs_difference'] for row in latent_rows):.3e} "
+        f"steady_max="
+        f"{max(row['steady_max_abs_difference'] for row in latent_rows):.3e}"
+    )
+
+    actual_codes = run_stateless_stream(
+        runtimes[encode_key], records[encode_key], actual_latent, PACKET_LATENT_FRAMES
+    )
+    token_rows = [
+        int(
+            np.count_nonzero(
+                reference_codes[..., index * epoch_frames : (index + 1) * epoch_frames]
+                != actual_codes[..., index * epoch_frames : (index + 1) * epoch_frames]
+            )
+        )
+        for index in range(epochs)
+    ]
+    tokens_passed = sum(count == 0 for count in token_rows)
+    if tokens_passed != epochs:
+        raise AssertionError(
+            f"post-reset token identity differs: {tokens_passed}/{epochs} epochs "
+            f"mismatches={token_rows}"
+        )
+    print(
+        f"post-reset token identity: {tokens_passed}/{epochs} epochs PASS "
+        f"token_mismatches={sum(token_rows)}/{reference_codes.size}"
+    )
+
+    actual_quantized = run_stateless_stream(
+        runtimes[decode_key], records[decode_key], actual_codes, PACKET_LATENT_FRAMES
+    )
+    actual_audio = run_stateful_stream(
+        runtimes["decoder"],
+        records["decoder"],
+        actual_quantized,
+        PACKET_LATENT_FRAMES,
+        resets,
+    )
+    audio_rows = epoch_parity_rows(
+        reference_audio, actual_audio, epoch_samples, POST_RESET_AUDIO_SAMPLES
+    )
+    audio_passed = epochs_within(audio_rows, WAVEFORM_TOLERANCE)
+    if audio_passed != epochs:
+        raise AssertionError(
+            f"post-reset decoder waveform parity exceeds tolerance: "
+            f"{audio_passed}/{epochs} epochs within "
+            f"{[round(row['head_max_abs_difference'], 6) for row in audio_rows]}"
+        )
+    print(
+        f"post-reset decoder waveform parity: {audio_passed}/{epochs} epochs PASS "
+        f"head150ms_max="
+        f"{max(row['head_max_abs_difference'] for row in audio_rows):.3e} "
+        f"steady_max="
+        f"{max(row['steady_max_abs_difference'] for row in audio_rows):.3e}"
+    )
+
+    recovered = 0
+    for reset in sorted(resets):
+        index = reset // EPOCH_PACKETS
+        cold_codes = encode(
+            runtimes["encoder"],
+            runtimes[encode_key],
+            records,
+            source.numpy()[..., index * epoch_samples : (index + 1) * epoch_samples],
+            DEFAULT_BANDWIDTH,
+        )
+        cold_audio = decode(
+            runtimes[decode_key],
+            runtimes["decoder"],
+            records,
+            cold_codes,
+            DEFAULT_BANDWIDTH,
+        )
+        recovered += int(
+            np.array_equal(
+                actual_codes[..., index * epoch_frames : (index + 1) * epoch_frames],
+                cold_codes,
+            )
+            and np.array_equal(
+                actual_audio[..., index * epoch_samples : (index + 1) * epoch_samples],
+                cold_audio,
+            )
+        )
+    if recovered != len(resets):
+        raise AssertionError(
+            f"reset epoch differs from a cold start: {recovered}/{len(resets)}"
+        )
+    print(f"epoch recovery equals cold start: {recovered}/{len(resets)} resets PASS")
+
+    reflect_latent_rows = epoch_parity_rows(
+        reference_latent, reflect_latent, epoch_frames, POST_RESET_LATENT_FRAMES
+    )
+    reflect_audio_rows = epoch_parity_rows(
+        reference_audio, reflect_audio, epoch_samples, POST_RESET_AUDIO_SAMPLES
+    )
+    refused = sum(
+        row["head_max_abs_difference"] >= LATENT_TOLERANCE
+        for row in reflect_latent_rows
+    ) + sum(
+        row["head_max_abs_difference"] >= WAVEFORM_TOLERANCE
+        for row in reflect_audio_rows
+    )
+    if refused != 2 * epochs:
+        raise AssertionError(
+            f"reflect-padded reference was not refused at every epoch head: "
+            f"{refused}/{2 * epochs}"
+        )
+    print(
+        f"reflect-padding negative control: {refused}/{2 * epochs} epoch heads "
+        f"refused latent_head_min="
+        f"{min(row['head_max_abs_difference'] for row in reflect_latent_rows):.3e} "
+        f"waveform_head_min="
+        f"{min(row['head_max_abs_difference'] for row in reflect_audio_rows):.3e}"
+    )
+
+    controls = latent_passed + tokens_passed + audio_passed + recovered + refused
+    return controls, {
+        "epochs": epochs,
+        "reset_packets": sorted(resets),
+        "latent": latent_rows,
+        "token_mismatches": token_rows,
+        "waveform": audio_rows,
+        "recovered_resets": recovered,
+        "reflect_control": {
+            "latent": reflect_latent_rows,
+            "waveform": reflect_audio_rows,
+            "refused_epoch_heads": refused,
+        },
+    }
+
+
 def write_wav(path: Path, value: object) -> None:
     import numpy as np
 
@@ -688,6 +980,7 @@ def verify_bundle(
     if not np.array_equal(codes_a, repeated_codes):
         raise AssertionError("identical reset stream was not deterministic")
     print("epoch reset and recovery controls: 3/3 PASS")
+    golden_controls, golden = verify_post_reset_golden(oracle, runtimes, records)
 
     def require_shape_refusal(label: str, operation: Callable[[], object]) -> None:
         try:
@@ -826,6 +1119,7 @@ def verify_bundle(
             "token_mismatches": total_token_mismatches,
             "token_population": total_token_population,
         },
+        "post_reset_golden": golden,
         "schema": "kilix.encodec.export-verification/v2",
         "verification_sources": {
             "capacity_fixture.py": sha256(REPOSITORY / "tools/capacity_fixture.py"),
@@ -851,7 +1145,14 @@ def verify_bundle(
         f"maximum_decode_p99_ms={maximum_decode_p99:.3f} "
         f"measured_H1_gate={int(h1_measured_pass)}/1"
     )
-    print("stateful multi-rate export technical controls: 48/48 PASS")
+    # Post-reset golden controls: latent, token and waveform parity per epoch,
+    # recovery per reset, and the reflect refusal for each latent and waveform
+    # epoch head.
+    golden_total = 3 * GOLDEN_EPOCHS + (GOLDEN_EPOCHS - 1) + 2 * GOLDEN_EPOCHS
+    print(
+        "stateful multi-rate export technical controls: "
+        f"{48 + golden_controls}/{48 + golden_total} PASS"
+    )
     if fixture is not None and not h1_measured_pass:
         raise AssertionError(
             f"frozen H1 performance gate failed: "
