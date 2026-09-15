@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Start every 24 kHz epoch, and the stream, with a four-packet repeat pre-roll
+  on both sides (owner decision OD-AL, arm C5-R4) in the Python streaming
+  runtime and the native runtime. Graph bytes and the export manifest are
+  unchanged.
+- Replace the constant-cold-start post-reset golden with a successor that holds
+  each epoch to the pre-roll checkpoint definition and refuses the cold start.
+- Add epoch independence, added-latency and native syn-fixture parity controls,
+  and hold the runtime to the checked F101 remedy programme's render identities,
+  determinism and 3/12 kb/s level tables.
+
 ## 0.1.5 - 2026-08-31
 
 - Bind performance verification to the frozen H1 q35/qemu64 fixture and refuse
