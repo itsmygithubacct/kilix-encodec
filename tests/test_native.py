@@ -14,7 +14,10 @@ with the same profile must produce identical tokens and PCM within 2 LSB. The
 programme's syn-fixture item must reproduce the checked C5-R4 render and the
 3747330 C0 reference. With --c0-reference-library, a library built from a git
 archive of 3747330 must emit byte-identical C0 packets and PCM, decode new C0
-streams with matching PCM, and refuse marked C5-R4 streams.
+streams with matching PCM, and refuse marked C5-R4 streams. That library still
+pins manifest 02201a5a, so it loads the same graphs beside a reconstructed
+copy of that manifest (the OD-AS pin changes only lock and encodec version
+fields).
 """
 from __future__ import annotations
 
@@ -33,6 +36,8 @@ TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 FIXTURE = FIXTURES / 'f101-c5r4-programme.json'
 C0_REFERENCE = FIXTURES / 'f101-c0-3747330-reference.json'
+sys.path.insert(0, str(FIXTURES))
+import legacy_c0_assets  # noqa: E402
 
 OK, INVALID, MODEL, RUNTIME, TRUNCATED, PROTOCOL, MEMORY, EPOCH_START = range(8)
 C0, C5_R4 = 0, 1
@@ -369,33 +374,35 @@ def mixed_peer_controls(native, assets, reference_library):
         check(not hasattr(old.lib, 'kenc_epoch_start_negotiate') and hasattr(native.lib, 'kenc_epoch_start_negotiate'),
               'the reference library is a separate pre-marker build')
         old_model = c.c_void_p()
-        check(old.model_load(c.byref(old_model), os.fsencode(assets)) == OK and old_model.value,
-              'the reference library loads the same validated model')
-        try:
-            for books in (4, 8, 16):
-                old_packets, old_pcm = native_stream(old, old_model, books, frames, reset_at=27)
-                new_packets, new_pcm = native_stream(native, model, books, frames, reset_at=27)
-                check(new_packets == old_packets and new_pcm == old_pcm,
-                      f'{books} codebooks: C0 packets and PCM byte-identical to 3747330')
-                result, pcm, _, _ = decode_packets(native, model, books, old_packets, C0)
-                check(result == OK and pcm == old_pcm,
-                      f'{books} codebooks: a 3747330 stream decodes as C0 with matching PCM')
-                result, pcm, _, _ = decode_packets(old, old_model, books, new_packets)
-                check(result == OK and pcm == new_pcm,
-                      f'{books} codebooks: a new C0 stream decodes on 3747330 with matching PCM')
-                marked, _ = native_stream(native, model, books, frames, C5_R4, reset_at=27)
-                result, pcm, output, written = decode_packets(old, old_model, books, marked)
-                check(result == PROTOCOL and not pcm and written == 0 and output == [12345] * 960,
-                      f'{books} codebooks: 3747330 refuses a marked C5-R4 stream instead of decoding it')
-                result, pcm, _, _ = decode_packets(native, model, books, old_packets, C5_R4)
-                check(result == EPOCH_START and not pcm,
-                      f'{books} codebooks: a C5-R4 decoder refuses a 3747330 stream')
-            long_frames = [tone(frame, 437, 113) if frame % 50 < 25 else noise(frame) for frame in range(100)]
-            old_packets, old_pcm = native_stream(old, old_model, 8, long_frames)
-            check(native_stream(native, model, 8, long_frames) == (old_packets, old_pcm),
-                  '100-packet mixed tone and noise stream: C0 packets and PCM byte-identical to 3747330')
-        finally:
-            old.model_free(old_model)
+        with tempfile.TemporaryDirectory(prefix='kenc-c0-ref-assets-') as legacy_root:
+            legacy = legacy_c0_assets.materialize(Path(assets), Path(legacy_root) / 'bundle')
+            check(old.model_load(c.byref(old_model), os.fsencode(legacy)) == OK and old_model.value,
+                  'the reference library loads the same graphs under the reconstructed 02201a5a manifest')
+            try:
+                for books in (4, 8, 16):
+                    old_packets, old_pcm = native_stream(old, old_model, books, frames, reset_at=27)
+                    new_packets, new_pcm = native_stream(native, model, books, frames, reset_at=27)
+                    check(new_packets == old_packets and new_pcm == old_pcm,
+                          f'{books} codebooks: C0 packets and PCM byte-identical to 3747330')
+                    result, pcm, _, _ = decode_packets(native, model, books, old_packets, C0)
+                    check(result == OK and pcm == old_pcm,
+                          f'{books} codebooks: a 3747330 stream decodes as C0 with matching PCM')
+                    result, pcm, _, _ = decode_packets(old, old_model, books, new_packets)
+                    check(result == OK and pcm == new_pcm,
+                          f'{books} codebooks: a new C0 stream decodes on 3747330 with matching PCM')
+                    marked, _ = native_stream(native, model, books, frames, C5_R4, reset_at=27)
+                    result, pcm, output, written = decode_packets(old, old_model, books, marked)
+                    check(result == PROTOCOL and not pcm and written == 0 and output == [12345] * 960,
+                          f'{books} codebooks: 3747330 refuses a marked C5-R4 stream instead of decoding it')
+                    result, pcm, _, _ = decode_packets(native, model, books, old_packets, C5_R4)
+                    check(result == EPOCH_START and not pcm,
+                          f'{books} codebooks: a C5-R4 decoder refuses a 3747330 stream')
+                long_frames = [tone(frame, 437, 113) if frame % 50 < 25 else noise(frame) for frame in range(100)]
+                old_packets, old_pcm = native_stream(old, old_model, 8, long_frames)
+                check(native_stream(native, model, 8, long_frames) == (old_packets, old_pcm),
+                      '100-packet mixed tone and noise stream: C0 packets and PCM byte-identical to 3747330')
+            finally:
+                old.model_free(old_model)
         if checks - before != REFERENCE_CONTROLS:
             raise AssertionError('reference control count differs from its declared skip count')
         print(f'native 3747330 C0 reference controls: {checks - before}/{REFERENCE_CONTROLS} PASS', flush=True)

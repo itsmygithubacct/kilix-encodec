@@ -314,8 +314,9 @@ def export_bundle(model_directory: Path, output_path: Path) -> Path:
         "codebooks": codebooks,
         "graphs": graphs,
         "license": {
-            "evidence": "reviewed-official-model-card-at-pinned-revision",
-            "spdx": "MIT",
+            "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+            "licensor": "Meta Platforms",
+            "spdx": "CC-BY-NC-4.0",
         },
         "model": {
             "files": model_files,

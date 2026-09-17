@@ -21,7 +21,9 @@ import tempfile
 import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'fixtures'))
 import epoch_stream  # noqa: E402  (NumPy-free header helpers only)
+import legacy_c0_assets  # noqa: E402
 
 REFERENCE_CONTROLS_PER_RATE = 7
 
@@ -42,6 +44,9 @@ def main(args):
     reference = args.c0_reference_command.resolve() if args.c0_reference_command else None
     with tempfile.TemporaryDirectory(prefix='kenc-file-cli-') as temporary:
         root = Path(temporary)
+        legacy_mono = None
+        if reference is not None and args.mono_assets is not None:
+            legacy_mono = legacy_c0_assets.materialize(args.mono_assets, root / 'legacy-c0-24k')
         def run(arguments, success, diagnostic=None, command=None):
             nonlocal checks
             result = subprocess.run([str(command or binary), *map(str, arguments)],
@@ -155,19 +160,19 @@ def main(args):
                     continue
                 before = checks
                 old_file = root / f'{profile}-{bitrate}-3747330.kenc'
-                run(['encode', '--model-dir', assets, '--profile', profile, '--bitrate', bitrate,
+                run(['encode', '--model-dir', legacy_mono, '--profile', profile, '--bitrate', bitrate,
                      '--threads', '1', source, old_file], 0, command=reference)
                 assert old_file.read_bytes() == files['C0'].read_bytes()
                 checks += 1
                 new_of_old = root / f'{profile}-{bitrate}-new-of-3747330.wav'
                 old_of_new = root / f'{profile}-{bitrate}-3747330-of-new.wav'
                 run(['decode', '--model-dir', assets, old_file, new_of_old], 0, b'kenc: epoch start C0')
-                run(['decode', '--model-dir', assets, files['C0'], old_of_new], 0, command=reference)
+                run(['decode', '--model-dir', legacy_mono, files['C0'], old_of_new], 0, command=reference)
                 c0_wav = (root / f'{profile}-{bitrate}-C0.wav').read_bytes()
                 assert new_of_old.read_bytes() == c0_wav == old_of_new.read_bytes()
                 checks += 1
                 refused = root / f'{profile}-{bitrate}-3747330-of-C5-R4.wav'
-                run(['decode', '--model-dir', assets, files['C5-R4'], refused], 1, b'protocol error', command=reference)
+                run(['decode', '--model-dir', legacy_mono, files['C5-R4'], refused], 1, b'protocol error', command=reference)
                 assert not refused.exists()
                 checks += 1
                 assert checks - before == REFERENCE_CONTROLS_PER_RATE

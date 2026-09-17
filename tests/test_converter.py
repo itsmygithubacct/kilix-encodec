@@ -55,9 +55,10 @@ class ConverterTests(unittest.TestCase):
         source = area / 'source'
         source.mkdir(mode=0o700)
         binding = json.loads((ROOT / 'tools/converter-inputs.json').read_text())
+        notices = [*binding['uv_notices'], 'encodec-LICENSE-MIT']
         paths = [*binding['source_files'], 'tools/converter_runtime.py',
                  'tools/NO-MODEL-GRANT-24KHZ.txt',
-                 *('tools/converter-notices/' + item for item in binding['uv_notices'])]
+                 *('tools/converter-notices/' + item for item in notices)]
         for relative in paths:
             destination = source / relative
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -85,7 +86,21 @@ class ConverterTests(unittest.TestCase):
         members.update({'notices/' + relative: (source / 'tools/converter-notices' / relative,
                                                 expected['sha256'])
                         for relative, expected in binding['uv_notices'].items()})
+        members['notices/encodec-LICENSE-MIT'] = (
+            source / 'tools/converter-notices/encodec-LICENSE-MIT',
+            binding['encodec_source']['license_sha256'])
         return source, environment, python, uv, output, members
+
+    def test_packaging_refuses_pypi_encodec_toolchain(self):
+        source, environment, python, uv, output, _members = self.packaging_fixture('pypi-pin')
+        binding = json.loads((source / 'tools/converter-inputs.json').read_text())
+        binding['toolchain']['encodec'] = '0.1.1'
+        (source / 'tools/converter-inputs.json').write_text(json.dumps(binding))
+        with mock.patch.object(builder, 'ROOT', source), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, 'pinned MIT encodec'):
+                builder.build(environment, python, uv, output)
+        self.assertEqual(list(output.iterdir()), [])
 
     def test_packaging_binds_actual_source_tools_and_notices(self):
         source, environment, python, uv, output, members = self.packaging_fixture('unchanged')

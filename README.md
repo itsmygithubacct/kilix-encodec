@@ -43,9 +43,9 @@ builds use different directories (`build-onnx` and `build`). Static consumers
 can obtain runtime, crypto and math dependencies with `pkg-config --static`.
 
 The native loader accepts exactly the eight 24 kHz graphs and canonical
-manifest emitted by exporter 0.1.5. It checks their compiled byte counts and
-SHA-256 digests before initializing ORT, then creates sessions from those same
-verified bytes. Asset symlinks, special files and substitutions are refused.
+manifest emitted by exporter 0.1.5 with the MIT encodec source pin. It checks
+their compiled byte counts and SHA-256 digests before initializing ORT, then
+creates sessions from those same verified bytes. Asset symlinks, special files and substitutions are refused.
 Tensor names, ranks, dimensions and types are checked before allocating stream
 buffers. Each stream has separate recurrent state and 1 or 2 CPU threads;
 inference uses caller-owned output storage and preallocated state tensors.
@@ -412,8 +412,10 @@ python3 tools/build_converter.py
 
 The default build acquires the exact UV 0.12.3 and CPython 3.12.8 tool archives
 listed in `tools/converter-inputs.json`, then constructs a fresh CPU environment
-from the frozen lock. It builds the EnCodec sdist only after the locked wheels
-supply setuptools. No model input is acquired. Tool archives and dependency
+from the frozen lock. The lock installs facebookresearch/encodec
+`2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e` (MIT), not PyPI 0.1.1. It builds
+that EnCodec sdist only after the locked wheels supply setuptools. No model
+input is acquired. Tool archives and dependency
 artifacts use a private cache; `--offline` requires that cache to be populated.
 `--cache-dir` selects another private cache, `--output-root` selects an existing
 destination, and `--timeout` bounds the entire build, up to 3,600 seconds.
@@ -454,10 +456,11 @@ threads are selected. Cancellation and deadlines tear down the owned process
 tree. A failed attempt can leave partial files in its output directory for
 the caller to inspect or discard; a new conversion requires an empty output.
 
-Successful output also carries `notices/NO-MODEL-GRANT-24KHZ.txt`. Neither this
-tool nor its output grants a model license, creates a source-supply decision,
-admits an installed model, or authorizes redistribution. Checkpoints, runtime
-archives and generated graphs must not be committed to this repository.
+Successful output also carries `notices/NO-MODEL-GRANT-24KHZ.txt`, which cites
+the pinned commit's MIT LICENSE by sha256 and records that the weights stay
+CC BY-NC 4.0 (OD-AR). Neither this tool nor its output grants redistribution,
+creates a source-supply decision, or admits an installed model. Checkpoints,
+runtime archives and generated graphs must not be committed to this repository.
 The command needs system Python, bubblewrap, user namespaces and Linux memfd
 seals. The development runtime occupies roughly 1.1 GiB on disk and additional
 temporary memory while converting; this is not a fitted device profile.

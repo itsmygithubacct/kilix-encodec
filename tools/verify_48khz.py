@@ -73,6 +73,13 @@ def load_manifest(
         raise AssertionError("48 kHz model revision differs")
     if manifest.get("model", {}).get("format") != "safetensors":
         raise AssertionError("48 kHz model format differs")
+    expected_license = {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    }
+    if manifest.get("license") != expected_license:
+        raise AssertionError("48 kHz license determination differs")
     expected_model_files = {
         name: {"bytes": size, "sha256": digest}
         for name, (size, digest) in MODEL_FILES.items()

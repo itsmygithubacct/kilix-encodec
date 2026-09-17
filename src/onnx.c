@@ -247,8 +247,8 @@ static kenc_result model_load(kenc_model **out, const model_input *input)
     if (model == NULL) { result = KENC_ERR_MEMORY; goto done; }
     atomic_init(&model->references, 1u);
     /* This is the exact scratch-export v2 contract, still user-supplied only. */
-    result = read_verified(input, "manifest.json", 12768u,
-        "02201a5a947dc0a0b9cce84d585eca35fb8a7e57aee4d404d5cb14f495f40b6c",
+    result = read_verified(input, "manifest.json", 12770u,
+        "e151992a68e292936da8cb618047be92c5c87f468e3c42d65152ba67f6368558",
         &manifest);
     if (result != KENC_OK) { goto done; }
     for (size_t i = 0u; i < KENC_GRAPH_COUNT; ++i) {
@@ -687,9 +687,9 @@ static kenc_result stereo_create(kenc_stereo **out, const model_input *input,
     static const char *const files[4] = {
         "manifest.json", "encoder_frame_op17.onnx", "decoder_frame_op17.onnx", "rvq-codebooks.f32le"
     };
-    static const size_t sizes[4] = {3901u, 29909926u, 29882042u, 8388608u};
+    static const size_t sizes[4] = {3930u, 29909926u, 29882042u, 8388608u};
     static const char *const hashes[4] = {
-        "844d8fcfdb2fb13d0485a9429c83debb590dcf964244fe0d06c50b5ec3380e38",
+        "065746beb8089cc190ead1a9932ab8b6e5ac601c4de5bf79552f952071bd83cd",
         "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a",
         "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1",
         "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"

@@ -1,16 +1,3 @@
-EnCodec 24 kHz checkpoint and derivatives: CC BY-NC 4.0, licensor Meta Platforms (owner decision OD-AR).
-The converter does not grant redistribution. Conversion is local, after the required user decision.
-Official source: https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th
-Checkpoint SHA256: d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf
-
-Converter code pin: facebookresearch/encodec 2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e
-(MIT relicensing 349b72939f57cb3bc7b60906c0ee8228c849485d is an ancestor. 2d29d93 is the earliest usable post-relicensing commit: 349b7293's setup.py is syntactically invalid.)
-Source archive SHA256: 47d071d2d90f3d107ed83c930c4c189a066f92d299371ff04b6ede573c7cf434
-MIT LICENSE SHA256: cf9b17822d1fcd4ff32ccbe14183386fb3adf6f2ff92dc184130823f7fc28173
-PyPI encodec 0.1.1 is not used. That release's METADATA declared CC BY-NC 4.0 and predated the MIT relicensing.
-
-Verbatim MIT LICENSE of the pinned commit:
-
 MIT License
 
 Copyright (c) Meta Platforms, Inc. and affiliates.
@@ -32,4 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-

@@ -3,7 +3,15 @@
     "bytes": 93171529,
     "sha256": "d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf"
   },
-  "notice_sha256": "253aa05a6109269e0c6db8493618060684a2826b7ccf3a496eea7f0b4ea2b0c3",
+  "encodec_source": {
+    "commit": "2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e",
+    "license_sha256": "cf9b17822d1fcd4ff32ccbe14183386fb3adf6f2ff92dc184130823f7fc28173",
+    "relicensing_commit": "349b72939f57cb3bc7b60906c0ee8228c849485d",
+    "sha256": "47d071d2d90f3d107ed83c930c4c189a066f92d299371ff04b6ede573c7cf434",
+    "url": "https://github.com/facebookresearch/encodec/archive/2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e.tar.gz",
+    "version": "0.1.2a3"
+  },
+  "notice_sha256": "ee322fb2b8c9b523a7a140eb39a403a88b1d0af9f9affedd16b8e7cb7ef77cda",
   "outputs": {
     "decoder_stateful_op17.onnx": {
       "bytes": 29733075,
@@ -14,8 +22,8 @@
       "sha256": "19c6f57f0d39d2660942c958a797133fa0eedd4120cccf5daecc5726427b8269"
     },
     "manifest.json": {
-      "bytes": 12768,
-      "sha256": "02201a5a947dc0a0b9cce84d585eca35fb8a7e57aee4d404d5cb14f495f40b6c"
+      "bytes": 12770,
+      "sha256": "e151992a68e292936da8cb618047be92c5c87f468e3c42d65152ba67f6368558"
     },
     "rvq_decode_12kbps_op17.onnx": {
       "bytes": 8396869,
@@ -58,7 +66,7 @@
     ],
     [
       "encodec",
-      "0.1.1"
+      "0.1.2a3"
     ],
     [
       "filelock",
@@ -179,10 +187,10 @@
   ],
   "schema": "kilix.encodec.converter-inputs/v1",
   "source_files": {
-    "pyproject.toml": "3937fe9804948e25e3550bb6f5d576ad50d2c35b8f3e588427ba05382d16086e",
+    "pyproject.toml": "c91ffe26b161d6576a4a18ea3b7492ba1115ee58f10e4a6efed2cb40e6eb21df",
     "tools/export_24khz.py": "e95ef4ba52b3b3a65c23098757b2dfaf1eaa2b1da9004d2762ef3333902e8783",
     "tools/stateful_graph.py": "7a94906d6e1cd809162ba77ea82728f2bf544a0c98895d268e8d2e786b0790f4",
-    "uv.lock": "5fcb6bcca9a8d6cf1674a3a063bef7d863485d3736beeb97dc19624f453d071c"
+    "uv.lock": "c79d96ee87bfc9d7b09b09c1b3bb7f51faf53d3ec1e480bef53d2e69d40a1d9e"
   },
   "tool_archives": {
     "python": {
@@ -201,7 +209,7 @@
     }
   },
   "toolchain": {
-    "encodec": "0.1.1",
+    "encodec": "0.1.2a3",
     "onnx": "1.22.0",
     "onnxruntime": "1.29.0",
     "python": "3.12.8",

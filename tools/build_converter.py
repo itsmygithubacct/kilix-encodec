@@ -59,9 +59,31 @@ def build(environment, python, uv, output_root):
     binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=65536))
     if binding.get('schema') != 'kilix.encodec.converter-inputs/v1':
         raise ValueError('converter binding schema differs')
+    pin = binding.get('encodec_source')
+    expected_commit = '2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e'
+    expected_url = ('https://github.com/facebookresearch/encodec/archive/'
+                    '2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e.tar.gz')
+    expected_archive = '47d071d2d90f3d107ed83c930c4c189a066f92d299371ff04b6ede573c7cf434'
+    expected_license = 'cf9b17822d1fcd4ff32ccbe14183386fb3adf6f2ff92dc184130823f7fc28173'
+    if (not isinstance(pin, dict) or pin.get('commit') != expected_commit
+            or pin.get('url') != expected_url or pin.get('sha256') != expected_archive
+            or pin.get('license_sha256') != expected_license or pin.get('version') != '0.1.2a3'):
+        raise ValueError('converter encodec pin differs from the MIT source')
+    if binding.get('toolchain', {}).get('encodec') != '0.1.2a3':
+        raise ValueError('converter toolchain is not the pinned MIT encodec')
+    if ['encodec', '0.1.1'] in binding.get('runtime_packages', []):
+        raise ValueError('converter still selects PyPI encodec 0.1.1')
     for name, expected in binding['source_files'].items():
         if digest(ROOT / name) != expected:
             raise ValueError('export source or lock differs from the native population')
+    pyproject = build_io.file_bytes(ROOT / 'pyproject.toml', CHECK, maximum=2 * 1024**2)
+    lock = build_io.file_bytes(ROOT / 'uv.lock', CHECK, maximum=2 * 1024**2)
+    if expected_url.encode() not in pyproject or b'encodec==0.1.1' in pyproject:
+        raise ValueError('export project still selects PyPI encodec 0.1.1')
+    if expected_url.encode() not in lock or expected_archive.encode() not in lock:
+        raise ValueError('frozen lock is not the pinned MIT encodec source')
+    if b'encodec-0.1.1.tar.gz' in lock:
+        raise ValueError('frozen lock still selects PyPI encodec 0.1.1')
     if digest(python) != binding['python_binary_sha256'] or digest(uv) != binding['uv_binary_sha256']:
         raise ValueError('export toolchain executable identity differs')
     python_root = python.parent.parent
@@ -81,6 +103,8 @@ def build(environment, python, uv, output_root):
         metadata_hashes[metadata_path.relative_to(packages).as_posix()] = hashlib.sha256(payload).hexdigest()
     if sorted(distributions) != binding['runtime_packages']:
         raise ValueError('export environment package population differs from the frozen lock')
+    if ['encodec', '0.1.1'] in distributions:
+        raise ValueError('export environment installed PyPI encodec 0.1.1')
     evidence = {'packages': sorted(distributions), 'toolchain': binding['toolchain']}
     converter = output_root / '.converter'
     executable = output_root / 'bin/kilix-encodec-convert-24khz'
@@ -150,6 +174,9 @@ def build(environment, python, uv, output_root):
         path = ROOT / 'tools/converter-notices' / name
         build_io.file_bytes(path, CHECK, maximum=65536, expected=expected['sha256'])
         add('notices/' + name, path, ROOT, expected=expected['sha256'])
+    license_path = ROOT / 'tools/converter-notices/encodec-LICENSE-MIT'
+    build_io.file_bytes(license_path, CHECK, maximum=65536, expected=pin['license_sha256'])
+    add('notices/encodec-LICENSE-MIT', license_path, ROOT, expected=pin['license_sha256'])
     total = sum(row[1] for row in entries.values())
     if not 1 <= len(entries) <= MAXIMUM_FILES or not 1 <= total <= MAXIMUM_BYTES:
         raise ValueError('converter runtime exceeds its declared resource bound')

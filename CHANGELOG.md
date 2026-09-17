@@ -28,6 +28,14 @@
   build when `C0_REFERENCE_LIBRARY` and `C0_REFERENCE_COMMAND` are given.
 - Pin the C5-R4 golden's lead-in length to a literal 4 and count the product's
   lead-in runs, so a changed runtime constant fails `verify_export` on its own.
+- Pin the 24 kHz converter's encodec source to facebookresearch/encodec
+  `2d29d935` (MIT), not PyPI 0.1.1. The eight graphs stay byte-identical to
+  the 0.1.1 export; the manifest records the new lock and reports `0.1.2a3`,
+  so the population digest is re-pinned in this repository. Catalogue re-pin
+  is a later wave.
+- Cite the pinned commit's MIT LICENSE by sha256 in THIRD-PARTY-NOTICES and
+  the converter notice. Weights stay CC BY-NC 4.0 (OD-AR). Stop calling the
+  48 kHz checkpoint or the 0.1.1 package MIT.
 - Replace the constant-cold-start post-reset golden with a successor that holds
   each epoch to the pre-roll checkpoint definition and refuses the cold start.
 - Add epoch independence, added-latency and native syn-fixture parity controls,
