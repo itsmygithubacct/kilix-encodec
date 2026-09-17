@@ -36,6 +36,7 @@
 - Cite the pinned commit's MIT LICENSE by sha256 in THIRD-PARTY-NOTICES and
   the converter notice. Weights stay CC BY-NC 4.0 (OD-AR). Stop calling the
   48 kHz checkpoint or the 0.1.1 package MIT.
+- Make `tools/consumer_grep.sh` fail loudly on a git error such as a bad ref.
 - Replace the constant-cold-start post-reset golden with a successor that holds
   each epoch to the pre-roll checkpoint definition and refuses the cold start.
 - Add epoch independence, added-latency and native syn-fixture parity controls,
