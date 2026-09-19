@@ -39,6 +39,89 @@ TOKEN_FLIP_RATE_LIMIT_PERCENT = 0.1
 BANDWIDTH_TO_CODEBOOKS = {3.0: 2, 6.0: 4, 12.0: 8, 24.0: 16}
 
 
+def verify_artifact_policy(manifest: dict[str, Any]) -> None:
+    """Assert the 48 kHz manifest's recorded artifact policy (SR-5, SR-10).
+
+    Pure, so --self-test can feed it planted manifests without a bundle.
+    """
+    expected_policy = {
+        "derived_artifact_publication": "owner-reserved",
+        "model_delivery": "local-safetensors-only",
+        "network_access": False,
+        "release_qualified": False,
+        "unsafe_pickle_loaded": False,
+    }
+    if manifest.get("artifact_policy") != expected_policy:
+        raise AssertionError("48 kHz artifact policy differs")
+    # In Python 0 == False and 0.0 == False, so equality alone admits a policy
+    # that records a number where the export writes a boolean.  A recorded
+    # `release_qualified: 0` is not the decision `release_qualified: false`.
+    recorded = manifest.get("artifact_policy")
+    if not isinstance(recorded, dict) or any(
+        type(recorded.get(key)) is not type(expected)
+        for key, expected in expected_policy.items()
+    ):
+        raise AssertionError("48 kHz artifact policy differs")
+
+
+def verify_artifact_policy_controls() -> tuple[int, int]:
+    """Admit the recorded policy; refuse each planted change to it.
+
+    The accepted values are typed here, not read from the checker, so a
+    changed expectation fails the admission control and a dropped or narrowed
+    check fails a refusal control.  The number-for-boolean cases are the ones
+    equality alone admitted (SR-10).
+    """
+    policy = {
+        "derived_artifact_publication": "owner-reserved",
+        "model_delivery": "local-safetensors-only",
+        "network_access": False,
+        "release_qualified": False,
+        "unsafe_pickle_loaded": False,
+    }
+    refused = "48 kHz artifact policy differs"
+    plants: list[tuple[str, object]] = [
+        ("policy absent", None),
+        ("policy empty", {}),
+        ("publication reverted", {**policy, "derived_artifact_publication": "allowed"}),
+        ("delivery changed", {**policy, "model_delivery": "user-supplied-only"}),
+        ("network access", {**policy, "network_access": True}),
+        ("release qualified", {**policy, "release_qualified": True}),
+        ("unsafe pickle loaded", {**policy, "unsafe_pickle_loaded": True}),
+        ("policy key added", {**policy, "grant": "commercial"}),
+        ("policy key removed",
+         {key: value for key, value in policy.items() if key != "release_qualified"}),
+        ("release qualified zero", {**policy, "release_qualified": 0}),
+        ("release qualified zero float", {**policy, "release_qualified": 0.0}),
+        ("network access zero", {**policy, "network_access": 0}),
+        ("unsafe pickle loaded zero", {**policy, "unsafe_pickle_loaded": 0.0}),
+    ]
+    passed = 0
+    total = 1 + len(plants)
+    try:
+        verify_artifact_policy({"artifact_policy": dict(policy)})
+    except AssertionError as error:
+        print(f"  48 kHz policy control failed: recorded values refused: {error}")
+    else:
+        passed += 1
+    for label, planted in plants:
+        value: dict[str, Any] = {} if planted is None else {"artifact_policy": planted}
+        try:
+            verify_artifact_policy(value)
+        except AssertionError as error:
+            if str(error) == refused:
+                passed += 1
+                continue
+            print(f"  48 kHz policy control failed: {label}: refused with {error!r}")
+        else:
+            print(f"  48 kHz policy control failed: {label}: admitted")
+    print(
+        f"48 kHz artifact policy controls: {passed}/{total} "
+        f"{'PASS' if passed == total else 'FAIL'}"
+    )
+    return passed, total
+
+
 def load_manifest(
     bundle: Path, model_directory: Path
 ) -> tuple[dict[str, Any], object]:
@@ -60,15 +143,7 @@ def load_manifest(
         raise AssertionError("48 kHz manifest is not canonical JSON")
     if manifest.get("schema") != "kilix.encodec.48khz-export/v1":
         raise AssertionError("48 kHz manifest schema differs")
-    expected_policy = {
-        "derived_artifact_publication": "owner-reserved",
-        "model_delivery": "local-safetensors-only",
-        "network_access": False,
-        "release_qualified": False,
-        "unsafe_pickle_loaded": False,
-    }
-    if manifest.get("artifact_policy") != expected_policy:
-        raise AssertionError("48 kHz artifact policy differs")
+    verify_artifact_policy(manifest)
     if manifest.get("model", {}).get("revision") != MODEL_REVISION:
         raise AssertionError("48 kHz model revision differs")
     if manifest.get("model", {}).get("format") != "safetensors":
@@ -700,8 +775,11 @@ def verify_bundle(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bundle", type=Path, required=True)
-    parser.add_argument("--model-dir", type=Path, required=True)
+    parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--model-dir", type=Path)
+    # The policy controls are pure: they need no bundle, no model directory
+    # and no export environment, so `make test` runs them.
+    parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--threads", type=int, choices=(1, 2, 4), default=2)
     parser.add_argument("--benchmark-repetitions", type=int, default=20)
     parser.add_argument(
@@ -709,6 +787,13 @@ def main() -> int:
     )
     parser.add_argument("--fixture-runner", type=Path)
     args = parser.parse_args()
+    if args.self_test:
+        passed, total = verify_artifact_policy_controls()
+        if passed != total:
+            parser.exit(1, "48 kHz verification refused: artifact policy controls failed\n")
+        return 0
+    if args.bundle is None or args.model_dir is None:
+        parser.error("--bundle and --model-dir are required")
     if args.benchmark_repetitions < 10:
         parser.error("--benchmark-repetitions must be at least 10")
     if args.fixture_tier == "h1" and args.benchmark_repetitions < 100:

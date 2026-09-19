@@ -102,6 +102,7 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/export_24khz.py --version; \
 	$(PYTHON) tools/export_48khz.py --version; \
 	$(PYTHON) tools/export_48khz.py --self-test; \
+	$(PYTHON) tools/verify_48khz.py --self-test; \
 	$(PYTHON) tools/listening_trial.py --version; \
 	$(PYTHON) tools/listening_trial.py --self-test; \
 	$(PYTHON) tests/test_consumer_grep.py; \

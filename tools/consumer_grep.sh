@@ -14,7 +14,7 @@ if [ "$#" -ne 2 ]; then
 fi
 repo=$1
 ref=$2
-PATTERN='encodec|kenc_|KMA2|epoch_packets|epoch[-_ ]reset|cold[-_ ]start|pre-?roll|02201a5a|e151992a|844d8fcf|065746be|bb615145|433b26a1|19c6f57f|90cb4f26'
+PATTERN='encodec|kenc_|KMA2|epoch_packets|epoch[-_ ]reset|cold[-_ ]start|pre-?roll|02201a5a|e151992a|844d8fcf|065746be|bb615145|433b26a1|2ce5225d|19c6f57f|90cb4f26'
 git -C "$repo" grep -n -I -i -E "$PATTERN" "$ref" --
 status=$?
 if [ "$status" -gt 1 ]; then

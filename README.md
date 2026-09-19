@@ -441,7 +441,7 @@ bytes and the exact package population; it does not acquire a new environment.
 | profile | command | runtime directory | upstream input | output population |
 | --- | --- | --- | --- | --- |
 | `24khz` | `bin/kilix-encodec-convert-24khz` | `.converter` | `encodec_24khz-d7cc33bc.th` from `dl.fbaipublicfiles.com` | 8 stateful graphs and `manifest.json` (`op17-v2-bb615145`) |
-| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-433b26a1`) |
+| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-2ce5225d`) |
 
 Each output consists of the command, its adjacent runtime directory holding
 `runtime.tar`, and a build receipt. Keep these together when relocating them.

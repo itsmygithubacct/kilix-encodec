@@ -22,7 +22,7 @@
   KX (the kilix installer) land.
 - Add the 48 kHz stereo frame converter, `tools/build_converter.py --profile
   48khz` (`bin/kilix-encodec-convert-48khz`), from the pinned
-  `facebook/encodec_48khz` files; its population is `op17-v1-433b26a1`.
+  `facebook/encodec_48khz` files; its population is `op17-v1-2ce5225d`.
 - Record the OD-AR licence in the 24 kHz export manifest as the 48 kHz one
   does (`license`: `CC-BY-NC-4.0`, `Meta Platforms`), with
   `checkpoint_delivery` `upstream-convert` and `derived_graph_publication`
@@ -32,7 +32,15 @@
   `verify_export.py` asserts these values, and its self-test refuses each
   planted change to them. The graphs are unchanged. The 24 kHz population is
   re-pinned to `op17-v2-bb615145`, and the 48 kHz one, which records
-  `export_24khz.py`, to `op17-v1-433b26a1`.
+  `export_24khz.py`, to `op17-v1-2ce5225d`.
+- Require real booleans in both recorded artifact policies. In Python
+  `0 == False`, so comparing the recorded policy with the expected one
+  admitted a manifest that recorded a number where the export writes a
+  boolean. `verify_export.py` and `verify_48khz.py` now also require the
+  recorded type, and each self-test plants the numbers that compared equal.
+  The 48 kHz manifest records `verify_48khz.py`, so its population moves from
+  `op17-v1-433b26a1` to `op17-v1-2ce5225d`; the two graphs and the codebooks
+  are byte-identical, and only that one source digest changes in the manifest.
 - Bind every converter input to its upstream download URL. The binding moves
   to `kilix.encodec.converter-inputs/v2` with one entry per profile.
 - Retire `tools/NO-MODEL-GRANT-24KHZ.txt` and the converter's own notice

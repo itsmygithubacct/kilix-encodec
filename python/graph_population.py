@@ -12,8 +12,8 @@ PROFILES = {
         ("rvq_encode_12kbps_op17.onnx", 16285603, "cf1c80c23955255809ba90f564e6f30e0911851a298c4622f180585b4a4c5a37"),
         ("rvq_decode_12kbps_op17.onnx", 8396869, "5e0db494814c629326fe4d82ce799915fdb45f841d3d99526bf126468849b9b2"),
     )),
-    2: ("encodec-48khz-frame", "op17-v1-433b26a1", 100663296, (
-        ("manifest.json", 3930, "433b26a118db6f33a329f512cb4ae3cc69441b16ad22c1017ec4526851a4e7ba"),
+    2: ("encodec-48khz-frame", "op17-v1-2ce5225d", 100663296, (
+        ("manifest.json", 3930, "2ce5225dc458dd30fe91854755dcfb360300fe3cee7d0c5682e7be684eae7a87"),
         ("encoder_frame_op17.onnx", 29909926, "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a"),
         ("decoder_frame_op17.onnx", 29882042, "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1"),
         ("rvq-codebooks.f32le", 8388608, "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"),

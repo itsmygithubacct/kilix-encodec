@@ -690,7 +690,7 @@ static kenc_result stereo_create(kenc_stereo **out, const model_input *input,
     };
     static const size_t sizes[4] = {3930u, 29909926u, 29882042u, 8388608u};
     static const char *const hashes[4] = {
-        "433b26a118db6f33a329f512cb4ae3cc69441b16ad22c1017ec4526851a4e7ba",
+        "2ce5225dc458dd30fe91854755dcfb360300fe3cee7d0c5682e7be684eae7a87",
         "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a",
         "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1",
         "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"
