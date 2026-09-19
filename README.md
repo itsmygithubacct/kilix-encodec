@@ -485,6 +485,13 @@ only reads it. An absent or empty `--receipt-store`, and an absent or empty
 `--manifest-digest`, are refused by the same gate, with exit status 1, before
 any input is read.
 
+Whatever stands at a receipt's file name is decided by the same gate. A FIFO,
+device, directory, oversized or unreadable entry is not a receipt: the vendored
+kilix-license refuses it without opening or waiting on it. A readable but
+malformed one is refused as well, whatever its parse raises. Every failure of
+the licence authority is this gate's refusal, so no conversion begins on one,
+and a covering receipt beside such an entry still converts.
+
 ### Running a conversion
 
 `kilix models install` is to download the pinned upstream bytes on first use,

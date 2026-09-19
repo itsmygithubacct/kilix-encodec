@@ -13,7 +13,11 @@
   is read. The commands take `--receipt-store` and `--manifest-digest`, embed
   the pinned kilix-license modules and record, and never write receipts.
   An absent or empty `--receipt-store` or `--manifest-digest` is refused by
-  that gate, with exit status 1 and before any input is read.
+  that gate, with exit status 1 and before any input is read. So is whatever
+  else stands at a receipt's file name: a FIFO, device, directory, oversized or
+  unreadable entry, which kilix-license never opens or waits on, and a
+  malformed regular file. Every failure of the licence authority is the gate's
+  refusal, never an unhandled error.
   `kilix models install` runs the commands only once C4 (kilix-content) and
   KX (the kilix installer) land.
 - Add the 48 kHz stereo frame converter, `tools/build_converter.py --profile

@@ -902,6 +902,197 @@ print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.ge
                 self.assertTrue(control)
                 self.assertEqual(list(output.iterdir()), [])
 
+    # --- E1-RV: the re-vendored authority, its receipts, and junk at receipt names ---
+
+    #: Context keys a receipt written by the vendored kilix-license carries and
+    #: the pre-LIC4 vendored code did not. Its parser refused them (E1-VERIFY F8).
+    LIC4_CONTEXT = ('binding_text_ids', 'component_exception_digests',
+                    'licence_text_id', 'statement_digests')
+    #: Receipts written by the kilix-license code E1 vendored (`d8e2c40a`), by a
+    #: git archive of that commit. Their bytes are their receipt digests.
+    OLD_RECEIPTS = ROOT / 'tests' / 'data' / 'receipts-d8e2c40a'
+    OLD_RECEIPT_DIGESTS = {
+        '24khz': '6f093f9f97869aa6f986ed3b658faa1ab69fbf2b670d41d772300132d73b5fa9',
+        '48khz': '673675ba15942b938fe296795dda7ec0b2b1f5b44ac217f65baa76bc5a697a6c',
+    }
+    #: Entries planted at a receipt's own file name. The non-regular ones must
+    #: never be opened or waited on; the regular ones are malformed receipts.
+    JUNK_ENTRIES = ('fifo', 'directory', 'dev-zero-symlink', 'dangling-symlink',
+                    'self-loop-symlink', 'mode-000', 'oversized', 'not-utf8',
+                    'not-json', 'json-array', 'empty', 'decision-list',
+                    'deep-nesting', 'schema-v2')
+
+    def plant_junk(self, kind, path, valid):
+        """Plant one junk entry at path, using valid as the well-formed base."""
+        base = json.loads(valid.read_bytes())
+        if kind == 'fifo':
+            os.mkfifo(path, 0o600)
+        elif kind == 'directory':
+            path.mkdir(mode=0o700)
+        elif kind == 'dev-zero-symlink':
+            path.symlink_to('/dev/zero')
+        elif kind == 'dangling-symlink':
+            path.symlink_to(path.parent / 'never-created')
+        elif kind == 'self-loop-symlink':
+            path.symlink_to(path.name)
+        elif kind == 'mode-000':
+            path.write_bytes(valid.read_bytes())
+            path.chmod(0)
+        elif kind == 'oversized':
+            data = valid.read_bytes()
+            path.write_bytes(data + b' ' * (1024 * 1024 + 1 - len(data)))
+        elif kind == 'not-utf8':
+            path.write_bytes(b'\xff\xfe\x00junk')
+        elif kind == 'not-json':
+            path.write_bytes(b'this is not a receipt\n')
+        elif kind == 'json-array':
+            path.write_bytes(b'[]\n')
+        elif kind == 'empty':
+            path.write_bytes(b'')
+        elif kind == 'decision-list':
+            path.write_text(json.dumps({**base, 'decision': []}, sort_keys=True))
+        elif kind == 'deep-nesting':
+            path.write_bytes(b'[' * 200_000)
+        elif kind == 'schema-v2':
+            path.write_text(json.dumps({**base, 'schema': 'kilix.license.receipt/v2'}, sort_keys=True))
+        else:
+            raise AssertionError('unknown junk kind: ' + kind)
+
+    def test_binding_lists_every_vendored_authority_module(self):
+        """A module added upstream must be bound, or it cannot be embedded."""
+        bound = binding()['licence_authority']
+        package = ROOT / 'third_party/kilix-license/src/kilix_license'
+        modules = {'third_party/kilix-license/src/kilix_license/' + path.name
+                   for path in package.glob('*.py')}
+        self.assertTrue(modules)
+        listed = set(bound['files'])
+        self.assertEqual(modules - listed, set())
+        records = {selected['record']['path'] for selected in binding()['profiles'].values()}
+        self.assertEqual(listed, modules | records | {'third_party/kilix-license.pin',
+                                                      'third_party/kilix-license/LICENSE'})
+        # Every bound module is embedded in the command, under its own name.
+        for profile in builder.PROFILES:
+            selected = builder.select_profile(binding(), profile)
+            embedded = builder.authority_payload(binding(), selected)['modules']
+            self.assertEqual(set(embedded), {
+                'kilix_license' if name.endswith('/__init__.py')
+                else 'kilix_license.' + Path(name).stem for name in modules})
+
+    def test_gate_admits_receipts_from_the_vendored_and_the_earlier_authority(self):
+        """E1-VERIFY F8: both writers' receipts cover, on both commands."""
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                runtime = runtime_module(profile)
+                # The vendored writer, whose receipts carry the LIC4 context.
+                store = self.receipt_store('vendored-writer-' + profile)
+                receipt, path = self.write_receipt(store, profile, 'b' * 64)
+                context = json.loads(path.read_text())['context']
+                for key in self.LIC4_CONTEXT:
+                    self.assertIn(key, context)
+                self.assertEqual(runtime.require_receipt(store, 'b' * 64).digest, receipt.digest)
+                # The writer E1 vendored: no LIC4 context, and still covering.
+                old = self.receipt_store('earlier-writer-' + profile)
+                record = binding()['profiles'][profile]['record']['digest']
+                name = next(item.name for item in self.OLD_RECEIPTS.iterdir()
+                            if item.name.startswith(record))
+                fixture = self.OLD_RECEIPTS / name
+                digest = name.removeprefix(record + '-').removesuffix('.json')
+                raw = json.loads(fixture.read_bytes())
+                self.assertEqual(raw['manifest_digest'], digest)
+                self.assertEqual(sorted(raw['context']),
+                                 ['advisory_digests', 'catalogue_digest', 'release_digest'])
+                self.assertEqual(hashlib.sha256(fixture.read_bytes()).hexdigest(),
+                                 self.OLD_RECEIPT_DIGESTS[profile])
+                (old / name).write_bytes(fixture.read_bytes())
+                admitted = runtime.require_receipt(old, digest)
+                self.assertEqual(admitted.digest, self.OLD_RECEIPT_DIGESTS[profile])
+
+    def test_gate_refuses_junk_at_a_receipt_name_without_waiting(self):
+        """Every junk entry is a refusal, and none of them blocks.
+
+        The gate runs in a child, so a FIFO or device that was waited on shows
+        up as a timeout instead of a hung suite.
+        """
+        helper = self.root / 'junk_gate.py'
+        helper.write_text('''import json,sys,types
+path,store,digest=sys.argv[1:4]
+module=types.ModuleType("converter_under_test");module.__file__=path
+exec(compile(open(path).read(),path,"exec"),module.__dict__)
+try:receipt=module.require_receipt(store,digest)
+except BaseException as error:
+ row={"outcome":"REFUSED" if isinstance(error,module.LicenceRefused) else "ESCAPED",
+      "type":type(error).__name__,"message":str(error)[:200]}
+else:row={"outcome":"ADMITTED","receipt":receipt.digest}
+print(json.dumps(row,sort_keys=True))
+''')
+        for profile in builder.PROFILES:
+            command = self.root / ('junk-command-' + profile)
+            command.write_text(rendered_command(profile))
+            record = binding()['profiles'][profile]['record']['digest']
+            for kind in self.JUNK_ENTRIES:
+                with self.subTest(profile=profile, kind=kind):
+                    store = self.receipt_store(f'junk-{kind}-{profile}')
+                    valid, _path = self.write_receipt(store, profile, 'c' * 64)
+                    covered = store / f'{record}-{"c" * 64}.json'
+                    planted = store / f'{record}-{"d" * 64}.json'
+                    self.plant_junk(kind, planted, covered)
+                    # Asked for the junk entry's own binding: a refusal, named.
+                    result = subprocess.run(
+                        ['/usr/bin/python3', '-I', '-B', str(helper), str(command), str(store), 'd' * 64],
+                        text=True, capture_output=True, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    row = json.loads(result.stdout)
+                    self.assertEqual(row['outcome'], 'REFUSED', row)
+                    self.assertEqual(row['type'], 'LicenceRefused', row)
+                    # The receipt beside it still covers its own binding.
+                    result = subprocess.run(
+                        ['/usr/bin/python3', '-I', '-B', str(helper), str(command), str(store), 'c' * 64],
+                        text=True, capture_output=True, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout),
+                                     {'outcome': 'ADMITTED', 'receipt': valid.digest})
+                    if kind == 'mode-000':
+                        planted.chmod(0o600)
+
+    def test_command_entry_refuses_junk_at_a_receipt_name_cleanly(self):
+        """The command exits 1 with the gate's refusal, never a traceback."""
+        for profile in builder.PROFILES:
+            command = self.root / ('junk-entry-' + profile)
+            command.write_text(rendered_command(profile))
+            record = binding()['profiles'][profile]['record']['digest']
+            for kind in ('fifo', 'dev-zero-symlink', 'decision-list', 'deep-nesting'):
+                with self.subTest(profile=profile, kind=kind):
+                    store = self.receipt_store(f'entry-junk-{kind}-{profile}')
+                    _receipt, path = self.write_receipt(store, profile, 'e' * 64)
+                    self.plant_junk(kind, store / f'{record}-{"f" * 64}.json', path)
+                    result = subprocess.run(
+                        ['/usr/bin/python3', '-I', str(command), '--input', str(self.root / 'input'),
+                         '--output', str(self.root / 'output'), '--receipt-store', str(store),
+                         '--manifest-digest', 'f' * 64], text=True, capture_output=True, timeout=60)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertEqual(result.stdout, '')
+                    self.assertNotIn('Traceback', result.stderr)
+                    self.assertIn('conversion refused: no kilix-license receipt covers', result.stderr)
+                    self.assertFalse((self.root / 'output').exists())
+
+    def test_command_entry_passes_the_gate_with_a_junk_entry_beside_a_receipt(self):
+        """A junk entry under another manifest does not stop the covered one."""
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                store = self.receipt_store('junk-beside-' + profile)
+                _receipt, path = self.write_receipt(store, profile, self.COVERED_DIGEST)
+                record = binding()['profiles'][profile]['record']['digest']
+                self.plant_junk('fifo', store / f'{record}-{"9" * 64}.json', path)
+                result, touched, output, control = self.watched_command(
+                    profile, 'junk-beside', ['--receipt-store', str(store),
+                                             '--manifest-digest', self.COVERED_DIGEST])
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('conversion refused: input bytes differ from the pinned population',
+                              result.stderr)
+                self.assertTrue(any(path.endswith('/runtime.tar') for path, _mask, _name in touched))
+                self.assertTrue(control)
+                self.assertEqual(list(output.iterdir()), [])
+
     def test_packaging_48khz_binds_frame_sources_record_and_command(self):
         source, environment, python, uv, output, members = self.packaging_fixture('frame', '48khz')
         with mock.patch.object(builder, 'ROOT', source), \

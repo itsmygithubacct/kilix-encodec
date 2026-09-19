@@ -168,7 +168,13 @@ def require_receipt(store_path, manifest_digest):
         try:
             return authority.require(asset, records=authority.RecordIndex([record]),
                                      store=Store(f'/proc/self/fd/{held}'))
-        except (authority.LicenseError, ValueError, KeyError) as error:
+        # Any failure of the licence authority is this gate's refusal. A FIFO,
+        # device, directory, oversized or unreadable entry at a receipt name is
+        # refused by kilix-license itself, without waiting on it; a readable but
+        # malformed one still raises whatever its parse raises, which is not
+        # always a LicenseError (LIC4-FIX-VERIFY LIC4F-3). None of them may
+        # reach the caller as anything but a refusal, and none converts.
+        except Exception as error:
             raise LicenceRefused(
                 f'no kilix-license receipt covers {record.id}: {type(error).__name__}: {error}'
             ) from error
