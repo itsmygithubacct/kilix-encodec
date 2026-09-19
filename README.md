@@ -321,9 +321,13 @@ the frozen fixture.
 - The export tool performs 0 of 1 checkpoint downloads. It opens only the
   caller-supplied regular file, verifies its exact size and SHA-256, and uses
   PyTorch's restricted weights-only loader.
-- The 24 kHz checkpoint and every derivative remain user-supplied and
-  non-redistributable. The 48 kHz safetensors input and every derivative remain
-  scratch-only; publication is owner-reserved.
+- Both checkpoints and every derivative are CC BY-NC 4.0, licensor Meta
+  Platforms (OD-AR). They are downloaded on first use from their upstream pins
+  and converted on the user's machine only under a covering kilix-license
+  receipt (see "Local conversion commands"); nothing is redistributed, and
+  publication is owner-reserved. The frozen 24 kHz export manifest still
+  records its historical `checkpoint_delivery` and `license_determination`
+  strings, because changing them would change the pinned population.
 
 Large graphs, weights, and codebooks do not belong in Git history.
 
@@ -401,13 +405,15 @@ data. `make test-content-ipc` checks C descriptor framing, privacy, limits,
 cancellation and cleanup with an explicitly synthetic embedded peer. These
 fixtures provide no actual model admission or release qualification credit.
 
-## Local 24 kHz conversion command
+## Local conversion commands
 
 `tools/build_converter.py` builds a relocatable conversion command from the
-unchanged export source and lock. Run it with system Python on Linux x86-64:
+unchanged export source and lock. Run it with system Python on Linux x86-64,
+once per profile:
 
 ```sh
-python3 tools/build_converter.py
+python3 tools/build_converter.py                    # 24 kHz stateful graphs
+python3 tools/build_converter.py --profile 48khz    # 48 kHz stereo frame graphs
 ```
 
 The default build acquires the exact UV 0.12.3 and CPython 3.12.8 tool archives
@@ -423,10 +429,16 @@ An explicit development environment can be selected only with all three
 `--environment`, `--python` and `--uv` paths. That route records the selected
 bytes and the exact package population; it does not acquire a new environment.
 
-The output consists of `bin/kilix-encodec-convert-24khz` and its adjacent
-`.converter/runtime.tar` and build receipt. Keep these together when relocating
-them. The receipt binds the exporter, lock, tools, package population, every
-runtime member, notices, builder and generated command. It is build evidence;
+| profile | command | runtime directory | upstream input | output population |
+| --- | --- | --- | --- | --- |
+| `24khz` | `bin/kilix-encodec-convert-24khz` | `.converter` | `encodec_24khz-d7cc33bc.th` from `dl.fbaipublicfiles.com` | 8 stateful graphs and `manifest.json` (`op17-v2-e151992a`) |
+| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-065746be`) |
+
+Each output consists of the command, its adjacent runtime directory holding
+`runtime.tar`, and a build receipt. Keep these together when relocating them.
+The receipt binds the profile, the exporter, lock, tools, package population,
+every runtime member, notices, the pinned licence authority, builder and
+generated command. It is build evidence;
 F100 installed-asset and source-supply authority are separate. Existing output
 entries are never overwritten. The dedicated build process owns and reaps its
 children before removing its private staging directories, including children
@@ -436,36 +448,78 @@ Generated package `RECORD` indexes are omitted because they include temporary
 environment command wrappers which are not shipped. Dependency code, version
 metadata and license notices are retained and bound in the runtime receipt.
 
-Invoke the command with the original, locally supplied checkpoint and an
-existing, empty directory owned by the current user with mode 0700:
+### Licence receipt gate
+
+Both checkpoints and every derivative are CC BY-NC 4.0, licensor Meta
+Platforms (owner decision OD-AR). The licence authority is kilix-license
+(OD-AJ): its records, first-use screen, agreement and receipts decide, and the
+converter carries no terms text of its own. `third_party/kilix-license/` is a
+`git archive` of kilix-license at the commit in `third_party/kilix-license.pin`.
+The builder verifies every vendored file against `tools/converter-inputs.json`
+and embeds the kilix-license modules and the profile's licence record in the
+command, so nothing is imported from disk at run time:
+
+| profile | licence record | record digest |
+| --- | --- | --- |
+| `24khz` | `encodec-24khz-stateful` | `8af1dc699df34436899f0b93dce271d2fadb119f62e136e74ad797686d880f4b` |
+| `48khz` | `encodec-48khz-frame` | `9c1baee4ad48816bba2568c7e14f136b388f11722d6e422a933a1a4a24d30f3f` |
+
+Before it reads any input, runtime or output, the command calls kilix-license
+`require()` for that record and the asset manifest digest it is given. It
+refuses unless the receipt store holds a receipt covering the whole binding:
+record digest, manifest digest, licence id, licence text digest, decision,
+licensor and the agreement-required non-commercial condition. A missing
+receipt, a receipt for another manifest or record, or a planted receipt whose
+licence text digest or any other bound field changed is refused. The receipt
+store must be an existing private directory of the current user; the command
+only reads it.
+
+### Running a conversion
+
+`kilix models install` downloads the pinned upstream bytes on first use, after
+the licence screen has recorded a receipt, and then runs the command. The
+input is never a user-selected file: the command accepts only the exact pinned
+sizes and SHA-256 digests above.
 
 ```sh
 bin/kilix-encodec-convert-24khz \
   --input /absolute/path/to/encodec_24khz-d7cc33bc.th \
   --output /absolute/path/to/empty-output \
+  --receipt-store /absolute/path/to/kilix-license-receipts \
+  --manifest-digest ASSET_MANIFEST_SHA256 \
   --timeout 180
+
+bin/kilix-encodec-convert-48khz \
+  --input /absolute/path/to/directory-with-the-three-model-files \
+  --output /absolute/path/to/empty-output \
+  --receipt-store /absolute/path/to/kilix-license-receipts \
+  --manifest-digest ASSET_MANIFEST_SHA256 \
+  --timeout 300
 ```
 
-The command accepts only the exact size and SHA-256 of the frozen original
-checkpoint. It seals that input and its complete runtime before execution,
-uses the restricted weights-only exporter in a private process/network/mount
-namespace, and checks all nine output files against the native population.
-The bounded temporary runtime is read-only before the selected interpreter
-starts; the trusted bootstrap installs hard resource limits first. Two CPU
-threads are selected. Cancellation and deadlines tear down the owned process
-tree. A failed attempt can leave partial files in its output directory for
-the caller to inspect or discard; a new conversion requires an empty output.
+`--manifest-digest` is the asset record's manifest digest, the value the
+licence screen bound into the receipt. The output directory must exist, be
+empty, be owned by the current user and have mode 0700. The command seals
+every input and its complete runtime before execution, runs the unchanged
+exporter in a private process/network/mount namespace (the restricted
+weights-only loader for 24 kHz, safetensors only for 48 kHz), and checks every
+output file against the bound population. The bounded temporary runtime is
+read-only before the selected interpreter starts; the trusted bootstrap
+installs hard resource limits first. Two CPU threads are selected.
+Cancellation and deadlines tear down the owned process tree. A failed attempt
+can leave partial files in its output directory for the caller to inspect or
+discard; a new conversion requires an empty output.
 
-Successful output also carries `notices/NO-MODEL-GRANT-24KHZ.txt`, which cites
-the pinned commit's MIT LICENSE by sha256 and records that the weights stay
-CC BY-NC 4.0 (OD-AR). Neither this tool nor its output grants redistribution,
-creates a source-supply decision, or admits an installed model. Checkpoints,
-runtime archives and generated graphs must not be committed to this repository.
-The command needs system Python, bubblewrap, user namespaces and Linux memfd
-seals. The development runtime occupies roughly 1.1 GiB on disk and additional
-temporary memory while converting; this is not a fitted device profile.
+The output holds exactly the bound population and no notice: licence notices
+are the installer's, taken from kilix-license texts. Neither this tool nor its
+output grants redistribution, creates a source-supply decision, or admits an
+installed model. Checkpoints, runtime archives and generated graphs must not be
+committed to this repository. The command needs system Python, bubblewrap,
+user namespaces and Linux memfd seals. The development runtime occupies
+roughly 1.1 GiB on disk and additional temporary memory while converting; this
+is not a fitted device profile.
 
-`python3 tests/test_converter.py -v` runs bounded file, cancellation, process
-ownership and output-publication controls without model payloads or network
+`make test-converter` runs bounded file, cancellation, process ownership,
+output-publication and receipt-gate controls without model payloads or network
 access. Real conversion, reproducible builds and installed admission require
 their separate exact inputs and evidence.

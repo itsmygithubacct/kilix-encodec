@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Vendor kilix-license by `git archive` into `third_party/kilix-license/`,
+  pinned in `third_party/kilix-license.pin` (owner decision OD-AJ).
+- Refuse every conversion unless a kilix-license receipt covers the
+  checkpoint's licence record binding (`require()`), checked before any input
+  is read. The commands take `--receipt-store` and `--manifest-digest`, embed
+  the pinned kilix-license modules and record, and never write receipts.
+- Add the 48 kHz stereo frame converter, `tools/build_converter.py --profile
+  48khz` (`bin/kilix-encodec-convert-48khz`), from the pinned
+  `facebook/encodec_48khz` files; its population is `op17-v1-065746be`.
+- Bind every converter input to its upstream download URL. The binding moves
+  to `kilix.encodec.converter-inputs/v2` with one entry per profile.
+- Retire `tools/NO-MODEL-GRANT-24KHZ.txt` and the converter's own notice
+  writing: the output is exactly the bound population, and licence notices
+  come from kilix-license. Both checkpoints stay CC BY-NC 4.0 (OD-AR).
 - Add the C5-R4 epoch-start profile (owner decision OD-AL): every 24 kHz epoch,
   and the stream, starts with a four-packet repeat pre-roll on both sides, in
   the Python streaming runtime and the native runtime. Graph bytes and the

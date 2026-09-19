@@ -4,6 +4,8 @@
 By default this creates a fresh CPU environment. An explicit development
 environment may be selected with all three path options. Both routes bind
 actual runtime bytes; neither includes or acquires a checkpoint or graph.
+Each build makes one conversion profile's command (24 kHz stateful graphs or
+48 kHz frame graphs), which refuses to run without a kilix-license receipt.
 """
 from __future__ import annotations
 
@@ -31,6 +33,12 @@ import converter_build_io as build_io
 ROOT = Path(__file__).resolve().parents[1]
 MAXIMUM_BYTES = 2 * 1024**3
 MAXIMUM_FILES = 50000
+PROFILES = ('24khz', '48khz')
+BINDING_SCHEMA = 'kilix.encodec.converter-inputs/v2'
+AUTHORITY_PACKAGE = 'third_party/kilix-license/src/kilix_license/'
+AUTHORITY_RECORDS = AUTHORITY_PACKAGE + 'data/records/'
+AUTHORITY_LICENSE = 'third_party/kilix-license/LICENSE'
+AUTHORITY_PIN = 'third_party/kilix-license.pin'
 
 
 CHECK = lambda: None
@@ -51,14 +59,74 @@ def owned(path):
     return value
 
 
-def build(environment, python, uv, output_root):
+def profile_names(profile):
+    """Converter directory and command name; 24 kHz keeps its 0.2.1 names."""
+    if profile not in PROFILES:
+        raise ValueError('conversion profile is unsupported')
+    return ('.converter' if profile == '24khz' else '.converter-' + profile,
+            'kilix-encodec-convert-' + profile)
+
+
+def select_profile(binding, profile):
+    """Return one profile's bound command, inputs, outputs and licence record."""
+    if binding.get('schema') != BINDING_SCHEMA:
+        raise ValueError('converter binding schema differs')
+    directory, command = profile_names(profile)
+    selected = binding.get('profiles', {}).get(profile)
+    if not isinstance(selected, dict):
+        raise ValueError('conversion profile is not bound')
+    if (selected.get('command') != command or selected.get('directory') != directory
+            or selected.get('input') not in ('file', 'directory')
+            or not selected.get('inputs') or not selected.get('outputs')):
+        raise ValueError('conversion profile binding is incomplete')
+    for name, pinned in selected['inputs'].items():
+        if '/' in name or not str(pinned.get('url', '')).startswith('https://'):
+            raise ValueError('conversion input must be one pinned upstream download')
+    record = selected.get('record', {})
+    if record.get('path') != AUTHORITY_RECORDS + record.get('id', '') + '.json':
+        raise ValueError('conversion profile licence record is not the pinned authority record')
+    return selected
+
+
+def authority_payload(binding, selected):
+    """Embed the pinned kilix-license modules and the profile's licence record."""
+    authority = binding.get('licence_authority', {})
+    files = authority.get('files', {})
+    for required in (AUTHORITY_PIN, AUTHORITY_LICENSE, selected['record']['path']):
+        if required not in files:
+            raise ValueError('licence authority binding is incomplete')
+    payload = {}
+    for name, expected in files.items():
+        payload[name] = build_io.file_bytes(ROOT / name, CHECK, maximum=1024**2, expected=expected)
+    if payload[AUTHORITY_PIN] != (authority.get('ref', '') + '\n').encode():
+        raise ValueError('vendored licence authority differs from its pin')
+    modules = {}
+    for name, data in sorted(payload.items()):
+        if name.startswith(AUTHORITY_PACKAGE) and name.endswith('.py') and name.count('/') == 4:
+            module = 'kilix_license' + ('' if name.endswith('/__init__.py')
+                                        else '.' + Path(name).stem)
+            modules[module] = ['/kilix-license/src/kilix_license/' + Path(name).name, data.decode()]
+    if 'kilix_license' not in modules or 'kilix_license.coverage' not in modules:
+        raise ValueError('licence authority modules are incomplete')
+    return {'modules': modules, 'record': payload[selected['record']['path']].decode(),
+            'ref': authority['ref']}
+
+
+def profile_payload(selected, profile):
+    """The profile facts the generated command needs, nothing else."""
+    return {'directory': selected['directory'], 'entry': selected['entry'],
+            'input': selected['input'], 'inputs': selected['inputs'],
+            'label': selected['label'], 'profile': profile,
+            'record': {'digest': selected['record']['digest'], 'id': selected['record']['id']}}
+
+
+def build(environment, python, uv, output_root, profile='24khz'):
     environment = owned(environment)
     python = owned(python)
     uv = owned(uv)
     output_root = owned(output_root)
-    binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=65536))
-    if binding.get('schema') != 'kilix.encodec.converter-inputs/v1':
-        raise ValueError('converter binding schema differs')
+    binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=262144))
+    selected = select_profile(binding, profile)
     pin = binding.get('encodec_source')
     expected_commit = '2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e'
     expected_url = ('https://github.com/facebookresearch/encodec/archive/'
@@ -73,7 +141,7 @@ def build(environment, python, uv, output_root):
         raise ValueError('converter toolchain is not the pinned MIT encodec')
     if ['encodec', '0.1.1'] in binding.get('runtime_packages', []):
         raise ValueError('converter still selects PyPI encodec 0.1.1')
-    for name, expected in binding['source_files'].items():
+    for name, expected in {**binding['source_files'], **selected['source_files']}.items():
         if digest(ROOT / name) != expected:
             raise ValueError('export source or lock differs from the native population')
     pyproject = build_io.file_bytes(ROOT / 'pyproject.toml', CHECK, maximum=2 * 1024**2)
@@ -87,8 +155,8 @@ def build(environment, python, uv, output_root):
     if digest(python) != binding['python_binary_sha256'] or digest(uv) != binding['uv_binary_sha256']:
         raise ValueError('export toolchain executable identity differs')
     python_root = python.parent.parent
-    selected = environment / 'bin/python'
-    if selected.resolve(strict=True) != python:
+    interpreter = environment / 'bin/python'
+    if interpreter.resolve(strict=True) != python:
         raise ValueError('environment uses a different interpreter')
     # Read metadata without executing caller-selected interpreter/site code.
     distributions = []
@@ -106,8 +174,8 @@ def build(environment, python, uv, output_root):
     if ['encodec', '0.1.1'] in distributions:
         raise ValueError('export environment installed PyPI encodec 0.1.1')
     evidence = {'packages': sorted(distributions), 'toolchain': binding['toolchain']}
-    converter = output_root / '.converter'
-    executable = output_root / 'bin/kilix-encodec-convert-24khz'
+    converter = output_root / selected['directory']
+    executable = output_root / 'bin' / selected['command']
     if os.path.lexists(converter) or os.path.lexists(executable):
         raise ValueError('refusing any existing converter output')
     entries = {}
@@ -167,7 +235,7 @@ def build(environment, python, uv, output_root):
             raise ValueError('dependency directory symlink is unsupported')
     if archived_metadata != set(metadata_hashes):
         raise ValueError('dependency metadata population changed during packaging')
-    for name, expected in binding['source_files'].items():
+    for name, expected in {**binding['source_files'], **selected['source_files']}.items():
         add('source/' + name, ROOT / name, ROOT, expected=expected)
     add('bin/uv', uv, uv.parent, 0o700, expected=binding['uv_binary_sha256'])
     for name, expected in binding['uv_notices'].items():
@@ -177,12 +245,15 @@ def build(environment, python, uv, output_root):
     license_path = ROOT / 'tools/converter-notices/encodec-LICENSE-MIT'
     build_io.file_bytes(license_path, CHECK, maximum=65536, expected=pin['license_sha256'])
     add('notices/encodec-LICENSE-MIT', license_path, ROOT, expected=pin['license_sha256'])
+    add('notices/kilix-license-LICENSE', ROOT / AUTHORITY_LICENSE, ROOT,
+        expected=binding['licence_authority']['files'][AUTHORITY_LICENSE])
     total = sum(row[1] for row in entries.values())
     if not 1 <= len(entries) <= MAXIMUM_FILES or not 1 <= total <= MAXIMUM_BYTES:
         raise ValueError('converter runtime exceeds its declared resource bound')
-    notice = build_io.file_bytes(ROOT / 'tools/NO-MODEL-GRANT-24KHZ.txt', CHECK, maximum=65536)
-    if hashlib.sha256(notice).hexdigest() != binding['notice_sha256']:
-        raise ValueError('model notice differs')
+    # The licence decision is kilix-license's (OD-AJ): the command embeds the
+    # pinned authority and a record; it carries no terms text of its own.
+    authority = authority_payload(binding, selected)
+    runtime_profile = profile_payload(selected, profile)
     output_guard = build_io.Directory(output_root)
     stage_name = '.converter-build-' + uuid.uuid4().hex
     os.mkdir(stage_name, 0o700, dir_fd=output_guard.fd)
@@ -213,18 +284,25 @@ def build(environment, python, uv, output_root):
         template = template_bytes.decode()
         for old, new in {
             '@BUNDLE_SHA256@': archive_hash, '@BUNDLE_BYTES@': str(archive_size),
-            '@RUNTIME_BYTES@': str(total), '@OUTPUTS_JSON@': json.dumps(binding['outputs'], sort_keys=True, separators=(',', ':')),
-            '@NOTICE_HEX@': notice.hex(),
+            '@RUNTIME_BYTES@': str(total),
+            '@OUTPUTS_JSON@': json.dumps(selected['outputs'], sort_keys=True, separators=(',', ':')),
+            '@PROFILE_HEX@': json.dumps(runtime_profile, sort_keys=True, separators=(',', ':')).encode().hex(),
+            '@AUTHORITY_HEX@': json.dumps(authority, sort_keys=True, separators=(',', ':')).encode().hex(),
         }.items():
             if template.count(old) != 1:
                 raise ValueError('converter template does not match the builder')
             template = template.replace(old, new)
-        compile(template, 'kilix-encodec-convert-24khz', 'exec')
+        compile(template, selected['command'], 'exec')
         (stage / 'command').write_text(template)
         (stage / 'command').chmod(0o700)
         (stage / 'runtime.tar').chmod(0o400)
-        receipt = {'schema': 'kilix.encodec.converter-build/v2', 'toolchain': evidence['toolchain'],
-            'packages': evidence['packages'], 'source_files': binding['source_files'],
+        receipt = {'schema': 'kilix.encodec.converter-build/v3', 'toolchain': evidence['toolchain'],
+            'profile': profile, 'command': selected['command'],
+            'inputs': selected['inputs'], 'outputs': selected['outputs'],
+            'licence_authority': {'ref': authority['ref'], 'record': runtime_profile['record'],
+                                  'files': binding['licence_authority']['files']},
+            'packages': evidence['packages'],
+            'source_files': {**binding['source_files'], **selected['source_files']},
             'runtime_tar_sha256': archive_hash, 'runtime_tar_bytes': archive_size,
             'runtime_bytes': total, 'runtime_files': rows,
             'command_sha256': digest(stage / 'command'),
@@ -239,12 +317,12 @@ def build(environment, python, uv, output_root):
         if not executable.parent.is_dir() or executable.parent.is_symlink() or os.path.lexists(executable):
             raise ValueError('unsafe converter executable destination')
         output_guard.check()
-        build_io.rename_new(output_guard.fd, stage_name, output_guard.fd, '.converter')
+        build_io.rename_new(output_guard.fd, stage_name, output_guard.fd, selected['directory'])
         published = True
         os.link(converter / 'command', executable)
         (converter / 'command').unlink()
-        print(json.dumps({key: receipt[key] for key in ('schema', 'runtime_tar_sha256', 'runtime_tar_bytes',
-            'runtime_bytes', 'command_sha256', 'model_payloads_included')}, indent=2))
+        print(json.dumps({key: receipt[key] for key in ('schema', 'profile', 'command', 'runtime_tar_sha256',
+            'runtime_tar_bytes', 'runtime_bytes', 'command_sha256', 'model_payloads_included')}, indent=2))
     finally:
         try:
             if not published:
@@ -360,7 +438,9 @@ def supervised_build(args, deadline):
         cache = stack.enter_context(build_io.Directory(args.cache_dir, create=True, private=True))
         CHECK = lambda: build_io.checkpoint(deadline, source, target, cache)
         CHECK()
-        for name in ('.converter', 'bin/kilix-encodec-convert-24khz'):
+        profile = getattr(args, 'profile', '24khz')
+        directory, command = profile_names(profile)
+        for name in (directory, 'bin/' + command):
             try:
                 os.stat(name, dir_fd=target.fd, follow_symlinks=False)
             except FileNotFoundError:
@@ -377,8 +457,9 @@ def supervised_build(args, deadline):
             if (os.fstat(stage.fd).st_dev, os.fstat(stage.fd).st_ino) != (identity.st_dev, identity.st_ino):
                 raise ValueError('new build directory identity differs')
             CHECK = lambda: build_io.checkpoint(deadline, source, target, cache, stage)
-            binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=65536))
-            for relative, expected in binding['source_files'].items():
+            binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=262144))
+            profiled = select_profile(binding, profile)
+            for relative, expected in {**binding['source_files'], **profiled['source_files']}.items():
                 build_io.file_bytes(ROOT / relative, CHECK, maximum=2 * 1024**2, expected=expected)
             if args.environment is None:
                 environment, python, uv = prepare_environment(binding, cache, stage, args.offline)
@@ -389,21 +470,21 @@ def supervised_build(args, deadline):
             CHECK = lambda: build_io.checkpoint(deadline, source, target, cache, stage, *selected)
             package = stage.path / 'package'
             package.mkdir(mode=0o700)
-            build(environment, python, uv, package)
+            build(environment, python, uv, package, profile)
             CHECK()
             binary = stack.enter_context(build_io.Directory(target.path / 'bin', create=True))
-            converter = stack.enter_context(build_io.Directory(package / '.converter', private=True))
+            converter = stack.enter_context(build_io.Directory(package / directory, private=True))
             package_directory = stack.enter_context(build_io.Directory(package))
             packaged_binary = stack.enter_context(build_io.Directory(package / 'bin'))
-            info = os.stat('kilix-encodec-convert-24khz', dir_fd=packaged_binary.fd, follow_symlinks=False)
+            info = os.stat(command, dir_fd=packaged_binary.fd, follow_symlinks=False)
             command_inode = (info.st_dev, info.st_ino)
-            build_io.rename_new(package_directory.fd, '.converter', target.fd, '.converter')
+            build_io.rename_new(package_directory.fd, directory, target.fd, directory)
             published = True
-            os.link('kilix-encodec-convert-24khz', 'kilix-encodec-convert-24khz',
+            os.link(command, command,
                     src_dir_fd=packaged_binary.fd, dst_dir_fd=binary.fd, follow_symlinks=False)
             target.check()
             binary.check()
-            visible = os.stat('.converter', dir_fd=target.fd, follow_symlinks=False)
+            visible = os.stat(directory, dir_fd=target.fd, follow_symlinks=False)
             held = os.fstat(converter.fd)
             if (visible.st_dev, visible.st_ino) != (held.st_dev, held.st_ino):
                 raise ValueError('published converter directory was replaced')
@@ -412,20 +493,20 @@ def supervised_build(args, deadline):
             # Never unlink a substitute at the final command name.
             if command_inode is not None and 'binary' in locals():
                 try:
-                    info = os.stat('kilix-encodec-convert-24khz', dir_fd=binary.fd, follow_symlinks=False)
+                    info = os.stat(command, dir_fd=binary.fd, follow_symlinks=False)
                 except FileNotFoundError:
                     pass
                 else:
                     if (info.st_dev, info.st_ino) == command_inode:
-                        os.unlink('kilix-encodec-convert-24khz', dir_fd=binary.fd)
+                        os.unlink(command, dir_fd=binary.fd)
             if published:
                 try:
-                    found = os.stat('.converter', dir_fd=target.fd, follow_symlinks=False)
+                    found = os.stat(directory, dir_fd=target.fd, follow_symlinks=False)
                 except FileNotFoundError:
                     found = None
                 held = os.fstat(converter.fd)
                 if found is not None and (found.st_dev, found.st_ino) == (held.st_dev, held.st_ino):
-                    shutil.rmtree('.converter', dir_fd=target.fd)
+                    shutil.rmtree(directory, dir_fd=target.fd)
             raise
         finally:
             build_io.reap_owned()
@@ -440,6 +521,8 @@ def supervised_build(args, deadline):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--profile', choices=PROFILES, default='24khz',
+                        help='24khz: stateful mono graphs; 48khz: stereo frame graphs')
     parser.add_argument('--environment', type=Path)
     parser.add_argument('--python', type=Path)
     parser.add_argument('--uv', type=Path)

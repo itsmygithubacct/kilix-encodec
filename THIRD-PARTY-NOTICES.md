@@ -23,7 +23,7 @@ it contains no learned model parameters.
 
 The Meta EnCodec project is reference/export input only.
 
-Code: the 24 kHz converter installs facebookresearch/encodec at commit
+Code: the 24 kHz and 48 kHz converters install facebookresearch/encodec at commit
 2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e (MIT). That commit is after the
 relicensing 349b72939f57cb3bc7b60906c0ee8228c849485d and is the earliest
 usable post-relicensing revision (349b7293's setup.py never closes
@@ -63,7 +63,10 @@ CC BY-NC 4.0, licensor Meta Platforms (owner decision OD-AR). A
 publisher-declared MIT tag on a third-party 48 kHz model card is not the
 determination. Derived graphs and codebooks inherit CC BY-NC 4.0. None may
 be committed or published from this repository without its own recorded
-license and provenance decision. The converter does not redistribute weights.
+license and provenance decision. The converters download nothing, redistribute
+no weights, and run only under a kilix-license receipt that covers the
+checkpoint's licence record binding; the licence screen and notices are
+kilix-license's, not the converters'.
 
 An optional `CONTENT=1` build embeds the explicitly selected kilix-content
 source package under that package's MIT license. The sealed ZIP contains its

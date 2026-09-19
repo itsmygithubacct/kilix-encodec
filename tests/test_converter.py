@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tarfile
@@ -27,16 +28,39 @@ import converter_build_io as build_io
 import build_converter as builder
 
 
-def runtime_module():
+def binding():
+    return json.loads((ROOT / 'tools/converter-inputs.json').read_text())
+
+
+def rendered_command(profile='24khz'):
+    """The command template with the real pinned authority and profile."""
+    bound = binding()
+    selected = builder.select_profile(bound, profile)
+    authority = builder.authority_payload(bound, selected)
     source = (ROOT / 'tools/converter_runtime.py').read_text()
     for key, value in {'@BUNDLE_SHA256@': '0' * 64, '@BUNDLE_BYTES@': '0',
                        '@RUNTIME_BYTES@': '0', '@OUTPUTS_JSON@': '{}',
-                       '@NOTICE_HEX@': ''}.items():
+                       '@PROFILE_HEX@': json.dumps(builder.profile_payload(selected, profile)).encode().hex(),
+                       '@AUTHORITY_HEX@': json.dumps(authority).encode().hex()}.items():
         source = source.replace(key, value)
+    return source
+
+
+def runtime_module(profile='24khz'):
     module = types.ModuleType('converter_test_runtime')
     module.__file__ = str(ROOT / 'tools/converter_runtime.py')
-    exec(compile(source, module.__file__, 'exec'), module.__dict__)
+    exec(compile(rendered_command(profile), module.__file__, 'exec'), module.__dict__)
     return module
+
+
+def vendored_authority():
+    """The vendored kilix-license, imported from disk to write test receipts."""
+    path = str(ROOT / 'third_party/kilix-license/src')
+    sys.dont_write_bytecode = True
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    import kilix_license
+    return kilix_license
 
 
 class ConverterTests(unittest.TestCase):
@@ -48,16 +72,17 @@ class ConverterTests(unittest.TestCase):
         shutil.rmtree(self.root)
         self.assertEqual(len(os.listdir('/proc/self/fd')), self.fds)
 
-    def packaging_fixture(self, name):
-        """Real frozen source/notice bytes; tiny inert tool/environment fixtures."""
+    def packaging_fixture(self, name, profile='24khz'):
+        """Real frozen source/notice/authority bytes; tiny inert tool/environment fixtures."""
         area = self.root / name
         area.mkdir(mode=0o700)
         source = area / 'source'
         source.mkdir(mode=0o700)
         binding = json.loads((ROOT / 'tools/converter-inputs.json').read_text())
+        selected = binding['profiles'][profile]
         notices = [*binding['uv_notices'], 'encodec-LICENSE-MIT']
-        paths = [*binding['source_files'], 'tools/converter_runtime.py',
-                 'tools/NO-MODEL-GRANT-24KHZ.txt',
+        paths = [*binding['source_files'], *selected['source_files'], 'tools/converter_runtime.py',
+                 *binding['licence_authority']['files'],
                  *('tools/converter-notices/' + item for item in notices)]
         for relative in paths:
             destination = source / relative
@@ -80,7 +105,7 @@ class ConverterTests(unittest.TestCase):
         output = area / 'output'
         output.mkdir(mode=0o700)
         members = {'source/' + relative: (source / relative, expected)
-                   for relative, expected in binding['source_files'].items()}
+                   for relative, expected in {**binding['source_files'], **selected['source_files']}.items()}
         members.update({'python/bin/python3.12': (python, binding['python_binary_sha256']),
                         'bin/uv': (uv, binding['uv_binary_sha256'])})
         members.update({'notices/' + relative: (source / 'tools/converter-notices' / relative,
@@ -89,6 +114,9 @@ class ConverterTests(unittest.TestCase):
         members['notices/encodec-LICENSE-MIT'] = (
             source / 'tools/converter-notices/encodec-LICENSE-MIT',
             binding['encodec_source']['license_sha256'])
+        members['notices/kilix-license-LICENSE'] = (
+            source / 'third_party/kilix-license/LICENSE',
+            binding['licence_authority']['files']['third_party/kilix-license/LICENSE'])
         return source, environment, python, uv, output, members
 
     def test_packaging_refuses_pypi_encodec_toolchain(self):
@@ -144,7 +172,8 @@ class ConverterTests(unittest.TestCase):
                 def mutate(path, check, **kwargs):
                     nonlocal mutated
                     data = read(path, check, **kwargs)
-                    if Path(path) == source / 'tools/NO-MODEL-GRANT-24KHZ.txt':
+                    # The first licence-authority read follows every add().
+                    if Path(path) == source / 'third_party/kilix-license.pin':
                         watched.write_bytes(changed)
                         mutated = True
                     return data
@@ -479,7 +508,7 @@ def prepare(binding,cache,stage,offline):
  python=stage.path/"python";python.mkdir(mode=0o700);(python/"bin").mkdir(mode=0o700)
  uv=stage.path/"uv";uv.mkdir(mode=0o700)
  return environment,python/"bin/python3.12",uv/"uv"
-def package(environment,python,uv,output):
+def package(environment,python,uv,output,profile):
  (output/".converter").mkdir(mode=0o700);(output/".converter/runtime.tar").write_bytes(b"runtime")
  (output/"bin").mkdir(mode=0o700);(output/"bin/kilix-encodec-convert-24khz").write_bytes(b"command")
  if kind=="ancestor":
@@ -494,7 +523,7 @@ def publish(source_dir,source,target_dir,name):
   os.mkdir(name,0o700,dir_fd=target_dir)
   (target/name/"sentinel").write_bytes(b"outside")
 builder.build_io.rename_new=publish
-args=types.SimpleNamespace(output_root=target,cache_dir=cache,environment=None,offline=True)
+args=types.SimpleNamespace(output_root=target,cache_dir=cache,environment=None,offline=True,profile="24khz")
 error=None
 try:builder.supervised_build(args,time.monotonic()+2)
 except BaseException as caught:error=type(caught).__name__
@@ -521,6 +550,231 @@ print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.ge
                     self.assertFalse((target / 'bin/kilix-encodec-convert-24khz').exists())
                 original_target = area / 'relocated/target' if kind == 'ancestor' else target
                 self.assertFalse(any(p.name.startswith('.converter-install-') for p in original_target.iterdir()))
+
+    # --- R4-067: kilix-license receipt gate, profiles, retired terms code ---
+
+    def receipt_store(self, name):
+        store = self.root / name
+        store.mkdir(mode=0o700)
+        return store
+
+    def write_receipt(self, store, profile, manifest_digest, **changes):
+        """A real kilix-license receipt, optionally planted with changed fields."""
+        authority = vendored_authority()
+        record = authority.load_determined_records().by_id(binding()['profiles'][profile]['record']['id'])
+        agreement = authority.capture_agreement(record, authority.typed_agreement_line(record))
+        receipt = authority.receipt_from_agreement(record, agreement, manifest_digest=manifest_digest,
+                                                   release_digest='1' * 64, catalogue_digest='2' * 64)
+        path = authority.ReceiptStore(store).write(receipt)
+        if changes:
+            raw = json.loads(path.read_text())
+            raw.update(changes)
+            path.write_text(json.dumps(raw, sort_keys=True) + '\n')
+        return receipt, path
+
+    def gated_run(self, runtime, store, manifest_digest):
+        """Run the command body; the input and output paths do not exist."""
+        with mock.patch.object(runtime, 'sealed', side_effect=AssertionError('input read')) as sealed:
+            try:
+                runtime.run(self.root / 'absent-input', self.root / 'absent-output', 5, store, manifest_digest)
+            finally:
+                self.assertEqual(sealed.call_count, 0)
+                self.assertFalse((self.root / 'absent-output').exists())
+
+    def test_binding_pins_vendored_authority_records_and_native_populations(self):
+        bound = binding()
+        authority = vendored_authority()
+        pin = (ROOT / 'third_party/kilix-license.pin').read_text()
+        self.assertEqual(pin, bound['licence_authority']['ref'] + '\n')
+        for name, expected in bound['licence_authority']['files'].items():
+            self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), expected, name)
+        records = authority.load_determined_records()
+        population = {}
+        exec(compile((ROOT / 'python/graph_population.py').read_text(), 'graph_population', 'exec'), population)
+        for profile, number in (('24khz', 1), ('48khz', 2)):
+            selected = builder.select_profile(bound, profile)
+            record = records.by_id(selected['record']['id'])
+            self.assertEqual(record.digest, selected['record']['digest'])
+            self.assertEqual(record.licence_ids, ('CC BY-NC 4.0',))
+            self.assertEqual(record.licensor, 'Meta Platforms')
+            self.assertEqual(record.expected_decision, 'accept')
+            files = population['PROFILES'][number][3]
+            self.assertEqual({name: {'bytes': size, 'sha256': digest} for name, size, digest in files},
+                             selected['outputs'])
+            for pinned in selected['inputs'].values():
+                self.assertTrue(pinned['url'].startswith(('https://dl.fbaipublicfiles.com/encodec/v0/',
+                    'https://huggingface.co/facebook/encodec_48khz/resolve/'
+                    'c3def8e7185ac8c8efdce6eb8c4a651e487a503e/')))
+
+    def test_converter_carries_no_terms_text_of_its_own(self):
+        self.assertFalse((ROOT / 'tools/NO-MODEL-GRANT-24KHZ.txt').exists())
+        self.assertNotIn('notice_sha256', binding())
+        for profile in builder.PROFILES:
+            command = rendered_command(profile)
+            self.assertNotIn('NO-MODEL-GRANT', command)
+            self.assertNotIn('notices', command)
+            self.assertIn('require_receipt(receipt_store, manifest_digest)', command)
+
+    def test_gate_refuses_without_a_receipt_before_touching_any_input(self):
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                runtime = runtime_module(profile)
+                store = self.receipt_store('empty-' + profile)
+                with self.assertRaisesRegex(runtime.LicenceRefused, r'CoverageRefused: .*field receipt'):
+                    self.gated_run(runtime, store, '3' * 64)
+                self.assertEqual(list(store.iterdir()), [])
+
+    def test_gate_refuses_a_planted_receipt_with_a_changed_licence_text_digest(self):
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                runtime = runtime_module(profile)
+                store = self.receipt_store('text-' + profile)
+                receipt, path = self.write_receipt(store, profile, '4' * 64)
+                changed = ('0' if receipt.licence_text_digest[0] != '0' else '1') + receipt.licence_text_digest[1:]
+                self.write_receipt(store, profile, '4' * 64, licence_text_digest=changed)
+                self.assertEqual(json.loads(path.read_text())['licence_text_digest'], changed)
+                with self.assertRaisesRegex(runtime.LicenceRefused, 'licence_text_digest'):
+                    self.gated_run(runtime, store, '4' * 64)
+
+    def test_gate_refuses_other_bindings_and_unsafe_stores(self):
+        runtime = runtime_module('24khz')
+        store = self.receipt_store('bindings')
+        receipt, path = self.write_receipt(store, '24khz', '5' * 64)
+        with self.assertRaisesRegex(runtime.LicenceRefused, 'field manifest_digest'):
+            self.gated_run(runtime, store, '6' * 64)
+        for field, value in (('decision', 'record'), ('licensor', 'Someone Else'),
+                             ('binding_condition_text_digests', {}),
+                             ('record_digest', '7' * 64)):
+            with self.subTest(field=field):
+                self.write_receipt(store, '24khz', '5' * 64, **{field: value})
+                with self.assertRaisesRegex(runtime.LicenceRefused, 'no kilix-license receipt covers'):
+                    self.gated_run(runtime, store, '5' * 64)
+        # A receipt for the other EnCodec record does not cover this one.
+        other = self.receipt_store('other-record')
+        self.write_receipt(other, '48khz', '5' * 64)
+        with self.assertRaisesRegex(runtime.LicenceRefused, 'field receipt'):
+            self.gated_run(runtime, other, '5' * 64)
+        for digest in ('5' * 63, '5' * 63 + 'A', '../' + '5' * 61):
+            with self.assertRaisesRegex(runtime.LicenceRefused, 'manifest digest'):
+                self.gated_run(runtime, store, digest)
+        store.chmod(0o750)
+        try:
+            with self.assertRaisesRegex(runtime.LicenceRefused, 'private directory'):
+                self.gated_run(runtime, store, '5' * 64)
+        finally:
+            store.chmod(0o700)
+        with self.assertRaisesRegex(runtime.LicenceRefused, 'receipt store is not a readable private directory'):
+            self.gated_run(runtime, self.root / 'missing-store', '5' * 64)
+        self.assertFalse((self.root / 'missing-store').exists())
+
+    def test_gate_admits_a_covering_receipt_and_leaves_the_store_unchanged(self):
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                runtime = runtime_module(profile)
+                store = self.receipt_store('covered-' + profile)
+                receipt, path = self.write_receipt(store, profile, '8' * 64)
+                before = {item.name: item.read_bytes() for item in store.iterdir()}
+                admitted = runtime.require_receipt(store, '8' * 64)
+                self.assertEqual(admitted.digest, receipt.digest)
+                self.assertEqual({item.name: item.read_bytes() for item in store.iterdir()}, before)
+                self.assertEqual(stat.S_IMODE(store.stat().st_mode), 0o700)
+                # Past the gate, run() reaches its own output and input checks.
+                output = self.root / ('occupied-' + profile)
+                output.mkdir(mode=0o700)
+                (output / 'member').write_bytes(b'x')
+                libc = mock.MagicMock()
+                libc.CDLL.return_value.prctl.return_value = 0
+                with mock.patch.object(runtime, 'ctypes', libc):
+                    with self.assertRaisesRegex(ValueError, 'private empty directory'):
+                        runtime.run(self.root / 'absent-input', output, 5, store, '8' * 64)
+
+    def test_gate_sets_aside_and_restores_an_imported_kilix_license(self):
+        authority = vendored_authority()
+        runtime = runtime_module('48khz')
+        embedded = runtime.licence_authority()
+        self.assertIs(sys.modules['kilix_license'], authority)
+        self.assertIsNot(embedded, authority)
+        self.assertNotIn(str(ROOT), getattr(embedded, '__file__', ''))
+        self.assertEqual(runtime.licence_record(embedded).digest,
+                         binding()['profiles']['48khz']['record']['digest'])
+
+    def test_command_entry_refuses_without_receipt_and_on_changed_text(self):
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                command = self.root / ('command-' + profile)
+                command.write_text(rendered_command(profile))
+                store = self.receipt_store('entry-' + profile)
+                arguments = ['/usr/bin/python3', '-I', str(command), '--input', str(self.root / 'input'),
+                             '--output', str(self.root / 'output'), '--receipt-store', str(store),
+                             '--manifest-digest', '9' * 64]
+                result = subprocess.run(arguments, text=True, capture_output=True, timeout=30)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('conversion refused: no kilix-license receipt covers', result.stderr)
+                self.assertIn('field receipt', result.stderr)
+                receipt, _path = self.write_receipt(store, profile, '9' * 64)
+                changed = ('0' if receipt.licence_text_digest[0] != '0' else '1') + receipt.licence_text_digest[1:]
+                self.write_receipt(store, profile, '9' * 64, licence_text_digest=changed)
+                result = subprocess.run(arguments, text=True, capture_output=True, timeout=30)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('licence_text_digest', result.stderr)
+                self.assertFalse((self.root / 'output').exists())
+
+    def test_packaging_48khz_binds_frame_sources_record_and_command(self):
+        source, environment, python, uv, output, members = self.packaging_fixture('frame', '48khz')
+        with mock.patch.object(builder, 'ROOT', source), \
+             contextlib.redirect_stdout(io.StringIO()):
+            builder.build(environment, python, uv, output, '48khz')
+        receipt = json.loads((output / '.converter-48khz/receipt.json').read_text())
+        self.assertEqual(receipt['profile'], '48khz')
+        self.assertEqual(receipt['licence_authority']['record']['id'], 'encodec-48khz-frame')
+        self.assertEqual(receipt['outputs'], binding()['profiles']['48khz']['outputs'])
+        with tarfile.open(output / '.converter-48khz/runtime.tar') as archive:
+            names = set(archive.getnames())
+            for name, (path, expected) in members.items():
+                self.assertEqual(hashlib.sha256(archive.extractfile(name).read()).hexdigest(), expected)
+        self.assertIn('source/tools/export_48khz.py', names)
+        self.assertIn('source/tools/verify_48khz.py', names)
+        self.assertFalse(any('NO-MODEL-GRANT' in name for name in names))
+        command = (output / 'bin/kilix-encodec-convert-48khz').read_text()
+        self.assertIn(json.dumps(builder.profile_payload(binding()['profiles']['48khz'], '48khz'),
+                                 sort_keys=True, separators=(',', ':')).encode().hex(), command)
+        self.assertFalse((output / '.converter').exists())
+
+    def test_packaging_refuses_changed_vendored_authority_or_pin(self):
+        for case in ('module', 'record', 'pin'):
+            with self.subTest(case=case):
+                source, environment, python, uv, output, _members = self.packaging_fixture('authority-' + case)
+                target = {'module': 'third_party/kilix-license/src/kilix_license/coverage.py',
+                          'record': 'third_party/kilix-license/src/kilix_license/data/records/'
+                                    'encodec-24khz-stateful.json',
+                          'pin': 'tools/converter-inputs.json'}[case]
+                if case == 'pin':
+                    bound = json.loads((source / target).read_text())
+                    bound['licence_authority']['ref'] = '0' * 40
+                    (source / target).write_text(json.dumps(bound))
+                    expected = 'differs from its pin'
+                else:
+                    original = (source / target).read_bytes()
+                    (source / target).write_bytes(original.replace(b'"', b"'", 1) if case == 'module'
+                                                  else original.replace(b'Meta Platforms', b'Meta Platformz', 1))
+                    expected = 'digest differs'
+                with mock.patch.object(builder, 'ROOT', source), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(ValueError, expected):
+                        builder.build(environment, python, uv, output)
+                self.assertEqual(list(output.iterdir()), [])
+
+    def test_profiles_bind_upstream_inputs_only(self):
+        for profile in builder.PROFILES:
+            with self.subTest(profile=profile):
+                bound = binding()
+                bound['profiles'][profile]['inputs'] = {
+                    name: {**pinned, 'url': 'file:///supplied/' + name}
+                    for name, pinned in bound['profiles'][profile]['inputs'].items()}
+                with self.assertRaisesRegex(ValueError, 'pinned upstream download'):
+                    builder.select_profile(bound, profile)
+        with self.assertRaisesRegex(ValueError, 'unsupported'):
+            builder.select_profile(binding(), 'supplied')
 
 
 if __name__ == '__main__':
