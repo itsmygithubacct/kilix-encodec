@@ -123,6 +123,35 @@ class WeightGuardTests(unittest.TestCase):
                 self.assertIn(f"weight-suffix-size:{suffix}", found["planted" + suffix])
                 self.assertEqual(set(), found["small" + suffix])
 
+    def test_upper_and_mixed_case_suffixes_fail(self) -> None:
+        # The suffix layer folds case: MODEL.ONNX and final.Mdl are refused
+        # under the lower-case suffix, always-refused and size-gated alike.
+        # The files carry no magic and sit below the 2 MiB bound, so only
+        # the suffix layer can refuse them.
+        def spellings(suffix: str) -> tuple[str, str]:
+            return suffix.upper(), suffix[:2].upper() + suffix[2:]
+
+        always = sorted(set(REQUIRED_ALWAYS_SUFFIXES) | set(ALWAYS_SUFFIXES))
+        gated = sorted(set(REQUIRED_SIZE_GATED_SUFFIXES) | set(SIZE_GATED_SUFFIXES))
+        files: dict[str, bytes] = {}
+        expected: dict[str, str] = {}
+        for suffix in always:
+            for index, spelled in enumerate(spellings(suffix)):
+                self.assertNotEqual(spelled, suffix)
+                name = f"case{index}/planted{spelled}"
+                files[name] = b"not a real model"
+                expected[name] = f"weight-suffix:{suffix}"
+        for suffix in gated:
+            for index, spelled in enumerate(spellings(suffix)):
+                self.assertNotEqual(spelled, suffix)
+                name = f"case{index}/gated{spelled}"
+                files[name] = b"\0" * REQUIRED_SIZE_GATE_BYTES
+                expected[name] = f"weight-suffix-size:{suffix}"
+        found = self.reasons_by_path("case-folding", files)
+        for name, reason in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual({reason}, found[name])
+
     def test_any_tracked_file_at_the_size_bound_fails(self) -> None:
         # The bound is 2 MiB exactly: a neutral text file of that size fails,
         # one byte smaller passes. A raised or lowered bound fails one side.
