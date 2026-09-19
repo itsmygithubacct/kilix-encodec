@@ -17,7 +17,8 @@ archive of 3747330 must emit byte-identical C0 packets and PCM, decode new C0
 streams with matching PCM, and refuse marked C5-R4 streams. That library still
 pins manifest 02201a5a, so it loads the same graphs beside a reconstructed
 copy of that manifest (the OD-AS pin changes only lock and encodec version
-fields).
+fields; SR-5 only the licence, delivery and publication fields and the
+exporter digest).
 """
 from __future__ import annotations
 

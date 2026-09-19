@@ -60,8 +60,8 @@
           "sha256": "19c6f57f0d39d2660942c958a797133fa0eedd4120cccf5daecc5726427b8269"
         },
         "manifest.json": {
-          "bytes": 12770,
-          "sha256": "e151992a68e292936da8cb618047be92c5c87f468e3c42d65152ba67f6368558"
+          "bytes": 12835,
+          "sha256": "bb615145d4a33dbfa4c07c1ff3283303b461af1c6fc83dbf50b59bcf6489f81b"
         },
         "rvq_decode_12kbps_op17.onnx": {
           "bytes": 8396869,
@@ -135,7 +135,7 @@
         },
         "manifest.json": {
           "bytes": 3930,
-          "sha256": "065746beb8089cc190ead1a9932ab8b6e5ac601c4de5bf79552f952071bd83cd"
+          "sha256": "433b26a118db6f33a329f512cb4ae3cc69441b16ad22c1017ec4526851a4e7ba"
         },
         "rvq-codebooks.f32le": {
           "bytes": 8388608,
@@ -292,7 +292,7 @@
   "schema": "kilix.encodec.converter-inputs/v2",
   "source_files": {
     "pyproject.toml": "c91ffe26b161d6576a4a18ea3b7492ba1115ee58f10e4a6efed2cb40e6eb21df",
-    "tools/export_24khz.py": "e95ef4ba52b3b3a65c23098757b2dfaf1eaa2b1da9004d2762ef3333902e8783",
+    "tools/export_24khz.py": "4d83e00064b9a731f0a3ebd7ea60c26de82e11479af5e66345792274ceb39ec3",
     "tools/stateful_graph.py": "7a94906d6e1cd809162ba77ea82728f2bf544a0c98895d268e8d2e786b0790f4",
     "uv.lock": "c79d96ee87bfc9d7b09b09c1b3bb7f51faf53d3ec1e480bef53d2e69d40a1d9e"
   },

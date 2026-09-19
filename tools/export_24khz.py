@@ -257,20 +257,28 @@ def export_bundle(checkpoint: Path, output_path: Path) -> Path:
                 model, direction, bandwidth, quantizers, output
             )
     manifest = {
+        # OD-AR: CC BY-NC 4.0, licensor Meta Platforms, binding; recorded as
+        # the 48 kHz exporter records it. The checkpoint is downloaded from its
+        # upstream pin on first use and converted on the user's machine
+        # (R4-067, OD-S); the derived graphs are never published.
         "artifact_policy": {
-            "checkpoint_delivery": "user-supplied-only",
-            "derived_graph_publication": "forbidden-without-separate-model-grant",
+            "checkpoint_delivery": "upstream-convert",
+            "derived_graph_publication": "user-machine-only-never-published",
             "native_runtime_downloads": False,
             "release_qualified": False,
         },
         "checkpoint": {
             "bytes": identity.bytes,
             "file": identity.file,
-            "license_determination": "no-redistribution-grant-found",
             "sha256": identity.sha256,
         },
         "graphs": records,
         "initial_state": "all-zero",
+        "license": {
+            "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+            "licensor": "Meta Platforms",
+            "spdx": "CC-BY-NC-4.0",
+        },
         "packet": {
             "bandwidths_kbps": [
                 bandwidth for bandwidth, _ in BANDWIDTH_PROFILES

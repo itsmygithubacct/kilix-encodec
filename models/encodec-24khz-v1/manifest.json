@@ -11,9 +11,13 @@
     "6": 8,
     "12": 16
   },
-  "delivery": "user-supplied",
+  "delivery": "upstream-convert",
   "format": "kilix.encodec.asset/v1",
-  "license_disposition": "no-grant-found-fail-closed",
+  "license": {
+    "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+    "licensor": "Meta Platforms",
+    "spdx": "CC-BY-NC-4.0"
+  },
   "packet_samples": 960,
   "profile": "encodec-24khz-v1",
   "release_qualified": false,

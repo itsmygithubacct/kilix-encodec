@@ -107,10 +107,11 @@ const char *kenc_epoch_start_name(kenc_epoch_start profile);
 kenc_result kenc_packet_metadata_read(kenc_packet_metadata *metadata,
     const uint8_t *packet, size_t packet_size, const kenc_options *options);
 
-/* Load the exact pinned 24 kHz user-supplied export. Symlinks, special files,
- * changed manifests and changed graph bytes are refused before ORT parses
- * anything. Builds without ONNX support return KENC_ERR_MODEL. No network or
- * Python is used. Successful streams retain the model until they are freed. */
+/* Load the exact pinned 24 kHz export, converted locally and never shipped.
+ * Symlinks, special files, changed manifests and changed graph bytes are
+ * refused before ORT parses anything. Builds without ONNX support return
+ * KENC_ERR_MODEL. No network or Python is used. Successful streams retain the
+ * model until they are freed. */
 kenc_result kenc_model_load(kenc_model **out, const char *asset_dir);
 void kenc_model_free(kenc_model *model);
 

@@ -246,9 +246,10 @@ static kenc_result model_load(kenc_model **out, const model_input *input)
     model = calloc(1u, sizeof(*model));
     if (model == NULL) { result = KENC_ERR_MEMORY; goto done; }
     atomic_init(&model->references, 1u);
-    /* This is the exact scratch-export v2 contract, still user-supplied only. */
-    result = read_verified(input, "manifest.json", 12770u,
-        "e151992a68e292936da8cb618047be92c5c87f468e3c42d65152ba67f6368558",
+    /* The exact export v2 contract: converted on the user's machine from the
+     * upstream checkpoint download, never shipped. */
+    result = read_verified(input, "manifest.json", 12835u,
+        "bb615145d4a33dbfa4c07c1ff3283303b461af1c6fc83dbf50b59bcf6489f81b",
         &manifest);
     if (result != KENC_OK) { goto done; }
     for (size_t i = 0u; i < KENC_GRAPH_COUNT; ++i) {
@@ -689,7 +690,7 @@ static kenc_result stereo_create(kenc_stereo **out, const model_input *input,
     };
     static const size_t sizes[4] = {3930u, 29909926u, 29882042u, 8388608u};
     static const char *const hashes[4] = {
-        "065746beb8089cc190ead1a9932ab8b6e5ac601c4de5bf79552f952071bd83cd",
+        "433b26a118db6f33a329f512cb4ae3cc69441b16ad22c1017ec4526851a4e7ba",
         "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a",
         "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1",
         "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"

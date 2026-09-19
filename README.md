@@ -186,7 +186,7 @@ C5-R4 stream. Without it those 18 controls are printed and counted as SKIPPED.
 ## Export controls
 
 Export dependencies are isolated in the locked `export` group. The exporter
-accepts only the exact reviewed user-supplied checkpoint and refuses to write
+accepts only the exact reviewed caller-supplied checkpoint and refuses to write
 inside the Git repository:
 
 ```sh
@@ -325,9 +325,11 @@ the frozen fixture.
   Platforms (OD-AR). They are downloaded on first use from their upstream pins
   and converted on the user's machine only under a covering kilix-license
   receipt (see "Local conversion commands"); nothing is redistributed, and
-  publication is owner-reserved. The frozen 24 kHz export manifest still
-  records its historical `checkpoint_delivery` and `license_determination`
-  strings, because changing them would change the pinned population.
+  publication is owner-reserved. Both export manifests record that licence as
+  `license` (`CC-BY-NC-4.0`, `Meta Platforms`). The 24 kHz manifest records
+  `checkpoint_delivery` `upstream-convert` and `derived_graph_publication`
+  `user-machine-only-never-published` in place of the superseded 0.2.1
+  user-supplied and no-grant strings; its graphs did not change.
 
 Large graphs, weights, and codebooks do not belong in Git history.
 
@@ -431,8 +433,8 @@ bytes and the exact package population; it does not acquire a new environment.
 
 | profile | command | runtime directory | upstream input | output population |
 | --- | --- | --- | --- | --- |
-| `24khz` | `bin/kilix-encodec-convert-24khz` | `.converter` | `encodec_24khz-d7cc33bc.th` from `dl.fbaipublicfiles.com` | 8 stateful graphs and `manifest.json` (`op17-v2-e151992a`) |
-| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-065746be`) |
+| `24khz` | `bin/kilix-encodec-convert-24khz` | `.converter` | `encodec_24khz-d7cc33bc.th` from `dl.fbaipublicfiles.com` | 8 stateful graphs and `manifest.json` (`op17-v2-bb615145`) |
+| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-433b26a1`) |
 
 Each output consists of the command, its adjacent runtime directory holding
 `runtime.tar`, and a build receipt. Keep these together when relocating them.

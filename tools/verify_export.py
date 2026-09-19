@@ -76,11 +76,15 @@ SKELETON_EXPECTED: dict[str, object] = {
     "bandwidths_kbps": [3, 6, 12],
     "codebooks_by_bandwidth": {"3": 4, "6": 8, "12": 16},
     "codebook_cardinality": 1024,
-    "license_disposition": "no-grant-found-fail-closed",
+    "license": {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    },
     "status": "p1-skeleton",
     "release_qualified": False,
     "artifacts": [],
-    "delivery": "user-supplied",
+    "delivery": "upstream-convert",
 }
 
 
@@ -158,19 +162,25 @@ def load_manifest(bundle: Path, checkpoint: Path) -> tuple[dict[str, Any], objec
     if value.get("padding_mode") != "constant":
         raise AssertionError("padding policy differs")
     expected_policy = {
-        "checkpoint_delivery": "user-supplied-only",
-        "derived_graph_publication": "forbidden-without-separate-model-grant",
+        "checkpoint_delivery": "upstream-convert",
+        "derived_graph_publication": "user-machine-only-never-published",
         "native_runtime_downloads": False,
         "release_qualified": False,
     }
     if value.get("artifact_policy") != expected_policy:
         raise AssertionError("artifact policy differs")
+    expected_license = {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    }
+    if value.get("license") != expected_license:
+        raise AssertionError("license determination differs")
 
     model, identity = load_model(checkpoint)
     expected_checkpoint = {
         "bytes": identity.bytes,
         "file": identity.file,
-        "license_determination": "no-redistribution-grant-found",
         "sha256": identity.sha256,
     }
     if value.get("checkpoint") != expected_checkpoint:

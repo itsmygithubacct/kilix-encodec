@@ -12,7 +12,16 @@
   status 1 and before any input is read.
 - Add the 48 kHz stereo frame converter, `tools/build_converter.py --profile
   48khz` (`bin/kilix-encodec-convert-48khz`), from the pinned
-  `facebook/encodec_48khz` files; its population is `op17-v1-065746be`.
+  `facebook/encodec_48khz` files; its population is `op17-v1-433b26a1`.
+- Record the OD-AR licence in the 24 kHz export manifest as the 48 kHz one
+  does (`license`: `CC-BY-NC-4.0`, `Meta Platforms`), with
+  `checkpoint_delivery` `upstream-convert` and `derived_graph_publication`
+  `user-machine-only-never-published`. These replace the superseded 0.2.1
+  strings `user-supplied-only`, `no-redistribution-grant-found` and
+  `forbidden-without-separate-model-grant`; the tracked skeleton follows. The
+  graphs are unchanged. The 24 kHz population is re-pinned to
+  `op17-v2-bb615145`, and the 48 kHz one, which records `export_24khz.py`, to
+  `op17-v1-433b26a1`.
 - Bind every converter input to its upstream download URL. The binding moves
   to `kilix.encodec.converter-inputs/v2` with one entry per profile.
 - Retire `tools/NO-MODEL-GRANT-24KHZ.txt` and the converter's own notice
