@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -51,6 +52,51 @@ def runtime_module(profile='24khz'):
     module.__file__ = str(ROOT / 'tools/converter_runtime.py')
     exec(compile(rendered_command(profile), module.__file__, 'exec'), module.__dict__)
     return module
+
+
+class Watch:
+    """inotify over paths: records every open, read, write or entry change.
+
+    Events are queued inside the syscall that causes them, so once a child
+    process has exited its events are all readable here.
+    """
+
+    MASK = 0x1 | 0x2 | 0x4 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200  # access modify attrib open moved create delete
+
+    def __init__(self, paths):
+        self.libc = ctypes.CDLL(None, use_errno=True)
+        self.fd = self.libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if self.fd < 0:
+            raise OSError(ctypes.get_errno(), 'inotify_init1')
+        self.paths = {}
+        for path in paths:
+            descriptor = self.libc.inotify_add_watch(self.fd, os.fsencode(path), self.MASK)
+            if descriptor < 0:
+                error = ctypes.get_errno()
+                os.close(self.fd)
+                raise OSError(error, f'inotify_add_watch {path}')
+            self.paths[descriptor] = str(path)
+
+    def events(self):
+        data = bytearray()
+        while True:
+            try:
+                chunk = os.read(self.fd, 65536)
+            except BlockingIOError:
+                break
+            if not chunk:
+                break
+            data += chunk
+        found, offset = [], 0
+        while offset < len(data):
+            descriptor, mask, _cookie, length = struct.unpack_from('iIII', data, offset)
+            name = bytes(data[offset + 16:offset + 16 + length]).rstrip(b'\0').decode()
+            found.append((self.paths.get(descriptor, descriptor), hex(mask), name))
+            offset += 16 + length
+        return found
+
+    def close(self):
+        os.close(self.fd)
 
 
 def vendored_authority():
@@ -718,6 +764,67 @@ print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.ge
                 self.assertEqual(result.returncode, 1)
                 self.assertIn('licence_text_digest', result.stderr)
                 self.assertFalse((self.root / 'output').exists())
+
+    NO_STORE = 'no kilix-license receipt store was given'
+
+    def test_gate_refuses_an_absent_or_empty_store_before_touching_any_input(self):
+        for profile in builder.PROFILES:
+            runtime = runtime_module(profile)
+            for store in (None, '', Path('')):
+                with self.subTest(profile=profile, store=store):
+                    expected = self.NO_STORE if store in (None, '') else 'receipt store is not a readable'
+                    with self.assertRaisesRegex(runtime.LicenceRefused, expected):
+                        self.gated_run(runtime, store, '3' * 64)
+                    with self.assertRaisesRegex(runtime.LicenceRefused, expected):
+                        runtime.require_receipt(store, '3' * 64)
+
+    def test_command_entry_refuses_an_absent_or_empty_store_before_touching_any_input(self):
+        # The real command, run as a program over real paths: the input, a
+        # private empty output directory and a runtime directory all exist,
+        # so only the gate stands between the command and a conversion.
+        for profile in builder.PROFILES:
+            selected = binding()['profiles'][profile]
+            for case, extra in (('removed', []), ('empty', ['--receipt-store', ''])):
+                with self.subTest(profile=profile, case=case):
+                    area = self.root / (profile + '-' + case)
+                    (area / 'bin').mkdir(parents=True, mode=0o700)
+                    command = area / 'bin' / selected['command']
+                    command.write_text(rendered_command(profile))
+                    runtime = area / selected['directory']
+                    runtime.mkdir(mode=0o700)
+                    (runtime / 'runtime.tar').write_bytes(b'')
+                    inputs = area / 'input'
+                    inputs.mkdir(mode=0o700)
+                    for name in selected['inputs']:
+                        (inputs / name).write_bytes(b'upstream input stand-in')
+                    given = inputs / next(iter(selected['inputs'])) if selected['input'] == 'file' else inputs
+                    output = area / 'output'
+                    output.mkdir(mode=0o700)
+                    watched = [inputs, *(inputs / name for name in selected['inputs']),
+                               output, runtime, runtime / 'runtime.tar']
+                    watch = Watch(watched)
+                    try:
+                        result = subprocess.run(
+                            ['/usr/bin/python3', '-I', str(command), '--input', str(given),
+                             '--output', str(output), *extra, '--manifest-digest', '9' * 64],
+                            text=True, capture_output=True, timeout=30)
+                        touched = watch.events()
+                        # Control: the watch does see an open of each kind of path.
+                        for path in (given, output, runtime / 'runtime.tar'):
+                            if path.is_dir():
+                                os.close(os.open(path, os.O_RDONLY | os.O_DIRECTORY))
+                            else:
+                                path.read_bytes()
+                        seen = {path for path, _mask, _name in watch.events()}
+                    finally:
+                        watch.close()
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn('conversion refused: ' + self.NO_STORE, result.stderr)
+                    self.assertEqual(result.stdout, '')
+                    self.assertEqual(touched, [])
+                    self.assertLessEqual({str(output), str(runtime / 'runtime.tar')}, seen)
+                    self.assertTrue(str(given) in seen or str(inputs) in seen)
+                    self.assertEqual(list(output.iterdir()), [])
 
     def test_packaging_48khz_binds_frame_sources_record_and_command(self):
         source, environment, python, uv, output, members = self.packaging_fixture('frame', '48khz')

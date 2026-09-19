@@ -472,7 +472,8 @@ licensor and the agreement-required non-commercial condition. A missing
 receipt, a receipt for another manifest or record, or a planted receipt whose
 licence text digest or any other bound field changed is refused. The receipt
 store must be an existing private directory of the current user; the command
-only reads it.
+only reads it. An absent or empty `--receipt-store` is refused by the same
+gate, with exit status 1, before any input is read.
 
 ### Running a conversion
 

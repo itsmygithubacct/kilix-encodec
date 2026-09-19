@@ -8,6 +8,8 @@
   checkpoint's licence record binding (`require()`), checked before any input
   is read. The commands take `--receipt-store` and `--manifest-digest`, embed
   the pinned kilix-license modules and record, and never write receipts.
+  An absent or empty `--receipt-store` is refused by that gate, with exit
+  status 1 and before any input is read.
 - Add the 48 kHz stereo frame converter, `tools/build_converter.py --profile
   48khz` (`bin/kilix-encodec-convert-48khz`), from the pinned
   `facebook/encodec_48khz` files; its population is `op17-v1-065746be`.
