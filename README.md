@@ -536,3 +536,10 @@ populations bound in `tools/converter-inputs.json` and
 `python/graph_population.py`; `--catalog` folds in an accepted kilix-content
 catalogue's EnCodec members. `make catalog-digests-check` and the test refuse
 a hand-edited or stale list.
+
+The guard has an inherent limit. A fragment of raw weight data below the 2 MiB
+size bound, with a neutral name, no magic number and a digest of its own that
+is not listed, passes. Raw float32 codebooks have no header, and one 1024x128
+codebook is 512 KiB, so the first 1 MiB of `rvq-codebooks.f32le` committed as
+a neutral `.dat` file is not detected. Review of what is committed covers that
+case; the scan does not.

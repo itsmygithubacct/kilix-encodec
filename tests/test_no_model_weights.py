@@ -22,8 +22,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "tests" / "support"))
 
 from weight_scan import (  # noqa: E402
-    SIZE_GATE_BYTES,
-    TRACKED_MAXIMUM_BYTES,
+    ALWAYS_SUFFIXES,
+    SIZE_GATED_SUFFIXES,
     catalog_matches_generator,
     load_catalog_digests,
     scan_tree,
@@ -38,6 +38,19 @@ IDENTITY = {
     "GIT_COMMITTER_NAME": "itsmygithubacct",
     "GIT_COMMITTER_EMAIL": "itsmygithubacct@users.noreply.github.com",
 }
+# The guard's floor, typed here and not read from weight_scan: a suffix dropped
+# from the guard, or a bound moved, fails these tests instead of shrinking them.
+# Suffixes the guard adds are planted as well (the union below).
+REQUIRED_ALWAYS_SUFFIXES = (
+    ".gguf", ".ggml", ".safetensors", ".onnx", ".pt", ".pth",
+    ".ckpt", ".mdl", ".tflite", ".th", ".fst", ".f32le",
+)
+REQUIRED_SIZE_GATED_SUFFIXES = (
+    ".bin", ".npy", ".npz", ".pkl", ".pb", ".h5",
+    ".engine", ".plan", ".ot", ".f32", ".raw",
+)
+REQUIRED_SIZE_GATE_BYTES = 1024 * 1024
+REQUIRED_TRACKED_MAXIMUM_BYTES = 2 * 1024 * 1024
 
 
 def _git_init(tree: Path) -> None:
@@ -80,23 +93,45 @@ class WeightGuardTests(unittest.TestCase):
         tree, catalog = self.planted_tree(name, files, extra)
         return {item.reason for item in scan_tree(tree, catalog)}
 
+    def reasons_by_path(self, name: str, files: dict[str, bytes]) -> dict[str, set[str]]:
+        tree, catalog = self.planted_tree(name, files)
+        found: dict[str, set[str]] = {relative: set() for relative in files}
+        for item in scan_tree(tree, catalog):
+            found.setdefault(item.path, set()).add(item.reason)
+        return found
+
     def test_repository_tracked_tree_has_no_weights(self) -> None:
         self.assertEqual([], scan_tree(ROOT, CATALOG))
 
     def test_planted_weight_suffix_fails(self) -> None:
-        for suffix in (".th", ".safetensors", ".onnx", ".pt", ".f32le", ".gguf"):
+        # Every always-refused suffix, each named exactly: ".pth" must not pass
+        # as ".th", nor ".f32le" as anything else.
+        suffixes = sorted(set(REQUIRED_ALWAYS_SUFFIXES) | set(ALWAYS_SUFFIXES))
+        found = self.reasons_by_path("suffixes", {"planted" + suffix: b"not a real model" for suffix in suffixes})
+        for suffix in suffixes:
             with self.subTest(suffix=suffix):
-                reasons = self.reasons("suffix" + suffix, {"planted" + suffix: b"not a real model"})
-                self.assertIn(f"weight-suffix:{suffix}", reasons)
+                self.assertIn(f"weight-suffix:{suffix}", found["planted" + suffix])
 
     def test_size_gated_suffix_at_gate_fails(self) -> None:
-        reasons = self.reasons("size-gated", {"planted.bin": b"\0" * SIZE_GATE_BYTES})
-        self.assertIn("weight-suffix-size:.bin", reasons)
-        self.assertEqual(set(), self.reasons("size-below", {"small.bin": b"\0" * 64}))
+        # Every size-gated suffix fails at 1 MiB and passes one byte below it.
+        suffixes = sorted(set(REQUIRED_SIZE_GATED_SUFFIXES) | set(SIZE_GATED_SUFFIXES))
+        files = {"planted" + suffix: b"\0" * REQUIRED_SIZE_GATE_BYTES for suffix in suffixes}
+        files.update({"small" + suffix: b"\0" * (REQUIRED_SIZE_GATE_BYTES - 1) for suffix in suffixes})
+        found = self.reasons_by_path("size-gated", files)
+        for suffix in suffixes:
+            with self.subTest(suffix=suffix):
+                self.assertIn(f"weight-suffix-size:{suffix}", found["planted" + suffix])
+                self.assertEqual(set(), found["small" + suffix])
 
     def test_any_tracked_file_at_the_size_bound_fails(self) -> None:
-        reasons = self.reasons("size-bound", {"docs/huge.txt": b"a" * TRACKED_MAXIMUM_BYTES})
-        self.assertIn(f"size:{TRACKED_MAXIMUM_BYTES}", reasons)
+        # The bound is 2 MiB exactly: a neutral text file of that size fails,
+        # one byte smaller passes. A raised or lowered bound fails one side.
+        found = self.reasons_by_path("size-bound", {
+            "docs/huge.txt": b"a" * REQUIRED_TRACKED_MAXIMUM_BYTES,
+            "docs/large.txt": b"a" * (REQUIRED_TRACKED_MAXIMUM_BYTES - 1),
+        })
+        self.assertEqual({f"size:{REQUIRED_TRACKED_MAXIMUM_BYTES}"}, found["docs/huge.txt"])
+        self.assertEqual(set(), found["docs/large.txt"])
 
     def test_planted_magic_on_neutral_names_fails(self) -> None:
         meta = b'{"__metadata__":{"format":"pt"},"x":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}'

@@ -3,6 +3,13 @@
 The shape follows the kilix-license and kilix-content weight guards. EnCodec
 adds the formats this repository converts: PyTorch zip and legacy checkpoints,
 ONNX graphs, and raw float32 codebooks.
+
+Limit: a suffix, magic, size and digest scan cannot see a fragment of raw
+weight data that is below TRACKED_MAXIMUM_BYTES, has a neutral name, begins
+with no magic and is not itself a listed blob. Raw float32 codebooks have no
+header, and one 1024x128 codebook is 512 KiB, so the first 1 MiB of
+rvq-codebooks.f32le committed as a neutral .dat file passes this scan. That is
+inherent to this kind of guard; review of what is committed is the control.
 """
 
 from __future__ import annotations
