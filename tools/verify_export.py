@@ -130,6 +130,116 @@ def verify_skeleton(
     return passed, total
 
 
+def verify_policy_and_licence(value: dict[str, Any]) -> None:
+    """Assert the export manifest's artifact policy and OD-AR licence (SR-5).
+
+    Pure, so --self-test can feed it planted manifests without a checkpoint.
+    """
+    expected_policy = {
+        "checkpoint_delivery": "upstream-convert",
+        "derived_graph_publication": "user-machine-only-never-published",
+        "native_runtime_downloads": False,
+        "release_qualified": False,
+    }
+    if value.get("artifact_policy") != expected_policy:
+        raise AssertionError("artifact policy differs")
+    expected_license = {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    }
+    if value.get("license") != expected_license:
+        raise AssertionError("license determination differs")
+
+
+def verify_policy_and_licence_controls() -> tuple[int, int]:
+    """Admit the SR-5 values; refuse each planted change to them.
+
+    The accepted values are typed here, not read from the checker, so a
+    changed expectation fails the admission control and a dropped or
+    narrowed check fails a refusal control.
+    """
+    policy = {
+        "checkpoint_delivery": "upstream-convert",
+        "derived_graph_publication": "user-machine-only-never-published",
+        "native_runtime_downloads": False,
+        "release_qualified": False,
+    }
+    licence = {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    }
+
+    def manifest(**changes: object) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "artifact_policy": dict(policy),
+            "license": dict(licence),
+        }
+        for key, change in changes.items():
+            if change is None:
+                del value[key]
+            else:
+                value[key] = change
+        return value
+
+    licence_refused = "license determination differs"
+    policy_refused = "artifact policy differs"
+    refusals: list[tuple[str, dict[str, Any], str]] = [
+        ("licence absent", manifest(license=None), licence_refused),
+        ("licence empty", manifest(license={}), licence_refused),
+        ("spdx MIT", manifest(license={**licence, "spdx": "MIT"}), licence_refused),
+        ("licensor truncated", manifest(license={**licence, "licensor": "Meta"}),
+         licence_refused),
+        ("evidence changed",
+         manifest(license={**licence, "evidence": "no-redistribution-grant-found"}),
+         licence_refused),
+        ("licensor removed",
+         manifest(license={k: v for k, v in licence.items() if k != "licensor"}),
+         licence_refused),
+        ("licence key added", manifest(license={**licence, "grant": "commercial"}),
+         licence_refused),
+        ("policy absent", manifest(artifact_policy=None), policy_refused),
+        ("delivery user-supplied",
+         manifest(artifact_policy={**policy, "checkpoint_delivery": "user-supplied-only"}),
+         policy_refused),
+        ("publication reverted",
+         manifest(artifact_policy={
+             **policy,
+             "derived_graph_publication": "forbidden-without-separate-model-grant",
+         }),
+         policy_refused),
+        ("release qualified",
+         manifest(artifact_policy={**policy, "release_qualified": True}), policy_refused),
+        ("runtime downloads",
+         manifest(artifact_policy={**policy, "native_runtime_downloads": True}),
+         policy_refused),
+    ]
+    passed = 0
+    total = 1 + len(refusals)
+    try:
+        verify_policy_and_licence(manifest())
+    except AssertionError as error:
+        print(f"  policy and licence control failed: SR-5 values refused: {error}")
+    else:
+        passed += 1
+    for label, value, expected in refusals:
+        try:
+            verify_policy_and_licence(value)
+        except AssertionError as error:
+            if str(error) == expected:
+                passed += 1
+                continue
+            print(f"  policy and licence control failed: {label}: refused with {error!r}")
+        else:
+            print(f"  policy and licence control failed: {label}: admitted")
+    print(
+        f"export policy and licence controls: {passed}/{total} "
+        f"{'PASS' if passed == total else 'FAIL'}"
+    )
+    return passed, total
+
+
 def uv_version() -> str:
     return subprocess.run(
         ["uv", "--version"], check=True, capture_output=True, text=True
@@ -161,21 +271,7 @@ def load_manifest(bundle: Path, checkpoint: Path) -> tuple[dict[str, Any], objec
         raise AssertionError("initial state contract differs")
     if value.get("padding_mode") != "constant":
         raise AssertionError("padding policy differs")
-    expected_policy = {
-        "checkpoint_delivery": "upstream-convert",
-        "derived_graph_publication": "user-machine-only-never-published",
-        "native_runtime_downloads": False,
-        "release_qualified": False,
-    }
-    if value.get("artifact_policy") != expected_policy:
-        raise AssertionError("artifact policy differs")
-    expected_license = {
-        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
-        "licensor": "Meta Platforms",
-        "spdx": "CC-BY-NC-4.0",
-    }
-    if value.get("license") != expected_license:
-        raise AssertionError("license determination differs")
+    verify_policy_and_licence(value)
 
     model, identity = load_model(checkpoint)
     expected_checkpoint = {
@@ -1371,6 +1467,9 @@ def self_test(skeleton: Path) -> None:
     print(f"export policy self-test: {passed}/{total} PASS")
     if passed != total:
         raise AssertionError("export policy self-test failed")
+    controls_passed, controls_total = verify_policy_and_licence_controls()
+    if controls_passed != controls_total:
+        raise AssertionError("export policy and licence controls failed")
 
 
 def main() -> int:

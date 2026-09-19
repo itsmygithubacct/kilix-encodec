@@ -20,10 +20,11 @@
   `checkpoint_delivery` `upstream-convert` and `derived_graph_publication`
   `user-machine-only-never-published`. These replace the superseded 0.2.1
   strings `user-supplied-only`, `no-redistribution-grant-found` and
-  `forbidden-without-separate-model-grant`; the tracked skeleton follows. The
-  graphs are unchanged. The 24 kHz population is re-pinned to
-  `op17-v2-bb615145`, and the 48 kHz one, which records `export_24khz.py`, to
-  `op17-v1-433b26a1`.
+  `forbidden-without-separate-model-grant`; the tracked skeleton follows.
+  `verify_export.py` asserts these values, and its self-test refuses each
+  planted change to them. The graphs are unchanged. The 24 kHz population is
+  re-pinned to `op17-v2-bb615145`, and the 48 kHz one, which records
+  `export_24khz.py`, to `op17-v1-433b26a1`.
 - Bind every converter input to its upstream download URL. The binding moves
   to `kilix.encodec.converter-inputs/v2` with one entry per profile.
 - Retire `tools/NO-MODEL-GRANT-24KHZ.txt` and the converter's own notice
