@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from kilix_license.agreement import Agreement, capture_agreement, typed_agreement_line
 from kilix_license.catalog import load_determined_records, load_determined_texts
+from kilix_license.changed import ChangedText, ReceiptScan, changed_texts, scan_receipts
 from kilix_license.coverage import AssetRef, covers, require
 from kilix_license.errors import (
     AgreementRequired,
@@ -28,6 +29,7 @@ __all__ = [
     "Agreement",
     "AgreementRequired",
     "AssetRef",
+    "ChangedText",
     "CoverageRefused",
     "HandEditedRecord",
     "LicenseError",
@@ -35,6 +37,7 @@ __all__ = [
     "LiveStoreForbidden",
     "ParaphraseRefused",
     "Receipt",
+    "ReceiptScan",
     "ReceiptShapeError",
     "ReceiptStore",
     "RecordIndex",
@@ -42,6 +45,7 @@ __all__ = [
     "TextStore",
     "__version__",
     "capture_agreement",
+    "changed_texts",
     "covers",
     "load_determined_records",
     "load_determined_texts",
@@ -50,5 +54,6 @@ __all__ = [
     "refuse_live_store",
     "render_screen",
     "require",
+    "scan_receipts",
     "typed_agreement_line",
 ]

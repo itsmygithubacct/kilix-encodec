@@ -3,7 +3,11 @@
 ## Unreleased
 
 - Vendor kilix-license by `git archive` into `third_party/kilix-license/`,
-  pinned in `third_party/kilix-license.pin` (owner decision OD-AJ).
+  pinned in `third_party/kilix-license.pin` (owner decision OD-AJ). The pin is
+  kilix-license `4db48b4c`, which records the identity of each shown text in a
+  receipt's context. The converters read those receipts and the ones the
+  earlier vendored code wrote; the licence records and their digests are
+  unchanged.
 - Refuse every conversion unless a kilix-license receipt covers the
   checkpoint's licence record binding (`require()`), checked before any input
   is read. The commands take `--receipt-store` and `--manifest-digest`, embed

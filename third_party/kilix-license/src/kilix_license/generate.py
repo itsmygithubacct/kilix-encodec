@@ -1,8 +1,9 @@
 """Generate licence records from the pinned determinations JSON.
 
 Licence file bytes are never retyped: they are copied into data/texts/
-named by sha256. Quote-backed texts are the JSON `text` field, which R0-DET-R2
-cut from cited source spans. A hand-edited committed record fails --check.
+named by sha256. Quote-backed texts are the JSON `text` field, which the
+determinations generator (R0-DET-R2; R3 for the OD-AY PDF-engine entries) cut
+from cited source spans. A hand-edited committed record fails --check.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from kilix_license.records import (
     Component,
     LicenseRecord,
     Statement,
+    require_text_id,
 )
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -30,7 +32,7 @@ RECORDS_DIRNAME = "records"
 CONVERTER_ID = "encodec-converter-runtime-code"
 CONVERTER_TEXT_ROLE = "code-relicensing-notice"
 FORBIDDEN_PREFIXES = ("kilix-llm",)
-# Same id set generate.py (R0-DET-R2) used so records equal the JSON.
+# Same id set the determinations generator (R0-DET-R2, R3) used so records equal the JSON.
 CONDITIONING_IDS = frozenset(
     {
         "Apache-2.0",
@@ -39,6 +41,13 @@ CONDITIONING_IDS = frozenset(
         "CC-BY-NC-4.0",
         "LicenseRef-Meta-Llama-3-Community-License",
     }
+)
+# OD-AY "Granite only": P1, N1 and N2 get records. The Datalab/Surya models
+# (P2-P6), the F1 font, N3 and N4 do not.
+PDF_ENGINE_RECORD_IDS = (
+    "granite-docling-258m",
+    "documentfigureclassifier-v2.5",
+    "granite-vision-4.1-4b",
 )
 REQUIRED_RECORD_IDS = (
     "small-en-us",
@@ -66,7 +75,89 @@ REQUIRED_RECORD_IDS = (
     "encodec-24khz-stateful",
     "encodec-48khz-frame",
     CONVERTER_ID,
+    # OD-AY (R4-047): the kilix-pdf-conversion [granite] engine models only.
+    *PDF_ENGINE_RECORD_IDS,
 )
+# SR-4 (C2E-VERIFY F2): the identity of each agreement-required binding text,
+# keyed by the determinations quote_id. The value names the document the text
+# is cut from, without a revision. It is an identifier, not a fetch URL. The
+# key is the text itself, not the record or binding id, so:
+#   - sibling records showing one text share it (both Bonsai Image variants);
+#   - a revised text keeps it while its digest changes (the changed marker);
+#   - a renamed binding keeps it: map the new quote_id to the same value.
+# Every binding quote must be listed; the generator refuses one that is not,
+# so a rename cannot silently mint a new identity. check_binding_text_ids()
+# refuses a table that merges two source documents or splits one quoted span.
+# Not bound (OD-AI): records carry it outside the record digest.
+BINDING_TEXT_IDS = {
+    # OD-AH. https://bfl.ai/legal/usage-policy (ADDENDUM-BFL-POLICY.md line 7).
+    "bfl-usage-policy": "bfl.ai/legal/usage-policy",
+    "bfl-usage-policy-binary": "bfl.ai/legal/usage-policy",
+    # OD-AG. The "## Prohibited use" section of the Pocket TTS model card README.
+    "pocket-prohibited-use": (
+        "huggingface.co/kyutai/pocket-tts-without-voice-cloning/README.md#prohibited-use"
+    ),
+    # OD-AP. The Meta Llama 3 Community License (meta-llama/llama3 LICENSE), in full.
+    "llama3-community-licence-full-text": "github.com/meta-llama/llama3/LICENSE",
+    # OD-AR. The owner's non-commercial binding sentence, shown for both checkpoints.
+    "encodec-noncommercial-binding": "kilix/owner-decisions/OD-AR#non-commercial-binding",
+}
+# SR-4 (LIC4-VERIFY LIC4-3): the identity of each record's licence text,
+# chosen the way BINDING_TEXT_IDS is: keyed by the determinations entry_id, the
+# value names the document the licence text is (without a revision). It is an
+# identifier, not a fetch URL. Records that show one licence text share it, so
+# a licence text revised through a sibling is marked changed. Every record must
+# be listed; the generator refuses one that is not, so a renamed entry cannot
+# silently mint a new identity. check_licence_text_ids() refuses a table that
+# gives two licence texts one identity, or one licence text two identities.
+# Each comment cites the determinations licence_texts label (or quote) the
+# value is taken from. Not bound (OD-AI): records carry it outside the digest.
+LICENCE_TEXT_IDS = {
+    # "Apache-2.0 text (Debian common-licenses copy, cfc7749b)": the Vosk models,
+    # and the card-only Apache-2.0 grants (builder reading R3 item 1).
+    "small-en-us": "debian/common-licenses/Apache-2.0",
+    "lgraph-en-us": "debian/common-licenses/Apache-2.0",
+    "granite-docling-258m": "debian/common-licenses/Apache-2.0",
+    "granite-vision-4.1-4b": "debian/common-licenses/Apache-2.0",
+    # Licence label quoted from OWNER-DETERMINATION-piper-kristin.md line 6.
+    "piper-en-us-kristin-medium": "kilix/owner-determinations/piper-kristin#licence",
+    # "MIT LICENSE of microsoft/VibeVoice".
+    "vibevoice-asr-bitnet": "github.com/microsoft/VibeVoice/LICENSE",
+    # "YOLOX LICENSE at tag 0.1.1rc0" (Megvii-BaseDetection/YOLOX).
+    "yolox_s": "github.com/Megvii-BaseDetection/YOLOX/LICENSE",
+    "yolox_tiny": "github.com/Megvii-BaseDetection/YOLOX/LICENSE",
+    "yolox_nano": "github.com/Megvii-BaseDetection/YOLOX/LICENSE",
+    # "Apache-2.0 LICENSE of tensorflow/models".
+    "yamnet": "github.com/tensorflow/models/LICENSE",
+    # "Prism ML Apache-2.0 LICENSE": one file, byte-identical in all four
+    # prism-ml repositories, so the identity names the publisher's licence.
+    "bonsai-8b": "huggingface.co/prism-ml#LICENSE",
+    "bonsai-27b": "huggingface.co/prism-ml#LICENSE",
+    "bonsai-image-4b:ternary-gemlite": "huggingface.co/prism-ml#LICENSE",
+    "bonsai-image-4b:binary-gemlite": "huggingface.co/prism-ml#LICENSE",
+    # "Ollama registry licence layer" of each library model.
+    "granite4.1:3b": "registry.ollama.ai/library/granite4.1:3b#license",
+    "granite3.2-vision:2b": "registry.ollama.ai/library/granite3.2-vision:2b#license",
+    "nomic-embed-text:v1.5": "registry.ollama.ai/library/nomic-embed-text:v1.5#license",
+    "qwen3.5:4b": "registry.ollama.ai/library/qwen3.5:4b#license",
+    # "BitNet MIT LICENSE at microsoft/bitnet-b1.58-2B-4T".
+    "bitnet-b1.58-2b4t": "huggingface.co/microsoft/bitnet-b1.58-2B-4T/LICENSE",
+    # "CC BY 4.0 legal code".
+    "pocket-tts-english-q8_0": "creativecommons.org/licenses/by/4.0/legalcode",
+    # "kilix config/model_notices a44a6081 (Apache-2.0 with Alibaba Cloud copyright)".
+    "qwen3-tts-0.6b-base": "kilix/config/model_notices#qwen3-tts",
+    "qwen3-tts-0.6b-customvoice": "kilix/config/model_notices#qwen3-tts",
+    "qwen3-tts-1.7b-voicedesign": "kilix/config/model_notices#qwen3-tts",
+    # "kilix config/model_notices b5d65a59 (OpenAI Whisper MIT LICENSE)".
+    "whisper-tiny-ggml": "kilix/config/model_notices#whisper",
+    # "CC BY-NC 4.0 legal code (creativecommons.org)", both checkpoints (OD-AR).
+    "encodec-24khz-stateful": "creativecommons.org/licenses/by-nc/4.0/legalcode",
+    "encodec-48khz-frame": "creativecommons.org/licenses/by-nc/4.0/legalcode",
+    # "MIT License canonical text, SPDX license-list-data ... text/MIT.txt".
+    "documentfigureclassifier-v2.5": "github.com/spdx/license-list-data/text/MIT.txt",
+    # "facebookresearch/encodec MIT LICENSE" (OD-AS code relicensing notice).
+    CONVERTER_ID: "github.com/facebookresearch/encodec/LICENSE",
+}
 _NON_ID = re.compile(r"[^a-z0-9._:-]+")
 _QUOTE_KEYS = (
     "binding_conditions",
@@ -89,19 +180,20 @@ def record_filename(record_id: str) -> str:
 
 
 def load_pin(directory: Path) -> str:
+    """The one sha256 pin line. A second pin line is refused (LIC3-2): a stale
+    pin appended after the real one must not pass unnoticed."""
     pin_path = directory / PIN_NAME
     text = pin_path.read_text(encoding="utf-8")
-    digest = None
+    pins = []
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        parts = stripped.split()
-        if len(parts) < 1:
-            continue
-        digest = parts[0]
-        break
-    if digest is None or len(digest) != 64:
+        pins.append(stripped.split()[0])
+    if len(pins) != 1:
+        raise ValueError(f"{pin_path} must hold exactly one sha256 pin line, found {len(pins)}")
+    digest = pins[0]
+    if len(digest) != 64 or set(digest) - set("0123456789abcdef"):
         raise ValueError(f"{pin_path} does not contain a sha256 pin")
     return digest
 
@@ -252,8 +344,20 @@ def _quotes_as(
         seen.add(item_id)
         digest, _data = quote_bytes(quote, f"{label}[{index}]")
         if cls is BindingCondition:
+            text_id = BINDING_TEXT_IDS.get(quote_id)
+            if text_id is None:
+                raise ValueError(
+                    f"{label}[{index}] binding quote {quote_id!r} has no text identity "
+                    "in BINDING_TEXT_IDS (SR-4); a renamed binding maps to its old identity"
+                )
+            require_text_id(text_id, f"BINDING_TEXT_IDS[{quote_id!r}]")
             items.append(
-                BindingCondition(id=item_id, text_sha256=digest, agreement_required=True)
+                BindingCondition(
+                    id=item_id,
+                    text_sha256=digest,
+                    agreement_required=True,
+                    text_id=text_id,
+                )
             )
         elif cls is Advisory:
             items.append(Advisory(id=item_id, text_sha256=digest))
@@ -289,6 +393,17 @@ def components_of(entry: Mapping[str, Any], texts_dir: Path) -> tuple[Component,
             )
         )
     return tuple(items)
+
+
+def licence_text_id_for(record_id: str) -> str:
+    """The declared licence text identity of record_id; a missing one is refused."""
+    text_id = LICENCE_TEXT_IDS.get(record_id)
+    if text_id is None:
+        raise ValueError(
+            f"record {record_id!r} has no licence text identity in LICENCE_TEXT_IDS "
+            "(SR-4); a renamed entry maps to its old identity"
+        )
+    return require_text_id(text_id, f"LICENCE_TEXT_IDS[{record_id!r}]")
 
 
 def record_from_entry(
@@ -329,6 +444,7 @@ def record_from_entry(
         determinations_sha256=pin,
         decision_class=generated,
         licence_ids=licence_ids_of(entry),
+        licence_text_id=licence_text_id_for(entry_id),
     )
 
 
@@ -378,7 +494,82 @@ def converter_record(
         determinations_sha256=pin,
         decision_class="informational",
         licence_ids=("MIT",),
+        licence_text_id=licence_text_id_for(CONVERTER_ID),
     )
+
+
+def check_binding_text_ids(
+    payload: Mapping[str, Any],
+    table: Mapping[str, str] | None = None,
+) -> None:
+    """Refuse an identity table that disagrees with the determinations' sources.
+
+    One identity must not cover two source documents, and one quoted span of
+    one source document must not carry two identities (a sibling left
+    without its alias). Missing entries are refused where records are built.
+    """
+    if table is None:
+        table = BINDING_TEXT_IDS
+    sources: dict[str, set[str]] = {}
+    spans: dict[tuple[Any, ...], set[str]] = {}
+    for entry in payload.get("entries") or []:
+        for quote in entry.get("binding_conditions") or []:
+            text_id = table.get(quote.get("quote_id"))
+            if text_id is None:
+                continue
+            source = quote.get("source") or {}
+            sources.setdefault(text_id, set()).add(str(source.get("sha256")))
+            span = (
+                source.get("sha256"),
+                quote.get("line_start"),
+                quote.get("line_end"),
+                quote.get("byte_start_in_first_line"),
+                quote.get("byte_end_in_last_line"),
+            )
+            spans.setdefault(span, set()).add(text_id)
+    merged = sorted(text_id for text_id, found in sources.items() if len(found) > 1)
+    if merged:
+        raise ValueError(f"text identities cover more than one source document: {merged}")
+    split = sorted(sorted(found) for found in spans.values() if len(found) > 1)
+    if split:
+        raise ValueError(f"one quoted source span carries several text identities: {split}")
+
+
+def check_licence_text_ids(
+    payload: Mapping[str, Any],
+    table: Mapping[str, str] | None = None,
+) -> None:
+    """Refuse a licence text identity table that disagrees with the determinations.
+
+    Two different licence texts must not share one identity (that would mark
+    one "changed" against the other with nothing revised), and one licence
+    text must not carry two identities (a sibling left without its alias, the
+    LIC4-3 defect). A licence text identity must not also name a binding text.
+    Missing entries are refused where records are built.
+    """
+    if table is None:
+        table = LICENCE_TEXT_IDS
+    shown: list[tuple[str, str]] = []
+    for entry in payload.get("entries") or []:
+        shown.append((str(entry.get("entry_id")), licence_text_digest(entry)))
+    shown.append((CONVERTER_ID, _converter_mit_digest(payload)))
+    digests: dict[str, set[str]] = {}
+    identities: dict[str, set[str]] = {}
+    for record_id, digest in shown:
+        text_id = table.get(record_id)
+        if text_id is None:
+            continue
+        digests.setdefault(text_id, set()).add(digest)
+        identities.setdefault(digest, set()).add(text_id)
+    merged = sorted(text_id for text_id, found in digests.items() if len(found) > 1)
+    if merged:
+        raise ValueError(f"licence text identities cover more than one licence text: {merged}")
+    split = sorted(sorted(found) for found in identities.values() if len(found) > 1)
+    if split:
+        raise ValueError(f"one licence text carries several text identities: {split}")
+    shared = sorted(set(digests) & set(BINDING_TEXT_IDS.values()))
+    if shared:
+        raise ValueError(f"licence text identities also name binding texts: {shared}")
 
 
 def generate_records(
@@ -387,6 +578,8 @@ def generate_records(
     pin: str,
     texts_dir: Path,
 ) -> list[LicenseRecord]:
+    check_binding_text_ids(payload)
+    check_licence_text_ids(payload)
     records: list[LicenseRecord] = []
     seen: set[str] = set()
     for entry in payload.get("entries") or []:
@@ -434,6 +627,22 @@ def write_quote_texts(payload: Mapping[str, Any], texts_dir: Path) -> None:
                 raise TextDigestMismatch(f"text {digest} collides with different bytes")
             continue
         path.write_bytes(data)
+
+
+def check_quote_texts(payload: Mapping[str, Any], texts_dir: Path) -> None:
+    """Read-only counterpart of write_quote_texts (LIC3-3): every quote blob the
+    records need must already be committed, byte-exact. Nothing is written."""
+    problems = []
+    for digest, data in sorted(quote_blobs(payload).items()):
+        path = texts_dir / digest
+        if not path.is_file():
+            problems.append(f"missing {digest}")
+        elif path.read_bytes() != data:
+            problems.append(f"differs {digest}")
+    if problems:
+        raise HandEditedRecord(
+            "committed quote texts are missing or differ: " + ", ".join(problems)
+        )
 
 
 def render_record_bytes(record: LicenseRecord) -> bytes:

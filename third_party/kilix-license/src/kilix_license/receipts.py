@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from kilix_license.agreement import Agreement, typed_agreement_line
@@ -15,7 +15,7 @@ from kilix_license.digest import (
     sha256_hex,
 )
 from kilix_license.errors import AgreementRequired, ReceiptShapeError
-from kilix_license.records import LicenseRecord
+from kilix_license.records import LicenseRecord, require_text_id
 
 RECEIPT_SCHEMA = "kilix.license.receipt/v1"
 
@@ -28,10 +28,21 @@ BOUND_FIELDS = (
     "licensor",
     "binding_condition_text_digests",
 )
+# Required in every receipt/v1 context, including receipts written by fbdfb546.
 CONTEXT_FIELDS = (
     "advisory_digests",
     "release_digest",
     "catalogue_digest",
+)
+# LIC4, additive: recorded, never bound, absent from older receipts. They
+# record what was on the screen (OD-AQ, C2E-VERIFY F6) and the identity of
+# each bound text (SR-4). covers() never reads them. licence_text_id is
+# LIC4-FIX (LIC4-VERIFY LIC4-3): absent from receipts LIC4 wrote.
+OPTIONAL_CONTEXT_FIELDS = (
+    "binding_text_ids",
+    "component_exception_digests",
+    "licence_text_id",
+    "statement_digests",
 )
 _TOP_LEVEL = frozenset(("schema", *BOUND_FIELDS, "context"))
 _R3_BOUND_KEYS = frozenset({"catalogue_digest", "catalog_sha256", "catalogue_sha256"})
@@ -59,17 +70,30 @@ class Receipt:
     advisory_digests: dict[str, str]
     release_digest: str
     catalogue_digest: str
+    # LIC4 context. None means the receipt predates LIC4 and has no such key;
+    # it then serialises to exactly the bytes it was read from.
+    binding_text_ids: dict[str, str] | None = None
+    component_exception_digests: dict[str, str] | None = None
+    statement_digests: dict[str, str] | None = None
+    # LIC4-FIX context. None: the receipt names no licence text identity.
+    licence_text_id: str | None = None
 
     def to_jsonable(self) -> dict[str, Any]:
+        context: dict[str, Any] = {
+            "advisory_digests": dict(sorted(self.advisory_digests.items())),
+            "catalogue_digest": self.catalogue_digest,
+            "release_digest": self.release_digest,
+        }
+        for field in OPTIONAL_CONTEXT_FIELDS:
+            value = getattr(self, field)
+            if value is None:
+                continue
+            context[field] = value if isinstance(value, str) else dict(sorted(value.items()))
         return {
             "binding_condition_text_digests": dict(
                 sorted(self.binding_condition_text_digests.items())
             ),
-            "context": {
-                "advisory_digests": dict(sorted(self.advisory_digests.items())),
-                "catalogue_digest": self.catalogue_digest,
-                "release_digest": self.release_digest,
-            },
+            "context": context,
             "decision": self.decision,
             "licence_id": self.licence_id,
             "licence_text_digest": self.licence_text_digest,
@@ -108,7 +132,11 @@ def parse_receipt(raw: Mapping[str, Any]) -> Receipt:
     if missing:
         raise ReceiptShapeError(missing[0], f"receipt missing bound field {missing[0]}")
     context = mapping(raw.get("context"), "context")
-    unknown_context = tuple(key for key in context if key not in CONTEXT_FIELDS)
+    unknown_context = tuple(
+        key
+        for key in context
+        if key not in CONTEXT_FIELDS and key not in OPTIONAL_CONTEXT_FIELDS
+    )
     if unknown_context:
         raise ReceiptShapeError(
             unknown_context[0],
@@ -126,7 +154,7 @@ def parse_receipt(raw: Mapping[str, Any]) -> Receipt:
         raise ReceiptShapeError("licence_id")
     if not isinstance(licensor, str) or not licensor:
         raise ReceiptShapeError("licensor")
-    return Receipt(
+    receipt = Receipt(
         record_digest=require_sha256(raw.get("record_digest"), "record_digest"),
         manifest_digest=require_sha256(raw.get("manifest_digest"), "manifest_digest"),
         licence_id=licence_id,
@@ -145,6 +173,31 @@ def parse_receipt(raw: Mapping[str, Any]) -> Receipt:
             context.get("catalogue_digest"), "catalogue_digest"
         ),
     )
+    # LIC4 optional context, validated after every fbdfb546 field so an older
+    # receipt is refused (or accepted) exactly as before.
+    extra: dict[str, Any] = {}
+    if "binding_text_ids" in context:
+        ids = mapping(context.get("binding_text_ids"), "binding_text_ids")
+        stray = sorted(
+            key for key in ids if key not in receipt.binding_condition_text_digests
+        )
+        if stray:
+            raise ReceiptShapeError(
+                "binding_text_ids",
+                f"binding_text_ids names unbound binding(s) {stray}",
+            )
+        extra["binding_text_ids"] = {
+            key: require_text_id(value, f"binding_text_ids.{key}")
+            for key, value in ids.items()
+        }
+    for field in ("component_exception_digests", "statement_digests"):
+        if field in context:
+            extra[field] = _digest_map(context.get(field), field)
+    if "licence_text_id" in context:
+        extra["licence_text_id"] = require_text_id(
+            context.get("licence_text_id"), "licence_text_id"
+        )
+    return replace(receipt, **extra) if extra else receipt
 
 
 def parse_receipt_bytes(data: bytes) -> Receipt:
@@ -191,4 +244,10 @@ def receipt_from_agreement(
         advisory_digests=record.advisory_digests(),
         release_digest=require_sha256(release_digest, "release_digest"),
         catalogue_digest=require_sha256(catalogue_digest, "catalogue_digest"),
+        # Context only (OD-AQ): what the screen showed, and each bound text's
+        # identity for the changed-text marker (SR-4). Never compared by covers().
+        binding_text_ids=record.binding_text_ids(),
+        component_exception_digests=record.component_exception_digests(),
+        statement_digests=record.statement_digests(),
+        licence_text_id=record.licence_text_id,
     )

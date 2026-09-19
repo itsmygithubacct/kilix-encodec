@@ -1,0 +1,1 @@
+This is an image classification model based on **Google EfficientNet-B0**, fine-tuned on a subset of the subset of HuggingFace/finepdfs to classify document figures into one of the following 26 categories:
