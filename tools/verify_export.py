@@ -240,6 +240,100 @@ def verify_policy_and_licence_controls() -> tuple[int, int]:
     return passed, total
 
 
+def load_manifest_controls() -> tuple[int, int]:
+    """Show that `load_manifest()` itself runs the SR-5 check (E1-FIX2-VERIFY E1).
+
+    The controls above hold for `verify_policy_and_licence()`; these hold for
+    its call site.  Each planted bundle names a checkpoint that does not exist,
+    so a refusal naming the policy or the licence can only come from the check,
+    which runs before the checkpoint is opened.  Dropping the call makes the
+    planted bundles fail for another reason, and these controls fail.
+    """
+    policy = {
+        "checkpoint_delivery": "upstream-convert",
+        "derived_graph_publication": "user-machine-only-never-published",
+        "native_runtime_downloads": False,
+        "release_qualified": False,
+    }
+    licence = {
+        "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
+        "licensor": "Meta Platforms",
+        "spdx": "CC-BY-NC-4.0",
+    }
+    accepted: dict[str, Any] = {
+        "artifact_policy": dict(policy),
+        "initial_state": "all-zero",
+        "license": dict(licence),
+        "padding_mode": "constant",
+        "profile": "encodec-24khz-causal-mono-3-6-12kbps",
+        "schema": "kilix.encodec.stateful-onnx-export/v2",
+    }
+    policy_refused = "artifact policy differs"
+    licence_refused = "license determination differs"
+    plants: list[tuple[str, dict[str, Any], str]] = [
+        (
+            "delivery user-supplied",
+            {**accepted, "artifact_policy": {**policy, "checkpoint_delivery": "user-supplied-only"}},
+            policy_refused,
+        ),
+        (
+            "publication reverted",
+            {
+                **accepted,
+                "artifact_policy": {
+                    **policy,
+                    "derived_graph_publication": "forbidden-without-separate-model-grant",
+                },
+            },
+            policy_refused,
+        ),
+        (
+            "licensor truncated",
+            {**accepted, "license": {**licence, "licensor": "Meta"}},
+            licence_refused,
+        ),
+        (
+            "evidence changed",
+            {**accepted, "license": {**licence, "evidence": "no-redistribution-grant-found"}},
+            licence_refused,
+        ),
+    ]
+    passed = 0
+    total = 1 + len(plants)
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as directory:
+        root = Path(directory)
+        checkpoint = root / "absent-checkpoint.th"
+
+        def outcome(label: str, value: dict[str, Any]) -> str:
+            bundle = root / label.replace(" ", "-")
+            bundle.mkdir()
+            (bundle / "manifest.json").write_bytes(canonical_json(value))
+            try:
+                load_manifest(bundle, checkpoint)
+            except BaseException as error:  # an import or checkpoint failure too
+                return str(error)
+            return "admitted"
+
+        # Control: the unplanted bundle gets past the check, and fails for a
+        # reason of its own (the absent checkpoint, or no export environment).
+        result = outcome("unplanted", accepted)
+        if result in (policy_refused, licence_refused, "admitted"):
+            print(f"  load_manifest control failed: unplanted bundle: {result}")
+        else:
+            passed += 1
+        for label, value, expected in plants:
+            result = outcome(label, value)
+            if result == expected:
+                passed += 1
+            else:
+                print(f"  load_manifest control failed: {label}: {result}")
+    print(
+        f"load_manifest policy and licence controls: {passed}/{total} "
+        f"{'PASS' if passed == total else 'FAIL'}"
+    )
+    return passed, total
+
+
 def uv_version() -> str:
     return subprocess.run(
         ["uv", "--version"], check=True, capture_output=True, text=True
@@ -247,11 +341,6 @@ def uv_version() -> str:
 
 
 def load_manifest(bundle: Path, checkpoint: Path) -> tuple[dict[str, Any], object]:
-    import onnx
-    import torch
-
-    from stateful_graph import load_model
-
     if bundle.is_symlink() or not bundle.is_dir():
         raise AssertionError("bundle must be a non-symlink directory")
     if bundle.resolve() == REPOSITORY or bundle.resolve().is_relative_to(REPOSITORY):
@@ -272,6 +361,14 @@ def load_manifest(bundle: Path, checkpoint: Path) -> tuple[dict[str, Any], objec
     if value.get("padding_mode") != "constant":
         raise AssertionError("padding policy differs")
     verify_policy_and_licence(value)
+
+    # The export environment is imported only after the manifest's own fields,
+    # so a planted policy or licence is refused before the checkpoint is opened
+    # and before anything is loaded.  load_manifest_controls() depends on it.
+    import onnx
+    import torch
+
+    from stateful_graph import load_model
 
     model, identity = load_model(checkpoint)
     expected_checkpoint = {
@@ -1470,6 +1567,9 @@ def self_test(skeleton: Path) -> None:
     controls_passed, controls_total = verify_policy_and_licence_controls()
     if controls_passed != controls_total:
         raise AssertionError("export policy and licence controls failed")
+    call_passed, call_total = load_manifest_controls()
+    if call_passed != call_total:
+        raise AssertionError("load_manifest policy and licence controls failed")
 
 
 def main() -> int:
