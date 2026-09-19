@@ -1,0 +1,3 @@
+# sha256 of determinations.json (R0-DET-R2). Records cite this digest.
+# Do not hand-edit; tools/generate_records.py --check verifies it.
+af7c5fe9d74fab86bdb4fb832cc63766900df3018ff991284438f6faf3b8cee4  determinations.json

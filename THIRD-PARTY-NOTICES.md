@@ -1,8 +1,17 @@
 # Third-party notices
 
 This repository's source and documentation are project-authored and licensed
-under the root MIT license. No third-party source, generated graph, checkpoint,
-codebook, audio sample, or model weight is vendored in this repository.
+under the root MIT license. Apart from the kilix-license source described
+below, no third-party source, generated graph, checkpoint, codebook, audio
+sample, or model weight is vendored in this repository.
+
+kilix-license: `third_party/kilix-license/` is a `git archive` of the
+kilix-license repository at the commit in `third_party/kilix-license.pin`,
+under its MIT license (`third_party/kilix-license/LICENSE`, Copyright (c) 2026
+Kilix License contributors). It is the licence authority (owner decision
+OD-AJ): the conversion commands embed its modules and one licence record, and
+ship its LICENSE as `notices/kilix-license-LICENSE` in their runtime archive.
+Its licence texts are stored by SHA-256 under `data/texts/`.
 
 The development export group uses ONNX, ONNX Runtime, PyTorch, torchaudio,
 NumPy, EnCodec, einops, Transformers, and safetensors under their respective

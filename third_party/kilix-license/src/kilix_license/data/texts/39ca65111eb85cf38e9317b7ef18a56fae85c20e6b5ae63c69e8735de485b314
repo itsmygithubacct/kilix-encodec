@@ -1,0 +1,2 @@
+  - E1: `encodec_24khz-d7cc33bc.th`, from `dl.fbaipublicfiles.com`, sha256 `d7cc33bc…47bf`;
+  - E2: `facebook/encodec_48khz` @ `c3def8e7`, `model.safetensors` sha256 `47a15ffb…`.

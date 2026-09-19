@@ -1,0 +1,1 @@
+YG1: no upstream statement names the weights.** They are released in the same GitHub repository and release as the Apache-2.0 `LICENSE`, and nothing contradicts Apache-2.0. But neither the README nor the release body nor the files say "the weights are Apache-2.0". Kilix's "with the weights included" (`PROVENANCE.md:10`) cites nothing.

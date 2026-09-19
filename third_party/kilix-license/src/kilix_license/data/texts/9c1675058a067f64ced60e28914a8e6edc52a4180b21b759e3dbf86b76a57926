@@ -1,0 +1,9 @@
+- **C3. No licence file, copyright holder or NOTICE accompanies the fetched artefact.**
+  - The bucket prefix holds only the model objects, and the artefact contains no copyright line.
+  - The only names on record are the metadata author `MediaPipe` (fetched object) or `TensorFlow` (Kaggle object), Kaggle `author: "Google"`, and the Model Garden copyright lines ("The TensorFlow Authors" 2016/2019; "Google LLC" 2022).
+  - A licensor name at first use would rest on these.
+- **C4. The embedded label list sits under three statements that upstream never reconciles.**
+  - The model-level Apache-2.0 statements (metadata, Kaggle) do not single it out.
+  - Its 521 strings are verbatim AudioSet ontology names (CC BY-SA 4.0) and dataset class names (CC BY 4.0).
+  - No upstream source says which, if any, governs the label strings inside the model. This packet does not decide whether such short names attract either licence.
+- **C5. Rights in the training audio are unstated.** YAMNet was trained on AudioSet segments of YouTube videos. No statement about rights in that audio was found. Kaggle's TF-Lite instances list `trainingData: []`; the TF2 instance lists `audioset`.

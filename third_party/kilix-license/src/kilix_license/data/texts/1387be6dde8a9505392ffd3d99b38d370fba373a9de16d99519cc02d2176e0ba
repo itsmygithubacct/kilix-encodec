@@ -1,0 +1,6 @@
+This software is copyright 2026-present Prism ML, Inc. It is available under the Apache 2.0 license.
+If you publicly deploy or redistribute this software, we would appreciate attribution such as: "Created using Bonsai Image by Prism ML."
+
+This software is built from FLUX.2 [klein] 4B, Copyright 2026 Black Forest Labs, which is available under the Apache 2.0 License: https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/main/LICENSE.md
+
+The text encoder is built from Qwen3-4B, Copyright 2024 Alibaba Cloud, which is available under the Apache 2.0 License: https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE

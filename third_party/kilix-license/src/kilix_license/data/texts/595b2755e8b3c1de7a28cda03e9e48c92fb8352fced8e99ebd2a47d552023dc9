@@ -1,0 +1,3 @@
+- **Source pin.** The converter runtime installs `encodec` from a pinned upstream facebookresearch/encodec commit at or after
+  349b7293, the MIT relicensing. The pin is a commit plus an archive or wheel sha256, and PyPI 0.1.1 is no longer used.
+  The package's code is then MIT with a notice only.

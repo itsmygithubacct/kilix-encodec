@@ -1,0 +1,30 @@
+[project]
+name = "kilix-license"
+version = "0.1.0"
+description = "Single licence authority for Kilix: records, screen, receipts, coverage"
+readme = "README.md"
+requires-python = ">=3.12.8,<3.13"
+license = "MIT"
+authors = [{ name = "itsmygithubacct", email = "itsmygithubacct@users.noreply.github.com" }]
+classifiers = [
+  # No "License :: OSI Approved :: ..." classifier. PEP 639 supersedes
+  # license classifiers with the `license` expression declared above, and
+  # setuptools>=77 refuses the pair.
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kilix_license = ["py.typed", "data/*", "data/texts/*", "data/records/*"]
+
+[tool.uv]
+package = false
+required-version = "==0.12.5"
