@@ -128,6 +128,10 @@ class WeightGuardTests(unittest.TestCase):
         # under the lower-case suffix, always-refused and size-gated alike.
         # The files carry no magic and sit below the 2 MiB bound, so only
         # the suffix layer can refuse them.
+        # Case 2 is the whole name in capitals, MODEL.ONNX itself: a scan that
+        # exempts capitalised names the way a README or LICENSE is exempt lets
+        # it through, and every lower-stem plant would still pass (E1-FIX2-
+        # VERIFY E3).
         def spellings(suffix: str) -> tuple[str, str]:
             return suffix.upper(), suffix[:2].upper() + suffix[2:]
 
@@ -141,12 +145,20 @@ class WeightGuardTests(unittest.TestCase):
                 name = f"case{index}/planted{spelled}"
                 files[name] = b"not a real model"
                 expected[name] = f"weight-suffix:{suffix}"
+            name = f"case2/MODEL{suffix.upper()}"
+            self.assertTrue(Path(name).name.isupper(), name)
+            files[name] = b"not a real model"
+            expected[name] = f"weight-suffix:{suffix}"
         for suffix in gated:
             for index, spelled in enumerate(spellings(suffix)):
                 self.assertNotEqual(spelled, suffix)
                 name = f"case{index}/gated{spelled}"
                 files[name] = b"\0" * REQUIRED_SIZE_GATE_BYTES
                 expected[name] = f"weight-suffix-size:{suffix}"
+            name = f"case2/WEIGHTS{suffix.upper()}"
+            self.assertTrue(Path(name).name.isupper(), name)
+            files[name] = b"\0" * REQUIRED_SIZE_GATE_BYTES
+            expected[name] = f"weight-suffix-size:{suffix}"
         found = self.reasons_by_path("case-folding", files)
         for name, reason in expected.items():
             with self.subTest(name=name):
