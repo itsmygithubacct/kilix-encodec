@@ -479,10 +479,13 @@ gate, with exit status 1, before any input is read.
 
 ### Running a conversion
 
-`kilix models install` downloads the pinned upstream bytes on first use, after
-the licence screen has recorded a receipt, and then runs the command. The
-input is never a user-selected file: the command accepts only the exact pinned
-sizes and SHA-256 digests above.
+`kilix models install` is to download the pinned upstream bytes on first use,
+after the licence screen has recorded a receipt, and then run the command.
+That installer path is not here yet: it arrives with C4 (kilix-content) and
+KX (the kilix installer). kilix-content's upstream-convert argv does not yet
+pass `--receipt-store` or `--manifest-digest`. Until then the command is run
+directly, as below. The input is never a user-selected file: the command
+accepts only the exact pinned sizes and SHA-256 digests above.
 
 ```sh
 bin/kilix-encodec-convert-24khz \
