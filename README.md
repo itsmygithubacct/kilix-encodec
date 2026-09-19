@@ -322,14 +322,21 @@ the frozen fixture.
   caller-supplied regular file, verifies its exact size and SHA-256, and uses
   PyTorch's restricted weights-only loader.
 - Both checkpoints and every derivative are CC BY-NC 4.0, licensor Meta
-  Platforms (OD-AR). They are downloaded on first use from their upstream pins
-  and converted on the user's machine only under a covering kilix-license
-  receipt (see "Local conversion commands"); nothing is redistributed, and
-  publication is owner-reserved. Both export manifests record that licence as
-  `license` (`CC-BY-NC-4.0`, `Meta Platforms`). The 24 kHz manifest records
-  `checkpoint_delivery` `upstream-convert` and `derived_graph_publication`
+  Platforms (OD-AR). Their delivery is upstream-convert: the exact bytes of
+  their upstream pins are converted on the user's machine only, under a
+  covering kilix-license receipt (see "Local conversion commands"). Fetching
+  those bytes on first use is left to the installer path, which is not here
+  yet (see "Running a conversion"); until then the caller supplies the pinned
+  download. Derived graphs are produced only on the user's machine and
+  never published (OD-AR, OD-S); nothing is redistributed. Both export
+  manifests record that licence as `license` (`CC-BY-NC-4.0`,
+  `Meta Platforms`). The 24 kHz manifest records `checkpoint_delivery`
+  `upstream-convert` and `derived_graph_publication`
   `user-machine-only-never-published` in place of the superseded 0.2.1
-  user-supplied and no-grant strings; its graphs did not change.
+  user-supplied and no-grant strings; its graphs did not change. The 48 kHz
+  manifest keeps its earlier wording of the same policy,
+  `derived_artifact_publication` `owner-reserved`: the owner has decided, and
+  the decision is that derived graphs are never published.
 
 Large graphs, weights, and codebooks do not belong in Git history.
 
@@ -517,14 +524,15 @@ Cancellation and deadlines tear down the owned process tree. A failed attempt
 can leave partial files in its output directory for the caller to inspect or
 discard; a new conversion requires an empty output.
 
-The output holds exactly the bound population and no notice: licence notices
-are the installer's, taken from kilix-license texts. Neither this tool nor its
-output grants redistribution, creates a source-supply decision, or admits an
-installed model. Checkpoints, runtime archives and generated graphs must not be
-committed to this repository. The command needs system Python, bubblewrap,
-user namespaces and Linux memfd seals. The development runtime occupies
-roughly 1.1 GiB on disk and additional temporary memory while converting; this
-is not a fitted device profile.
+The output holds exactly the bound population and no notice. The licence
+texts are kilix-license's; presenting them with an installed model is left to
+the installer path (C4 and KX above), which is not here yet. Neither this tool
+nor its output grants redistribution, creates a source-supply decision, or
+admits an installed model. Checkpoints, runtime archives and generated graphs
+must not be committed to this repository. The command needs system Python,
+bubblewrap, user namespaces and Linux memfd seals. The development runtime
+occupies roughly 1.1 GiB on disk and additional temporary memory while
+converting; this is not a fitted device profile.
 
 `make test-converter` runs bounded file, cancellation, process ownership,
 output-publication and receipt-gate controls without model payloads or network
