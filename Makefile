@@ -59,7 +59,7 @@ PKG_CONFIG_FILE := $(BUILD)/$(PROJECT).pc
 .PHONY: all clean export-48khz-test export-env export-test install install-test sanitize test test-native test-native-c
 .PHONY: test-stereo test-stereo-c test-container-oracle test-source-c test-file-cli
 .PHONY: test-asset-fds FORCE_CONTENT test-content-python test-content-ipc
-.PHONY: test-converter
+.PHONY: test-converter catalog-digests catalog-digests-check
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(SHARED_LINK) $(COMMAND) $(PKG_CONFIG_FILE)
 
@@ -105,12 +105,20 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/listening_trial.py --version; \
 	$(PYTHON) tools/listening_trial.py --self-test; \
 	$(PYTHON) tests/test_consumer_grep.py; \
+	$(PYTHON) -B tests/test_no_model_weights.py; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
 
 # Converter build/command controls, including the kilix-license receipt gate.
 # No model payload, network access or real conversion.
 test-converter:
 	$(PYTHON) -B tests/test_converter.py -v
+
+# R4-198: the weight guard's digest list is generated, never hand-edited.
+catalog-digests:
+	$(PYTHON) -B tools/regenerate_catalog_digests.py
+
+catalog-digests-check:
+	$(PYTHON) -B tools/regenerate_catalog_digests.py --check
 
 export-env:
 	uv sync --frozen --group export

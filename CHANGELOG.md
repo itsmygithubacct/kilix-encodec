@@ -16,6 +16,8 @@
 - Retire `tools/NO-MODEL-GRANT-24KHZ.txt` and the converter's own notice
   writing: the output is exactly the bound population, and licence notices
   come from kilix-license. Both checkpoints stay CC BY-NC 4.0 (OD-AR).
+- Add the tracked-tree model weight guard (`tests/test_no_model_weights.py`)
+  with a generated catalog digest list (`make catalog-digests`).
 - Add the C5-R4 epoch-start profile (owner decision OD-AL): every 24 kHz epoch,
   and the stream, starts with a four-packet repeat pre-roll on both sides, in
   the Python streaming runtime and the native runtime. Graph bytes and the
