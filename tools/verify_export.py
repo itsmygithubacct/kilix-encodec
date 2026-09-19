@@ -143,6 +143,15 @@ def verify_policy_and_licence(value: dict[str, Any]) -> None:
     }
     if value.get("artifact_policy") != expected_policy:
         raise AssertionError("artifact policy differs")
+    # In Python 0 == False and 0.0 == False, so equality alone admits a policy
+    # that records a number where the export writes a boolean.  A recorded
+    # `release_qualified: 0` is not the decision `release_qualified: false`.
+    recorded = value.get("artifact_policy")
+    if not isinstance(recorded, dict) or any(
+        type(recorded.get(key)) is not type(expected)
+        for key, expected in expected_policy.items()
+    ):
+        raise AssertionError("artifact policy differs")
     expected_license = {
         "evidence": "OD-AR-cc-by-nc-4.0-meta-platforms",
         "licensor": "Meta Platforms",
@@ -218,6 +227,16 @@ def verify_policy_and_licence_controls() -> tuple[int, int]:
          manifest(artifact_policy={**policy, "release_qualified": True}), policy_refused),
         ("runtime downloads",
          manifest(artifact_policy={**policy, "native_runtime_downloads": True}),
+         policy_refused),
+        # 0 == False and 0.0 == False: a number is not the recorded decision.
+        ("release qualified zero",
+         manifest(artifact_policy={**policy, "release_qualified": 0}), policy_refused),
+        ("release qualified zero float",
+         manifest(artifact_policy={**policy, "release_qualified": 0.0}), policy_refused),
+        ("runtime downloads zero",
+         manifest(artifact_policy={**policy, "native_runtime_downloads": 0}), policy_refused),
+        ("runtime downloads zero float",
+         manifest(artifact_policy={**policy, "native_runtime_downloads": 0.0}),
          policy_refused),
     ]
     passed = 0
