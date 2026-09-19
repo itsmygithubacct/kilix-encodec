@@ -107,6 +107,7 @@ test: all $(TEST_BINS)
 	$(PYTHON) tools/listening_trial.py --self-test; \
 	$(PYTHON) tests/test_consumer_grep.py; \
 	$(PYTHON) -B tests/test_no_model_weights.py; \
+	$(PYTHON) -B tests/test_manifest_policy_call_site.py; \
 	printf 'kilix-encodec test binaries: %s/%s PASS\n' "$$passed" "$$total"
 
 # Converter build/command controls, including the kilix-license receipt gate.
