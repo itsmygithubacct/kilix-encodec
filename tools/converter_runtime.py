@@ -129,12 +129,16 @@ def licence_record(authority):
 def require_receipt(store_path, manifest_digest):
     """Return the covering receipt, or refuse before any input is read.
 
-    An absent or empty store is this gate's own refusal: there is no path by
-    which a conversion proceeds without a receipt store to look in.
+    An absent or empty store, and an absent or empty manifest digest, are this
+    gate's own refusals: there is no path by which a conversion proceeds
+    without a receipt store to look in and the manifest digest a receipt binds.
     """
     store = os.fspath(store_path) if isinstance(store_path, (str, os.PathLike)) else None
     if not isinstance(store, str) or not store:
         raise LicenceRefused('no kilix-license receipt store was given; '
+                             'a covering receipt is required before any input is read')
+    if manifest_digest is None or manifest_digest == '':
+        raise LicenceRefused('no asset manifest digest was given; '
                              'a covering receipt is required before any input is read')
     if (not isinstance(manifest_digest, str) or len(manifest_digest) != 64
             or set(manifest_digest) - DIGEST_CHARACTERS):
@@ -393,13 +397,15 @@ def main():
                         help='the upstream download: the checkpoint file (24 kHz) or the '
                              'directory holding the pinned model files (48 kHz)')
     parser.add_argument('--output', type=Path, required=True)
-    # Not an argparse requirement: an absent or empty store must reach the
-    # licence gate and be refused there, like any store without a receipt.
+    # Neither is an argparse requirement: an absent or empty store or manifest
+    # digest must reach the licence gate and be refused there, like any store
+    # without a covering receipt.
     parser.add_argument('--receipt-store', default=None,
                         help='kilix-license receipt store written by the licence screen; '
                              'without one the conversion is refused')
-    parser.add_argument('--manifest-digest', required=True,
-                        help='asset manifest digest the covering receipt binds')
+    parser.add_argument('--manifest-digest', default=None,
+                        help='asset manifest digest the covering receipt binds; '
+                             'without one the conversion is refused')
     parser.add_argument('--timeout', type=int, default=900)
     arguments = parser.parse_args()
     os.umask(0o077)

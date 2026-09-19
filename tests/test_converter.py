@@ -778,53 +778,129 @@ print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.ge
                     with self.assertRaisesRegex(runtime.LicenceRefused, expected):
                         runtime.require_receipt(store, '3' * 64)
 
+    def watched_command(self, profile, name, gate_arguments):
+        """Run the real command as a program over real paths under an inotify watch.
+
+        The input, a private empty output directory and a runtime directory
+        with runtime.tar all exist, so only the gate stands between the
+        command and a conversion. Returns the result, the events the run
+        caused, the output directory and whether a control open of each kind
+        of watched path (input, output, runtime.tar) was seen afterwards.
+        """
+        selected = binding()['profiles'][profile]
+        area = self.root / (profile + '-' + name)
+        (area / 'bin').mkdir(parents=True, mode=0o700)
+        command = area / 'bin' / selected['command']
+        command.write_text(rendered_command(profile))
+        runtime = area / selected['directory']
+        runtime.mkdir(mode=0o700)
+        (runtime / 'runtime.tar').write_bytes(b'')
+        inputs = area / 'input'
+        inputs.mkdir(mode=0o700)
+        for item in selected['inputs']:
+            (inputs / item).write_bytes(b'upstream input stand-in')
+        given = inputs / next(iter(selected['inputs'])) if selected['input'] == 'file' else inputs
+        output = area / 'output'
+        output.mkdir(mode=0o700)
+        watched = [inputs, *(inputs / item for item in selected['inputs']),
+                   output, runtime, runtime / 'runtime.tar']
+        watch = Watch(watched)
+        try:
+            result = subprocess.run(
+                ['/usr/bin/python3', '-I', str(command), '--input', str(given),
+                 '--output', str(output), *gate_arguments],
+                text=True, capture_output=True, timeout=30)
+            touched = watch.events()
+            # Control: the watch does see an open of each kind of path.
+            for path in (given, output, runtime / 'runtime.tar'):
+                if path.is_dir():
+                    os.close(os.open(path, os.O_RDONLY | os.O_DIRECTORY))
+                else:
+                    path.read_bytes()
+            seen = {path for path, _mask, _name in watch.events()}
+        finally:
+            watch.close()
+        control = ({str(output), str(runtime / 'runtime.tar')} <= seen
+                   and (str(given) in seen or str(inputs) in seen))
+        return result, touched, output, control
+
     def test_command_entry_refuses_an_absent_or_empty_store_before_touching_any_input(self):
-        # The real command, run as a program over real paths: the input, a
-        # private empty output directory and a runtime directory all exist,
-        # so only the gate stands between the command and a conversion.
         for profile in builder.PROFILES:
-            selected = binding()['profiles'][profile]
             for case, extra in (('removed', []), ('empty', ['--receipt-store', ''])):
                 with self.subTest(profile=profile, case=case):
-                    area = self.root / (profile + '-' + case)
-                    (area / 'bin').mkdir(parents=True, mode=0o700)
-                    command = area / 'bin' / selected['command']
-                    command.write_text(rendered_command(profile))
-                    runtime = area / selected['directory']
-                    runtime.mkdir(mode=0o700)
-                    (runtime / 'runtime.tar').write_bytes(b'')
-                    inputs = area / 'input'
-                    inputs.mkdir(mode=0o700)
-                    for name in selected['inputs']:
-                        (inputs / name).write_bytes(b'upstream input stand-in')
-                    given = inputs / next(iter(selected['inputs'])) if selected['input'] == 'file' else inputs
-                    output = area / 'output'
-                    output.mkdir(mode=0o700)
-                    watched = [inputs, *(inputs / name for name in selected['inputs']),
-                               output, runtime, runtime / 'runtime.tar']
-                    watch = Watch(watched)
-                    try:
-                        result = subprocess.run(
-                            ['/usr/bin/python3', '-I', str(command), '--input', str(given),
-                             '--output', str(output), *extra, '--manifest-digest', '9' * 64],
-                            text=True, capture_output=True, timeout=30)
-                        touched = watch.events()
-                        # Control: the watch does see an open of each kind of path.
-                        for path in (given, output, runtime / 'runtime.tar'):
-                            if path.is_dir():
-                                os.close(os.open(path, os.O_RDONLY | os.O_DIRECTORY))
-                            else:
-                                path.read_bytes()
-                        seen = {path for path, _mask, _name in watch.events()}
-                    finally:
-                        watch.close()
+                    result, touched, output, control = self.watched_command(
+                        profile, case, [*extra, '--manifest-digest', '9' * 64])
                     self.assertEqual(result.returncode, 1, result.stderr)
                     self.assertIn('conversion refused: ' + self.NO_STORE, result.stderr)
                     self.assertEqual(result.stdout, '')
                     self.assertEqual(touched, [])
-                    self.assertLessEqual({str(output), str(runtime / 'runtime.tar')}, seen)
-                    self.assertTrue(str(given) in seen or str(inputs) in seen)
+                    self.assertTrue(control)
                     self.assertEqual(list(output.iterdir()), [])
+
+    # --- E1-FIX-VERIFY N1: the manifest digest is the gate's other input ---
+
+    NO_DIGEST = 'no asset manifest digest was given'
+    MALFORMED_DIGEST = 'manifest digest must be 64 lowercase hex characters'
+    COVERED_DIGEST = 'a' * 64
+    MALFORMED_DIGESTS = (('whitespace', ' '), ('whitespace-64', ' ' * 64),
+                         ('non-hex', 'g' * 64), ('upper-case', 'A' * 64),
+                         ('short', 'a' * 63), ('long', 'a' * 65))
+
+    def covering_store(self, profile):
+        """A store holding a real receipt that covers COVERED_DIGEST, so only
+        the digest given to the gate can make it refuse."""
+        store = self.receipt_store('covering-' + profile)
+        receipt, _path = self.write_receipt(store, profile, self.COVERED_DIGEST)
+        return store, receipt
+
+    def test_gate_refuses_an_absent_or_empty_manifest_digest_before_touching_any_input(self):
+        for profile in builder.PROFILES:
+            runtime = runtime_module(profile)
+            store, receipt = self.covering_store(profile)
+            before = {item.name: item.read_bytes() for item in store.iterdir()}
+            # Control: this store and digest pass the gate.
+            self.assertEqual(runtime.require_receipt(store, self.COVERED_DIGEST).digest, receipt.digest)
+            cases = [('none', None, self.NO_DIGEST), ('empty', '', self.NO_DIGEST),
+                     *((case, digest, self.MALFORMED_DIGEST) for case, digest in self.MALFORMED_DIGESTS)]
+            for case, digest, expected in cases:
+                with self.subTest(profile=profile, case=case):
+                    with self.assertRaisesRegex(runtime.LicenceRefused, expected):
+                        self.gated_run(runtime, store, digest)
+                    with self.assertRaisesRegex(runtime.LicenceRefused, expected):
+                        runtime.require_receipt(store, digest)
+            self.assertEqual({item.name: item.read_bytes() for item in store.iterdir()}, before)
+
+    def test_command_entry_refuses_an_absent_or_empty_manifest_digest_before_touching_any_input(self):
+        for profile in builder.PROFILES:
+            store, _receipt = self.covering_store(profile)
+            covered = ['--receipt-store', str(store)]
+            cases = [('removed', [], self.NO_DIGEST),
+                     ('empty', ['--manifest-digest', ''], self.NO_DIGEST),
+                     ('equals-empty', ['--manifest-digest='], self.NO_DIGEST),
+                     *((case, ['--manifest-digest', digest], self.MALFORMED_DIGEST)
+                       for case, digest in self.MALFORMED_DIGESTS)]
+            for case, extra, expected in cases:
+                with self.subTest(profile=profile, case=case):
+                    result, touched, output, control = self.watched_command(
+                        profile, 'digest-' + case, [*covered, *extra])
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn('conversion refused: ' + expected, result.stderr)
+                    self.assertEqual(result.stdout, '')
+                    self.assertEqual(touched, [])
+                    self.assertTrue(control)
+                    self.assertEqual(list(output.iterdir()), [])
+            # Control: the same store with the digest it covers passes the
+            # gate, and the command goes on to seal its runtime, which this
+            # empty stand-in fails.
+            with self.subTest(profile=profile, case='covered'):
+                result, touched, output, control = self.watched_command(
+                    profile, 'digest-covered', [*covered, '--manifest-digest', self.COVERED_DIGEST])
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('conversion refused: input bytes differ from the pinned population',
+                              result.stderr)
+                self.assertTrue(any(path.endswith('/runtime.tar') for path, _mask, _name in touched))
+                self.assertTrue(control)
+                self.assertEqual(list(output.iterdir()), [])
 
     def test_packaging_48khz_binds_frame_sources_record_and_command(self):
         source, environment, python, uv, output, members = self.packaging_fixture('frame', '48khz')
