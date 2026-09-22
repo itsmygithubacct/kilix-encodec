@@ -21,6 +21,13 @@ def main():
         environment=dict(os.environ); environment.pop('LC_CTYPE',None)
         assert environment=={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','LC_ALL':'C.UTF-8',
             'KILIX_LICENSE_RECEIPTS':'/ipc/receipts','GPU_TERMINAL_HOME':'/ipc/stack','HOME':'/ipc/home'}
+    if mode=='privacy-empty':
+        # Empty values cross as they are, and an unset one stays unset, so
+        # receipt_store_root() reads the caller's own answer (an empty HOME is "/").
+        environment=dict(os.environ); environment.pop('LC_CTYPE',None)
+        assert environment=={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','LC_ALL':'C.UTF-8',
+            'KILIX_LICENSE_RECEIPTS':'','HOME':''}
+    if mode in ('privacy','privacy-empty'):
         try:os.fstat(60)
         except OSError:pass
         else:return 8

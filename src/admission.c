@@ -174,14 +174,17 @@ kenc_result kenc_installed_assets_open(kenc_installed_assets **out,
     /* Only the variables kilix-license's receipt_store_root() reads cross exec,
      * so this helper finds receipts exactly where the licence screen filed them
      * ($KILIX_LICENSE_RECEIPTS, else $GPU_TERMINAL_HOME/license-receipts, else
-     * $HOME/.local/gpu_terminal/license-receipts). No loader or Python injection. */
+     * $HOME/.local/gpu_terminal/license-receipts). No loader or Python injection.
+     * Each crosses exactly as the caller has it, set or unset, empty included:
+     * kilix-license reads an empty $HOME as "/", and dropping it made the
+     * helper fall back to the passwd home while the writer used "/". */
     static const char *const receipt_names[] = {"KILIX_LICENSE_RECEIPTS", "GPU_TERMINAL_HOME", "HOME"};
     char receipt_environment[3][4128];
     char *environment[] = {"PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", NULL, NULL, NULL, NULL};
     size_t used = 3u;
     for (size_t i = 0u; i < 3u && error == 0; ++i) {
         const char *value = getenv(receipt_names[i]);
-        if (value == NULL || value[0] == '\0') { continue; }
+        if (value == NULL) { continue; }
         if (strnlen(value, 4096u) >= 4096u) { error = EINVAL; continue; }
         (void)snprintf(receipt_environment[i], sizeof(receipt_environment[i]), "%s=%s", receipt_names[i], value);
         environment[used++] = receipt_environment[i];

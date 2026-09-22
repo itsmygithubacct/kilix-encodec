@@ -71,6 +71,20 @@ int main(void)
         kenc_installed_assets_free(assets);
         TEST_CHECK(descriptors()==before+1u);
     }
+    /* An empty value crosses as it is and an unset one stays unset: an empty
+     * HOME is "/" to kilix-license, so dropping it would move the store. */
+    (void)setenv("KILIX_LICENSE_RECEIPTS","",1);
+    (void)unsetenv("GPU_TERMINAL_HOME");
+    (void)setenv("HOME","",1);
+    {
+        kenc_installed_assets *assets=NULL;
+        TEST_CHECK(kenc_installed_assets_open(&assets,1u,"/privacy-empty",2000u,NULL,NULL)==KENC_OK);
+        kenc_installed_assets_free(assets);
+        TEST_CHECK(descriptors()==before+1u);
+    }
+    (void)setenv("KILIX_LICENSE_RECEIPTS","/ipc/receipts",1);
+    (void)setenv("GPU_TERMINAL_HOME","/ipc/stack",1);
+    (void)setenv("HOME","/ipc/home",1);
     static const char *const refusals[]={"/few","/many","/unsealed","/writable","/wrong-profile",
         "/error","/reserved","/short","/long","/empty-first","/fdless","/extra-empty",
         "/extra-rights","/extra-data","/late-error","/exit"};

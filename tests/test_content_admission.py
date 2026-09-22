@@ -220,6 +220,32 @@ class NativeAdmission(unittest.TestCase):
         self.assertEqual(outcomes["control"], "ADMITTED")
         self.assertEqual(outcomes["plant"], "REFUSED a module outside the isolated path was imported")
 
+    def test_an_empty_home_finds_the_receipt_where_kilix_license_files_it(self):
+        # With HOME="" and neither override set, kilix-license files receipts
+        # under "/" (expanduser gives "/"). The helper must look there too, not
+        # in the passwd home. Filing there needs a root this user owns, which
+        # the namespace harness provides; tests/test_admission_ipc.c checks the
+        # empty HOME crossing on every host.
+        top = Path("/.local")
+        if os.geteuid() == 0 or os.stat("/").st_uid != os.geteuid() or os.path.lexists(top):
+            self.skipTest("needs a private root directory owned by this non-root user, without /.local")
+        os.environ.pop("KILIX_LICENSE_RECEIPTS", None)
+        os.environ.pop("GPU_TERMINAL_HOME", None)
+        os.environ["HOME"] = ""
+        try:
+            self.assertEqual(kilix_license.receipt_store_root(), Path("/.local/gpu_terminal/license-receipts"))
+            for profile in self.graphs:
+                self.assertEqual(self.admit(profile)[0], KENC_ERR_MODEL)
+            store = kilix_license.ReceiptStore.shared()
+            for path in self.store.root.glob("*.json"):
+                shutil.copy2(path, store.root / path.name)
+            for profile in self.graphs:
+                result, assets = self.admit(profile)
+                self.assertEqual(result, KENC_OK)
+                self.library.kenc_installed_assets_free(assets)
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+
     def test_the_library_carries_the_bundle_it_was_built_from(self):
         self.assertEqual(self.library.kenc_installed_content_commit().decode(), self.commit)
         self.assertEqual(self.library.kenc_installed_bundle_sha256().decode(), self.receipt["bundle_sha256"])

@@ -429,7 +429,10 @@ catalog, receipt decision, download, converter or path-only admission is used.
 Only `KILIX_LICENSE_RECEIPTS`, `GPU_TERMINAL_HOME` and `HOME` cross into the
 helper besides a fixed `PATH` and locale: they are exactly what
 `receipt_store_root()` reads, so the helper looks for receipts where the licence
-screen filed them. `XDG_STATE_HOME` no longer selects anything. A successful asset object owns
+screen filed them. Each crosses exactly as the caller has it, set or unset and
+empty included: an empty `HOME` means `/` to kilix-license, so the helper then
+looks under `/.local/gpu_terminal/license-receipts`, as the writer does.
+`XDG_STATE_HOME` no longer selects anything. A successful asset object owns
 its FDs until `kenc_installed_assets_free`; model contexts retain their own bytes.
 
 `make test-content-python CONTENT_SOURCE=/path/to/kilix-content` checks the

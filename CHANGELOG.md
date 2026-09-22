@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Pass the receipt-root variables to the admission helper exactly as the
+  caller has them, empty values included. With `HOME=""` kilix-license files
+  receipts under `/`, but the helper dropped the empty value and looked in the
+  passwd home, so an accepted licence was refused.
 - Admit installed models against the asset/v3 catalogue and kilix-license
   receipts (owner decisions OD-BM, OD-BN). The F100 authority the helper used
   (`ReceiptStore`, `ReleaseContext`, `ArtifactBinding`, `InstalledAsset`,
