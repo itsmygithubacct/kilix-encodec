@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Admit installed models against the asset/v3 catalogue and kilix-license
+  receipts (owner decisions OD-BM, OD-BN). The F100 authority the helper used
+  (`ReceiptStore`, `ReleaseContext`, `ArtifactBinding`, `InstalledAsset`,
+  `Installer.open_asset`) no longer exists in kilix-content. The helper now
+  asks `kilix_content.verified_packaged_catalog()`, `kilix_license.coverage.require()`
+  over `receipt_store_root()`, and the tree `Installer.asset_destination()`
+  names, and takes its own sealed snapshot. It still refuses a missing or wrong
+  receipt, a changed tree and a catalogue that does not match its pin, and now
+  also a catalogue naming more than one licence or another licence record.
+  The bundle embeds the content commit's vendored kilix-license, which must be
+  the one this repository pins. The public C API is unchanged; the helper's
+  environment now carries `KILIX_LICENSE_RECEIPTS`, `GPU_TERMINAL_HOME` and
+  `HOME` instead of `XDG_STATE_HOME`. Receipts written under the F100 store are
+  not read.
 - Re-pin the vendored licence authority to kilix-license `7104ea5c`, which
   binds the real EnCodec licence-history note (`data/texts/8cfc463c…`) as the
   records' advisory. Eleven of the nineteen `licence_authority.files` digests

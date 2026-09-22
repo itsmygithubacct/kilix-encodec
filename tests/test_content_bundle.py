@@ -10,7 +10,9 @@ import zipfile
 import zlib
 
 
-BUILDER = Path(__file__).resolve().parents[1] / "tools/build_content_bundle.py"
+ROOT = Path(__file__).resolve().parents[1]
+BUILDER = ROOT / "tools/build_content_bundle.py"
+LICENCE = json.loads((ROOT / "tools/converter-inputs.json").read_bytes())["licence_authority"]
 
 
 class BundleIdentity(unittest.TestCase):
@@ -29,6 +31,11 @@ class BundleIdentity(unittest.TestCase):
         for name in ("__init__.py", "installed.py", "receipt.py", "catalog.py"):
             (self.package / name).write_text("# Original exact source: $Format:%H$\n")
         (self.repository / "LICENSE").write_text("Original license\n")
+        # The content commit vendors the licence authority this repository pins.
+        for path in LICENCE["files"]:
+            target = self.repository / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / path).read_bytes())
         (self.repository / ".gitattributes").write_text("src/kilix_content/installed.py export-ignore\nsrc/kilix_content/receipt.py export-subst\n")
         self.commit = self.save()
 
@@ -44,7 +51,7 @@ class BundleIdentity(unittest.TestCase):
         self.git("commit", "-qm", "Bundle identity fixture")
         return self.git("rev-parse", "HEAD")
 
-    def build(self, label, commit=None, environment=None, success=True):
+    def build(self, label, commit=None, environment=None, success=True, reason=None):
         output = self.root / label
         process = subprocess.run(["/usr/bin/python3", "-I", "-B", str(BUILDER),
             "--source", str(self.repository), "--commit", commit or self.commit,
@@ -53,6 +60,8 @@ class BundleIdentity(unittest.TestCase):
         if not success:
             self.assertNotEqual(process.returncode, 0)
             self.assertFalse(output.exists())
+            if reason is not None:
+                self.assertIn(reason.encode(), process.stderr)
             return
         self.assertEqual(process.returncode, 0, process.stderr.decode())
         return output
@@ -71,7 +80,18 @@ class BundleIdentity(unittest.TestCase):
                 self.assertEqual(archive.read("kilix_content/" + path.name), path.read_bytes())
         receipt = json.loads((first / "content_bundle.receipt.json").read_text())
         self.assertEqual(receipt["content_tree"], self.git("rev-parse", self.commit + "^{tree}"))
-        self.assertEqual(len(receipt["content_objects"]), 5)
+        # 4 package files and the content licence, then every pinned licence
+        # authority module, record and licence (the pin file is compared, not embedded).
+        self.assertEqual(len(receipt["content_objects"]), 5 + len(LICENCE["files"]) - 1)
+        self.assertEqual(receipt["licence_authority_ref"], LICENCE["ref"])
+        with zipfile.ZipFile(first / "content_bundle.zip") as archive:
+            for path, digest in LICENCE["files"].items():
+                if path.startswith("third_party/kilix-license/src/"):
+                    name = path[len("third_party/kilix-license/src/"):]
+                    self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), digest, name)
+            self.assertEqual(archive.read("licenses/kilix-license.txt"),
+                             (ROOT / "third_party/kilix-license/LICENSE").read_bytes())
+            self.assertEqual(archive.read("installed_assets.py"), (ROOT / "python/installed_assets.py").read_bytes())
 
     def test_commit_tree_and_blob_replacements_cannot_change_named_source(self):
         first = self.build("first")
@@ -112,6 +132,30 @@ class BundleIdentity(unittest.TestCase):
         link.unlink()
         (self.package / "unrecognized.dat").write_bytes(b"unsafe")
         self.build("unknown", self.save(), success=False)
+
+    def test_a_licence_authority_other_than_the_pinned_one_refuses_without_output(self):
+        package = self.repository / "third_party/kilix-license/src/kilix_license"
+        pin = self.repository / "third_party/kilix-license.pin"
+        pin.write_text("0" * 40 + "\n")
+        self.build("other-pin", self.save(), success=False, reason="pins a different licence authority")
+        pin.write_text(LICENCE["ref"] + "\n")
+        coverage = package / "coverage.py"
+        original = coverage.read_bytes()
+        coverage.write_bytes(original + b"# changed\n")
+        self.build("changed-module", self.save(), success=False, reason="differs from the pinned one")
+        coverage.write_bytes(original)
+        record = next(package.glob("data/records/*.json"))
+        saved = record.read_bytes()
+        record.write_bytes(saved.replace(b"}", b" }", 1))
+        self.build("changed-record", self.save(), success=False, reason="differs from the pinned one")
+        record.write_bytes(saved)
+        (package / "unpinned.py").write_text("# not in licence_authority.files\n")
+        self.build("extra-module", self.save(), success=False, reason="modules differ from the pinned set")
+        (package / "unpinned.py").unlink()
+        self.build("restored", self.save())
+        for path in list((self.repository / "third_party").rglob("*"))[::-1]:
+            path.unlink() if path.is_file() else path.rmdir()
+        self.build("absent", self.save(), success=False, reason="does not vendor the pinned licence authority")
 
     def test_oversized_blob_refuses_before_output(self):
         (self.package / "oversized.py").write_bytes(b"#" * (2 * 1024**2 + 1))

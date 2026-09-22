@@ -171,17 +171,20 @@ kenc_result kenc_installed_assets_open(kenc_installed_assets **out,
     if (error == 0) { error = posix_spawn_file_actions_addclosefrom_np(&actions, 5); }
     char parent[32]; (void)snprintf(parent, sizeof(parent), "%ld", (long)getpid());
     char *arguments[] = {"/usr/bin/python3", "-I", "-B", "/proc/self/fd/3", parent, NULL};
-    /* The authority uses NSS for identity/home. Only its documented receipt
-     * store location override crosses exec; no loader or Python injection. */
-    char state_environment[4112];
-    char *environment[] = {"PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", NULL, NULL};
-    const char *state_home = getenv("XDG_STATE_HOME");
-    if (state_home != NULL && state_home[0] != '\0') {
-        if (strnlen(state_home, 4096u) >= 4096u) { error = EINVAL; }
-        else {
-            (void)snprintf(state_environment, sizeof(state_environment), "XDG_STATE_HOME=%s", state_home);
-            environment[3] = state_environment;
-        }
+    /* Only the variables kilix-license's receipt_store_root() reads cross exec,
+     * so this helper finds receipts exactly where the licence screen filed them
+     * ($KILIX_LICENSE_RECEIPTS, else $GPU_TERMINAL_HOME/license-receipts, else
+     * $HOME/.local/gpu_terminal/license-receipts). No loader or Python injection. */
+    static const char *const receipt_names[] = {"KILIX_LICENSE_RECEIPTS", "GPU_TERMINAL_HOME", "HOME"};
+    char receipt_environment[3][4128];
+    char *environment[] = {"PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", NULL, NULL, NULL, NULL};
+    size_t used = 3u;
+    for (size_t i = 0u; i < 3u && error == 0; ++i) {
+        const char *value = getenv(receipt_names[i]);
+        if (value == NULL || value[0] == '\0') { continue; }
+        if (strnlen(value, 4096u) >= 4096u) { error = EINVAL; continue; }
+        (void)snprintf(receipt_environment[i], sizeof(receipt_environment[i]), "%s=%s", receipt_names[i], value);
+        environment[used++] = receipt_environment[i];
     }
     if (error == 0) { error = posix_spawn(&process, arguments[0], &actions, NULL, arguments, environment); }
     posix_spawn_file_actions_destroy(&actions);

@@ -48,6 +48,10 @@ int main(void)
     (void)setenv("PYTHONHOME","/invalid/ambient/python",1);
     (void)setenv("PYTHONINSPECT","1",1);
     (void)setenv("LD_PRELOAD","/invalid/ambient/preload.so",1);
+    (void)setenv("XDG_STATE_HOME","/invalid/ambient/state",1);
+    (void)setenv("KILIX_LICENSE_RECEIPTS","/ipc/receipts",1);
+    (void)setenv("GPU_TERMINAL_HOME","/ipc/stack",1);
+    (void)setenv("HOME","/ipc/home",1);
     for (uint8_t profile=1u;profile<=2u;++profile) {
         kenc_installed_assets *assets=NULL;
         TEST_CHECK(kenc_installed_assets_open(&assets,profile,"/privacy",2000u,NULL,NULL)==KENC_OK);

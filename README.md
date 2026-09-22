@@ -358,7 +358,7 @@ refuse. The unused file profile's descriptor set can be null.
 
 These native interfaces verify model bytes. The installed consumer still must
 obtain current packaged catalog and license-receipt authority through
-`Installer.open_asset`; a path or sealed descriptor alone is not model admission.
+`kenc_installed_assets_open`; a path or sealed descriptor alone is not model admission.
 Existing directory loaders remain available for explicit development tools.
 `make ONNX=1 test-asset-fds MODEL_DIR=... STEREO_MODEL_DIR=...` checks sealed
 input refusal, byte-for-byte directory-loader parity and post-close lifetime
@@ -374,7 +374,11 @@ make ONNX=1 CONTENT=1 CONTENT_SOURCE=/path/to/kilix-content \
 
 The build reads that exact content Git archive, includes its license, and
 embeds a deterministic ZIP containing the complete authority package, packaged
-catalog and this provider's admission helper. `content_bundle.receipt.json`
+catalog, the content commit's vendored kilix-license (modules, the two EnCodec
+licence records and its licence) and this provider's admission helper. The
+content commit must pin the same kilix-license commit as
+`third_party/kilix-license.pin`, and every embedded kilix-license file must
+hash to its `licence_authority.files` digest, or the build refuses. `content_bundle.receipt.json`
 records every source hash, exact content commit and ZIP digest. No package or
 catalog is taken from the process's Python path. The final source closure must
 bind both this provider and the chosen content source; rebuilding against a
@@ -392,25 +396,48 @@ any output is emitted.
 `kilix_encodec_content.h` exposes `kenc_installed_assets_open`. Each call runs
 the embedded ZIP from a read-only sealed memory descriptor with isolated system
 Python, a minimal environment and hard resource ceilings. The caller supplies
-an absolute content storage root and a 1–120000 ms deadline. The helper checks
-the exact F101 IDs, versions, graph population, compatibility and packaged
-catalog before opening the production receipt store and `Installer.open_asset`.
-All declared notices and metadata are verified too; only the native 9/4 graph
-members are returned. Every returned descriptor is rehashed by the helper,
-then subject to the native loader's unchanged compiled hash/ORT checks.
+an absolute content storage root and a 1–120000 ms deadline. The helper
+(`python/installed_assets.py`) asks the asset/v3 and kilix-license authorities
+on every call, with no readiness cache:
+
+- the catalogue is `kilix_content.verified_packaged_catalog()`, parsed from the
+  one read of its bytes that matched the content component's pin, and its entry
+  must equal the exact F101 IDs, versions, graph population and compatibility
+  compiled here, name exactly one licence, and name this bundle's own
+  kilix-license record for the asset;
+- the licence is `kilix_license.coverage.require()` over the store
+  `kilix_license.receipt_store_root()` names, for the record digest and the
+  manifest digest. The store is only read; admission never writes a receipt;
+- the installed tree is the directory `Installer.asset_destination()` names and
+  must equal the manifest exactly. It is walked by descriptor without following
+  symlinks, the content root and everything below it must be the caller's and
+  not writable by others, each member is copied once into a sealed memory file
+  while it is hashed, and the tree, the members and the covering receipt are
+  checked again afterwards. asset/v3 has no installed-snapshot API, so this
+  snapshot is the helper's own.
+
+All declared notices are verified too; only the native 9/4 graph members are
+returned. Every returned descriptor is rehashed by the helper, then subject to
+the native loader's unchanged compiled hash/ORT checks. The helper also refuses
+if any authority module was imported from anywhere but its sealed ZIP.
 
 The C caller accepts one bounded, credential-bound descriptor record only
 after the owned helper exits successfully, closes all received FDs on refusal,
 and kills/reaps only its own helper on cancellation or deadline. No arbitrary
 helper/interpreter path, ambient loader/Python import configuration, caller
 catalog, receipt decision, download, converter or path-only admission is used.
-The optional `XDG_STATE_HOME` continues to select the production receipt store
-under that API's ownership and authority checks. A successful asset object owns
+Only `KILIX_LICENSE_RECEIPTS`, `GPU_TERMINAL_HOME` and `HOME` cross into the
+helper besides a fixed `PATH` and locale: they are exactly what
+`receipt_store_root()` reads, so the helper looks for receipts where the licence
+screen filed them. `XDG_STATE_HOME` no longer selects anything. A successful asset object owns
 its FDs until `kenc_installed_assets_free`; model contexts retain their own bytes.
 
 `make test-content-python CONTENT_SOURCE=/path/to/kilix-content` checks the
-real receipt/snapshot API with clearly synthetic graph identities and catalog
-data. `make test-content-ipc` checks C descriptor framing, privacy, limits,
+real asset/v3 catalogue and kilix-license receipt code with clearly synthetic
+graph identities and catalog data, plants each refusal (no receipt, a wrong
+receipt, a tampered tree, a tampered catalogue), and runs
+`kenc_installed_assets_open` end to end from a fixture content commit bundled
+by `tools/build_content_bundle.py`. `make test-content-ipc` checks C descriptor framing, privacy, limits,
 cancellation and cleanup with an explicitly synthetic embedded peer. These
 fixtures provide no actual model admission or release qualification credit.
 

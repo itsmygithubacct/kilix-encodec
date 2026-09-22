@@ -16,7 +16,11 @@ def main():
     if mode=='slow':time.sleep(60)
     if mode=='exit':return 9
     if mode=='privacy':
-        assert set(os.environ)<=set(('PATH','LANG','LC_ALL','XDG_STATE_HOME','LC_CTYPE'))
+        # Exactly the fixed locale/path plus the three receipt-root variables
+        # kilix-license reads; XDG_STATE_HOME and every loader/Python variable stay out.
+        environment=dict(os.environ); environment.pop('LC_CTYPE',None)
+        assert environment=={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','LC_ALL':'C.UTF-8',
+            'KILIX_LICENSE_RECEIPTS':'/ipc/receipts','GPU_TERMINAL_HOME':'/ipc/stack','HOME':'/ipc/home'}
         try:os.fstat(60)
         except OSError:pass
         else:return 8

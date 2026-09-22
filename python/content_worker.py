@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import array
 import ctypes
+import importlib
 import os
 import resource
 import select
@@ -12,6 +13,37 @@ import struct
 import sys
 
 HEADER = struct.Struct("<4sBBHI")
+
+
+AUTHORITY = ("kilix_content", "kilix_license", "installed_assets", "graph_population")
+
+
+def sealed_authority():
+    """Import the admission authority and prove every module came from this ZIP.
+
+    kilix_content prepends a path for its vendored kilix_license; the bundle's
+    own kilix_license is imported first so that path is never searched for it,
+    and the path is removed again. An authority module from anywhere but this
+    ZIP, or any other module from outside the interpreter's own isolated path,
+    refuses.
+    """
+    bundle = os.path.dirname(os.path.abspath(__file__)) + os.sep
+    startup = list(sys.path)
+    importlib.import_module("kilix_license")  # first: kilix_content resolves it by package
+    importlib.import_module("kilix_content")
+    from installed_assets import admitted_assets
+    sys.path[:] = [entry for entry in sys.path if entry in startup]
+    allowed = tuple(os.path.join(entry, "") for entry in startup if entry)
+    modules = list(sys.modules.items())
+    for name, module in modules:
+        origin = getattr(module, "__file__", None)
+        if name.split(".")[0] in AUTHORITY and (not isinstance(origin, str) or not origin.startswith(bundle)):
+            raise RuntimeError("admission authority is not the sealed bundle")
+    for name, module in modules:
+        origin = getattr(module, "__file__", None)
+        if isinstance(origin, str) and not origin.startswith(allowed):
+            raise RuntimeError("a module outside the isolated path was imported")
+    return admitted_assets
 
 
 def main():
@@ -61,7 +93,7 @@ def main():
         def cancelled():
             # EOF or any extra request invalidates this single-request exchange.
             return os.getppid() != parent or bool(select.select([channel], [], [], 0)[0])
-        from installed_assets import admitted_assets
+        admitted_assets = sealed_authority()
         with admitted_assets(profile, root, timeout_ms=timeout_ms, cancelled=cancelled) as files:
             fds = array.array("i", [fd for _name, fd in files])
             response = HEADER.pack(b"KCO1", profile, len(files), 0, 0)

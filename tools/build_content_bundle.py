@@ -3,6 +3,13 @@
 
 The final closure supplies the content commit. No model payload, runtime path,
 local catalog override or network request is accepted by this build step.
+
+asset/v3 keeps licence receipts in kilix-license, which the content commit
+vendors at `third_party/kilix-license`. The bundle carries that vendored copy
+too, and only when it is the licence authority this repository pins: the
+content commit's `third_party/kilix-license.pin` must equal ours, and every
+embedded kilix-license module, record and licence must hash to the digest
+`tools/converter-inputs.json` binds under `licence_authority.files`.
 """
 from __future__ import annotations
 
@@ -154,7 +161,63 @@ def content_members(source: Path, commit: str):
 
     add("LICENSE", "licenses/kilix-content.txt", *root["LICENSE"])
     visit(src["kilix_content"][1], "kilix_content", 0)
+    licence = licence_authority()
+
+    def entry(path: str) -> tuple[str, str]:
+        tree_oid, parts = tree, path.split("/")
+        for index, name in enumerate(parts):
+            found = git_tree(source, tree_oid).get(name)
+            if found is None or (index < len(parts) - 1 and found[0] != "40000"):
+                raise ValueError("content commit does not vendor the pinned licence authority")
+            mode, tree_oid = found
+        return mode, tree_oid
+
+    def pinned(path: str, name: str):
+        mode, oid = entry(path)
+        add(path, name, mode, oid)
+        if hashlib.sha256(members[name]).hexdigest() != licence["files"][path]:
+            raise ValueError("content commit's licence authority differs from the pinned one")
+
+    pin_mode, pin_oid = entry(LICENCE_PIN)
+    if (pin_mode not in ("100644", "100755")
+            or git_object(source, "blob", pin_oid, 4096) != (licence["ref"] + "\n").encode()):
+        raise ValueError("content commit pins a different licence authority")
+    package = LICENCE_PACKAGE.rstrip("/")
+    listed = {path for path in licence["files"] if path.startswith(LICENCE_PACKAGE)}
+    modules = {path for path in listed if path.count("/") == 4 and path.endswith(".py")}
+    records = listed - modules
+    present = {package + "/" + name for name, (mode, _oid) in git_tree(source, entry(package)[1]).items()
+               if mode != "40000" and name.endswith(".py")}
+    if present != modules or package + "/__init__.py" not in modules or not records:
+        raise ValueError("content commit's licence authority modules differ from the pinned set")
+    for path in sorted(listed):
+        pinned(path, path[len("third_party/kilix-license/src/"):])
+    pinned(LICENCE_LICENSE, "licenses/kilix-license.txt")
     return members, tree, objects
+
+
+LICENCE_PIN = "third_party/kilix-license.pin"
+LICENCE_LICENSE = "third_party/kilix-license/LICENSE"
+LICENCE_PACKAGE = "third_party/kilix-license/src/kilix_license/"
+
+
+def licence_authority() -> dict:
+    """This repository's own licence-authority pin, which the bundle must match."""
+    root = Path(__file__).resolve().parents[1]
+    binding = json.loads((root / "tools" / "converter-inputs.json").read_bytes())
+    authority = binding.get("licence_authority", {})
+    ref, files = authority.get("ref"), authority.get("files")
+    if (not isinstance(ref, str) or not re.fullmatch("[0-9a-f]{40}", ref)
+            or not isinstance(files, dict) or LICENCE_LICENSE not in files
+            or (root / LICENCE_PIN).read_bytes() != (ref + "\n").encode()):
+        raise ValueError("this repository's licence authority pin is incomplete")
+    records = {profile.get("record", {}).get("path") for profile in binding.get("profiles", {}).values()}
+    if not records or not records <= set(files) or not all(
+            isinstance(digest, str) and re.fullmatch("[0-9a-f]{64}", digest) for digest in files.values()):
+        raise ValueError("this repository's licence authority pin is incomplete")
+    return dict(ref=ref, files={path: digest for path, digest in files.items()
+                                if path.startswith(LICENCE_PACKAGE) and (path.endswith(".py") or path in records)
+                                or path == LICENCE_LICENSE})
 
 
 def write_changed(path: Path, payload: bytes):
@@ -169,13 +232,15 @@ def build(source: Path, commit: str, output: Path):
     if not re.fullmatch("[0-9a-f]{40}", commit):
         raise ValueError("an exact content commit is required")
     members, tree, objects = content_members(source, commit)
-    if not 5 <= len(members) <= 128 or "kilix_content/__init__.py" not in members or "licenses/kilix-content.txt" not in members:
+    if (not 5 <= len(members) <= 128 or "kilix_content/__init__.py" not in members
+            or "licenses/kilix-content.txt" not in members or "kilix_license/__init__.py" not in members
+            or "licenses/kilix-license.txt" not in members):
         raise ValueError("incomplete content authority population")
     root = Path(__file__).resolve().parents[1]
     for path in ("installed_assets.py", "graph_population.py", "content_worker.py"):
         members["__main__.py" if path == "content_worker.py" else path] = (root / "python" / path).read_bytes()
     record = dict(schema="kilix.encodec.content-build/v2", content_commit=commit,
-        content_tree=tree, content_objects=objects,
+        content_tree=tree, content_objects=objects, licence_authority_ref=licence_authority()["ref"],
         files={name:dict(bytes=len(data),sha256=hashlib.sha256(data).hexdigest()) for name,data in sorted(members.items())})
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED) as target:
