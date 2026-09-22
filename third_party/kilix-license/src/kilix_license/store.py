@@ -9,6 +9,7 @@ import stat
 import time
 
 from kilix_license.errors import AtomicWriteCrashed
+from kilix_license.paths import check_receipt_store_root, receipt_store_root
 from kilix_license.receipts import Receipt, parse_receipt_bytes
 
 # A receipt is well under 4 KiB. No entry larger than this is read.
@@ -65,6 +66,29 @@ class ReceiptStore:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)
+
+    @classmethod
+    def shared(cls, root: str | os.PathLike[str] | None = None) -> ReceiptStore:
+        """The one store the whole stack writes to and reads from.
+
+        V-ACC-VERIFY F7: a receipt the user really accepted was filed at a root
+        its writer chose, and the reader looked somewhere else, so the gate
+        refused an acceptance that had happened. The root is this authority's
+        to name (OD-AJ), and it is named once, in
+        :func:`kilix_license.paths.receipt_store_root`.
+
+        Call it with no argument: a consumer that never spells a path cannot
+        disagree with any other consumer. ``root`` exists for a caller that
+        already has a path and wants it checked -- it must be the agreed root,
+        and anything else raises :class:`ReceiptStoreRootRefused` naming both.
+
+        ``ReceiptStore(root)`` is unchanged and still takes any directory: a
+        test fixture, a migration, an inspection of somebody else's store. What
+        it no longer is, is the way a consumer reaches the shared store.
+        """
+        if root is not None:
+            check_receipt_store_root(root)
+        return cls(receipt_store_root())
 
     def path_for(self, record_digest: str, manifest_digest: str) -> Path:
         return self.root / f"{record_digest}-{manifest_digest}.json"

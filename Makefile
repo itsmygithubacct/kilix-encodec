@@ -114,6 +114,7 @@ test: all $(TEST_BINS)
 # No model payload, network access or real conversion.
 test-converter:
 	$(PYTHON) -B tests/test_converter.py -v
+	$(PYTHON) -B tests/test_vendor_licence_authority.py -v
 
 # R4-198: the weight guard's digest list is generated, never hand-edited.
 catalog-digests:

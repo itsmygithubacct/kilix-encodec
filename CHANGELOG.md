@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Re-pin the vendored licence authority to kilix-license `7104ea5c`, which
+  binds the real EnCodec licence-history note (`data/texts/8cfc463c…`) as the
+  records' advisory. Eleven of the nineteen `licence_authority.files` digests
+  move, and both record digests stay `8af1dc69…` and `9c1baee4…`: an advisory
+  is context, not binding, so every receipt written for them still covers.
+  `tools/vendor_licence_authority.py` does the re-pin from raw Git objects and
+  regenerates the pin; it refuses unless the pin and the vendored tree are
+  exactly the stated old commit, and with no arguments it checks that the
+  committed pin is what it would generate (`make test-converter`).
 - Vendor kilix-license by `git archive` into `third_party/kilix-license/`,
   pinned in `third_party/kilix-license.pin` (owner decision OD-AJ). The pin is
   kilix-license `4db48b4c`, which records the identity of each shown text in a

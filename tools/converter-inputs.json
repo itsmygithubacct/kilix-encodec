@@ -9,27 +9,27 @@
   },
   "licence_authority": {
     "files": {
-      "third_party/kilix-license.pin": "6b1a79a58084bd4f4ccd5ed2fce83bbd012db7987be0248937f2ff9e3e182f09",
+      "third_party/kilix-license.pin": "2e8b4aa58c02db5b4131184e9b5b58a82e0067e34a8a083f454ba865ac127967",
       "third_party/kilix-license/LICENSE": "443acd34ba896c5ee92d9ebd200436eb96f2f1aa0815e16c12c42c8f1a5fd30f",
-      "third_party/kilix-license/src/kilix_license/__init__.py": "34d89309b31ed9832a95473e1d9912e10fbf856e25c8fdef65bef48dd7b88b0c",
-      "third_party/kilix-license/src/kilix_license/agreement.py": "fbc5d0e691a1efb757a0f03ec0d4bc48cfbc03bf9cca3a666af04548f0f3008a",
+      "third_party/kilix-license/src/kilix_license/__init__.py": "a89f66e1c9957631b575d1c78147b72315a100445dfb8df2de6a51f5d5830e3a",
+      "third_party/kilix-license/src/kilix_license/agreement.py": "adc5275b8a63586b81d90f6451de275a34f10c93c21c22132c0803af423e8ee3",
       "third_party/kilix-license/src/kilix_license/catalog.py": "5c0beae90a32c4e09febbd97baf014e7d46eacd3c6c8bee2ce3c211d1c59986d",
       "third_party/kilix-license/src/kilix_license/changed.py": "3ca6586bbd1aafc4b082c3727c73e95d601a7e1c31f1698184328bf350cc1b5b",
-      "third_party/kilix-license/src/kilix_license/coverage.py": "41376d336083ceffa889d10e5003c04fe67855cb115055edede9d409f2f21179",
-      "third_party/kilix-license/src/kilix_license/data/records/encodec-24khz-stateful.json": "b1ad9038a6e145f446809bd9587d5ca7415a457552bc66b5176cc0d54ae9fc2f",
-      "third_party/kilix-license/src/kilix_license/data/records/encodec-48khz-frame.json": "fb964d43cc7f14c33a191cc18406e56550a70c7c305f89d9589dff4e250e379d",
+      "third_party/kilix-license/src/kilix_license/coverage.py": "d25b2641733da626508217da4463dc3e98c972af01829eeed98b8f759646c238",
+      "third_party/kilix-license/src/kilix_license/data/records/encodec-24khz-stateful.json": "c9e8f92742b342c401b78474517c1b9605b6e3b78db07bddb9eb98a6a64fad71",
+      "third_party/kilix-license/src/kilix_license/data/records/encodec-48khz-frame.json": "4d1006881076b49e9ff805b133c80fb20115ae3f3281df311ec066f2974d45ef",
       "third_party/kilix-license/src/kilix_license/digest.py": "e0e6fbfe2b20395af057e4cb042484da4f5509140aa5f01eb774289a399bf2da",
-      "third_party/kilix-license/src/kilix_license/errors.py": "bd878e999cba37557176b5b9991b60198c7dd8d29d6d0b8f5260cef86b967c08",
-      "third_party/kilix-license/src/kilix_license/generate.py": "9e04f5365d4452cfd3dc6322e3ee6011078d726221d99228fb30cc11c76526f5",
+      "third_party/kilix-license/src/kilix_license/errors.py": "46e9cfc399e73a16b4a8eccf0233720db0c4f3dee00231da2d0d11b76235876f",
+      "third_party/kilix-license/src/kilix_license/generate.py": "6e3d176e03b28937906da0a543aba880eeea1f95c9b17573c48cf01c0f0666cd",
       "third_party/kilix-license/src/kilix_license/paraphrase.py": "006cdee5bbc521b44c2e7e958f6f02715271100b941e0c2a8b1df26d7f7a9499",
-      "third_party/kilix-license/src/kilix_license/paths.py": "284c42aa2bb52c2f803f5e3b495339c8e37151aa6079cb44ef34ae73f4b14c47",
-      "third_party/kilix-license/src/kilix_license/receipts.py": "bc544877907c82d77195726e03116268d871be6de981bc07e058074cbb56c0dd",
+      "third_party/kilix-license/src/kilix_license/paths.py": "3e5077106d5dc7193817b57e07f1fca3b751b0d68580cfcc4e4492aa57a46833",
+      "third_party/kilix-license/src/kilix_license/receipts.py": "b15e06d0175479628b28ad9d828f0a248257f2ce3f9a9b37bfc4377ea0553a45",
       "third_party/kilix-license/src/kilix_license/records.py": "97e532025905de07af956576f979af824389345b3620bd24f1c9fb122858cf77",
       "third_party/kilix-license/src/kilix_license/screen.py": "89bc751c2e56051a9f0556ac834cd951f2c1272e578061406372cdaa5f273086",
-      "third_party/kilix-license/src/kilix_license/store.py": "4620685f0e85fea3c9375d81b03fbf7127f6b1f3c28a2c43a645ea86cb8059d2",
+      "third_party/kilix-license/src/kilix_license/store.py": "136021de6ebd50dd7b07ab3ba783e802799b2735d55cac021ed905a2d0ee414b",
       "third_party/kilix-license/src/kilix_license/texts.py": "16d4c14e48e83325fa1071ca4c1c7ae6c3ad8e9cd4a8cc18019259bdda88b01e"
     },
-    "ref": "4db48b4c5cb4721dc3068db648976222c802b93e"
+    "ref": "7104ea5cb2670a9d52c14fcb324c86710e4c2681"
   },
   "profiles": {
     "24khz": {

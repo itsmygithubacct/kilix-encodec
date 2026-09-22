@@ -64,12 +64,65 @@ def require(
     *,
     records: RecordIndex,
     store: ReceiptStore,
+    captured_at_a_terminal: bool = False,
 ) -> Receipt:
-    """Return the covering receipt for asset, scoped to the binding."""
+    """Return the covering receipt for asset, scoped to the binding.
+
+    ``captured_at_a_terminal`` is off by default and changes nothing when it
+    is: coverage is the OD-AI binding and nothing else, so every receipt any
+    earlier kilix-license wrote is accepted exactly as before.
+
+    Switched on, it additionally demands that the receipt record a capture at
+    a terminal (V-ACC-VERIFY F6's ``acceptance.capture_mode``). That refuses a
+    receipt written with no console -- a build step, an image, a provisioning
+    script -- and refuses every receipt written before LIC6, which record no
+    capture at all. It is not proof a person accepted anything, and it says
+    nothing about which person: see
+    :class:`kilix_license.agreement.Acceptance` for exactly what a receipt
+    proves and does not. It is the weakest mechanical check that distinguishes
+    a receipt minted at a console from one that was shipped.
+
+    OD-BC keeps this lever **available and off**, and pairs it with a rule
+    that no flag can enforce: a receipt is never shipped, vendored or
+    provisioned, and shipping one is not an acceptable remedy for a refusing
+    gate. The acceptable outcomes are acceptance at first use, or no weights.
+    See ``README.md``.
+    """
     record = records.by_digest(asset.record_digest)
-    receipt = store.lookup(asset.record_digest, asset.manifest_digest)
+    # LIC6-FIX-VERIFY V4. A malformed file in the store used to leave this
+    # function by raising, and the consumer that asks the question --
+    # kilix_content.first_use.needs_agreement() -- catches CoverageRefused
+    # only, so one truncated write or half-restored backup turned the
+    # first-use flow into a traceback rather than a refusal. LIC6 typed the
+    # failure (ReceiptShapeError instead of TypeError or ValueError) but that
+    # class is not a CoverageRefused either, so the symptom was unchanged.
+    #
+    # A file this authority cannot read as a receipt covers nothing, so that
+    # is what require() says. Fail-closed and unchanged in effect: no weights
+    # are fetched, the caller shows the licence and asks for consent. The
+    # typed contract inside the authority is untouched -- parse_receipt_bytes
+    # and parse_receipt still raise ReceiptShapeError, and the original is
+    # chained here and named in the message, so a corrupt store is still
+    # diagnosable.
+    #
+    # What this does NOT close, said plainly: the pre-existing family of bare
+    # `ValueError` escapes out of the LIC4/LIC5 digest-map and text-id helpers
+    # (advisory_digests, statement_digests, binding_text_ids,
+    # component_exception_digests, catalogue_digest, release_digest,
+    # licence_text_id) still leave this function untyped. They are identical
+    # at 417b0c2d, c002be26 and 1a3bc477, so nothing regressed; closing them
+    # changes the failure contract of seven fields at once and is its own
+    # wave, with its own require() differential.
+    try:
+        receipt = store.lookup(asset.record_digest, asset.manifest_digest)
+        others = () if receipt is not None else store.for_record(asset.record_digest)
+    except ReceiptShapeError as error:
+        raise CoverageRefused(
+            error.field,
+            "a file in the receipt store is not a receipt this authority can "
+            f"read, so nothing there covers this asset: {error}",
+        ) from error
     if receipt is None:
-        others = store.for_record(asset.record_digest)
         if others:
             raise CoverageRefused("manifest_digest")
         raise CoverageRefused("receipt")
@@ -78,6 +131,19 @@ def require(
         raise CoverageRefused("manifest_digest")
     if receipt.record_digest != asset.record_digest:
         raise CoverageRefused("record_digest")
+    if captured_at_a_terminal and not (
+        receipt.acceptance is not None
+        and receipt.acceptance.was_captured_at_a_terminal
+    ):
+        raise CoverageRefused(
+            "acceptance.capture_mode",
+            "this caller demands a receipt captured at a terminal; this one "
+            + (
+                "records no capture at all (it predates LIC6)"
+                if receipt.acceptance is None
+                else f"records capture_mode {receipt.acceptance.capture_mode!r}"
+            ),
+        )
     return receipt
 
 

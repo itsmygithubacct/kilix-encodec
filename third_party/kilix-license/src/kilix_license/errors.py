@@ -11,6 +11,17 @@ class LiveStoreForbidden(LicenseError):
     """A path under the live receipt store was refused."""
 
 
+class ReceiptStoreRootRefused(LicenseError):
+    """A receipt store root that is not the one the authority publishes.
+
+    V-ACC-VERIFY F7: kilix-content wrote a receipt at a root it chose and
+    kilix-voice looked for it at a root it chose, so an acceptance the user
+    really gave left the gate refusing. There is one root, and it comes from
+    receipt_store_root(); a caller that means the shared store and names
+    something else is refused here rather than silently filing out of sight.
+    """
+
+
 class TextDigestMismatch(LicenseError):
     """Stored bytes do not match their sha256 name."""
 

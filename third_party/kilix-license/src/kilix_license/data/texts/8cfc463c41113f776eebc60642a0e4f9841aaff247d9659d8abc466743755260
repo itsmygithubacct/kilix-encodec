@@ -1,0 +1,20 @@
+EnCodec licence history. Every line below a "quoted from" header is copied
+byte for byte from the source that header names; nothing here is retyped.
+The source file is pinned by licence-evidence-encodec-errata-2026-09-17
+(L-ENC-R2) sources/quotes.json, sha256 15d17ef65ae566134fe3fa238817211192019fb066717db675192a0a545a5dca.
+
+quoted from licence-evidence-encodec-2026-09-15/sources/upstream-licence-history.txt
+sha256 1ce36c87223cc7a1cdd052a876440abd48e11604ffc0037a2b4afadef6da1e90, lines 14 and 18
+(facebookresearch/encodec LICENSE and README at the commits named):
+
+  3837f0db 2022-10-25T09:54:25Z LICENSE 19333 B sha256 a7950c0fed88e9a1… first line 'Attribution-NonCommercial 4.0 International'; README:135 'This repository is released under the CC-BY-NC 4.0. license as found in the [LICENSE](LICENSE) file.'
+  349b7293 2023-04-26T12:17:48Z LICENSE 1087 B sha256 cf9b17822d1fcd4f… first line 'MIT License'; README:184 'The code in this repository is released under the MIT license as found in the [LICENSE](LICENSE) file.'
+
+quoted from licence-evidence-encodec-2026-09-15/sources/upstream-licence-history.txt
+sha256 1ce36c87223cc7a1cdd052a876440abd48e11604ffc0037a2b4afadef6da1e90, lines 91 to 94
+(section 9 of that file: facebookresearch/audiocraft, an adjacent Meta repository that states a licence for model weights separately from the licence for code; "this repository" in the lines below is audiocraft, not encodec):
+
+== 9. facebookresearch/audiocraft (adjacent)
+  main 896ec7c47f5e5d1e5aa1e4b260c4405328bf009d | LICENSE_weights commits [('5e3ae32f', '2023-08-02T13:34:38Z'), ('5238467a', '2023-06-09T05:35:16Z')]
+  README.md: * The code in this repository is released under the MIT license as found in the [LICENSE file](LICENSE).
+  README.md: * The models weights in this repository are released under the CC-BY-NC 4.0 license as found in the [LICENSE_weights file](LICENSE_weights).
