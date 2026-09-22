@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import stat
 import tempfile
 import time
 import unittest
@@ -41,8 +43,9 @@ class Fixture:
     """One installed asset, one covering receipt, one pinned catalogue."""
 
     def __init__(self, profile=1, *, receipt_present=True, changes=None, pin_catalog=True,
-                 catalog_edit=None):
+                 catalog_edit=None, root_parent=None):
         self.profile = profile
+        self.root_parent = root_parent
         self.receipt_present = receipt_present
         self.changes = changes or {}
         self.pin_catalog = pin_catalog
@@ -78,7 +81,11 @@ class Fixture:
             self.record = record_for(asset_id)
             if self.receipt_present:
                 self.write_receipt(self.spec.manifest_digest)
-            self.root = self.base / "data"
+            above = self.base
+            if self.root_parent is not None:
+                above = self.base / self.root_parent
+                above.mkdir(mode=0o700)
+            self.root = above / "data"
             installer = content.Installer(str(self.root))
             self.selected = Path(installer.asset_destination(self.spec))
             self.selected.mkdir(mode=0o700, parents=True)
@@ -296,6 +303,62 @@ class AdapterTests(unittest.TestCase):
                 return result
             with patch.object(adapter, '_snapshot', rewrite):
                 fixture.refused(self, 'member rewritten during the snapshot admitted', 'changed during admission')
+
+    def test_directory_and_population_changes_during_the_snapshot_refuse(self):
+        # Each plant is visible only to one of the after-read rechecks: the
+        # member identities and the receipt are unchanged in both, and every
+        # member is read through the descriptors taken before the change.
+        original = adapter._snapshot
+
+        def swapped(fixture):
+            # The asset directory replaced by an identical copy: same names,
+            # same bytes, same modes, another directory.
+            moved = fixture.selected.with_name('swapped-out')
+            fixture.selected.rename(moved)
+            shutil.copytree(moved, fixture.selected)
+
+        def populated(fixture):
+            (fixture.selected / 'extra.onnx').write_bytes(b'undeclared, added mid-read')
+
+        for plant, reason in ((swapped, 'directory identity changed'), (populated, 'undeclared member')):
+            with self.subTest(plant=plant.__name__), Fixture() as fixture:
+                with fixture.open():
+                    pass
+
+                def during(parent, item, check, keep):
+                    result = original(parent, item, check, keep)
+                    if item.path == 'manifest.json':
+                        plant(fixture)
+                    return result
+                with patch.object(adapter, '_snapshot', during):
+                    fixture.refused(self, 'change during the snapshot admitted', reason)
+
+    def test_the_content_root_ancestor_rule_on_both_sides(self):
+        # Ancestors of the root may be anyone's, but not writable by others
+        # unless sticky: 0770 and 0757 refuse, 1777 and 0755 admit.
+        for mode, admitted in ((0o770, False), (0o757, False), (0o1777, True), (0o755, True)):
+            with self.subTest(mode=oct(mode)), Fixture(root_parent='ancestor') as fixture:
+                ancestor = fixture.root.parent
+                ancestor.chmod(mode)
+                self.assertEqual(stat.S_IMODE(ancestor.stat().st_mode), mode)
+                try:
+                    if admitted:
+                        with fixture.open() as files:
+                            self.assertEqual(len(files), len(fixture.graphs))
+                    else:
+                        fixture.refused(self, 'shared ancestor admitted', 'shared ancestor')
+                finally:
+                    ancestor.chmod(0o700)
+
+    def test_a_catalogue_entry_over_the_native_budget_is_refused(self):
+        with Fixture() as fixture:
+            asset_id, version, _budget, population = adapter.PROFILES[1]
+            installed = fixture.spec.installed_bytes
+            with patch.dict(adapter.PROFILES, {1: (asset_id, version, installed - 1, population)}):
+                fixture.refused(self, 'entry over the budget admitted', 'identity differs from native consumer')
+            with patch.dict(adapter.PROFILES, {1: (asset_id, version, installed, population)}):
+                with fixture.open() as files:
+                    self.assertEqual(len(files), len(fixture.graphs))
 
     def test_cancel_and_deadline_during_snapshot_release_partial_descriptors(self):
         original = adapter._snapshot

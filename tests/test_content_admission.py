@@ -184,6 +184,42 @@ class NativeAdmission(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not the sealed bundle"):
             content_worker.sealed_authority()
 
+    def test_the_worker_refuses_a_module_imported_from_outside_its_isolated_path(self):
+        # The worker's second origin check. Its authority comes from the real
+        # bundle ZIP here, so the first check passes; one ordinary module is
+        # then imported from a directory that is no longer on the path, which
+        # is what code loaded through a path that was later dropped looks like.
+        # The control arm, without that module, must return the authority.
+        foreign = self.scratch / "foreign"
+        foreign.mkdir()
+        (foreign / "kenc_foreign_probe.py").write_text("VALUE = 1\n")
+        script = "\n".join((
+            "import runpy, sys",
+            "bundle, foreign, plant = sys.argv[1], sys.argv[2], sys.argv[3] == 'plant'",
+            "worker = runpy.run_path(bundle, run_name='kenc_worker_probe')",
+            "sys.path.insert(0, bundle)",
+            "if plant:",
+            "    sys.path.insert(0, foreign)",
+            "    import kenc_foreign_probe",
+            "    sys.path.remove(foreign)",
+            "try:",
+            "    worker['sealed_authority']()",
+            "except RuntimeError as error:",
+            "    print('REFUSED', error)",
+            "else:",
+            "    print('ADMITTED')",
+        ))
+        bundle = str(self.base / "out-pinned" / "content_bundle.zip")
+        outcomes = {}
+        for arm in ("control", "plant"):
+            completed = subprocess.run(["/usr/bin/python3", "-I", "-B", "-c", script, bundle, str(foreign), arm],
+                                       env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+                                       capture_output=True, timeout=60)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            outcomes[arm] = completed.stdout.decode().strip()
+        self.assertEqual(outcomes["control"], "ADMITTED")
+        self.assertEqual(outcomes["plant"], "REFUSED a module outside the isolated path was imported")
+
     def test_the_library_carries_the_bundle_it_was_built_from(self):
         self.assertEqual(self.library.kenc_installed_content_commit().decode(), self.commit)
         self.assertEqual(self.library.kenc_installed_bundle_sha256().decode(), self.receipt["bundle_sha256"])
