@@ -10,6 +10,7 @@ So what is exercised is the sealed-ZIP launch, the isolated interpreter, the
 worker's own origin check, the catalogue, the receipt and the tree checks, and
 the descriptor transfer back into C. No model byte and no network is involved.
 """
+import ast
 import ctypes
 import hashlib
 import json
@@ -245,6 +246,67 @@ class NativeAdmission(unittest.TestCase):
                 self.library.kenc_installed_assets_free(assets)
         finally:
             shutil.rmtree(top, ignore_errors=True)
+
+    def test_a_caller_that_is_pid_1_gets_a_runtime_outcome_not_a_model_refusal(self):
+        # The worker refuses a parent that is PID 1. A caller that is PID 1 of
+        # its PID namespace must therefore learn that admission could not run
+        # (KENC_ERR_RUNTIME), not that its model was refused (KENC_ERR_MODEL).
+        # The same library, fixture and receipts admit from PID 2 of that
+        # namespace, so nothing but the caller's PID differs.
+        script = "\n".join((
+            "import ctypes, os, sys",
+            "library, root = sys.argv[1], sys.argv[2]",
+            "uid, gid = os.geteuid(), os.getegid()",
+            "try:",
+            "    os.unshare(os.CLONE_NEWUSER | os.CLONE_NEWPID)",
+            "except OSError as error:",
+            "    print('UNSHARE', error.errno)",
+            "    raise SystemExit(0)",
+            "for name, text in (('setgroups', 'deny'), ('uid_map', f'{uid} {uid} 1'), ('gid_map', f'{gid} {gid} 1')):",
+            "    with open('/proc/self/' + name, 'w') as handle:",
+            "        handle.write(text)",
+            "def admit():",
+            "    loaded = ctypes.CDLL(library)",
+            "    loaded.kenc_installed_assets_open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint8,",
+            "        ctypes.c_char_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_void_p]",
+            "    loaded.kenc_installed_assets_free.argtypes = [ctypes.c_void_p]",
+            "    results = []",
+            "    for profile in (1, 2):",
+            "        assets = ctypes.c_void_p()",
+            "        results.append(loaded.kenc_installed_assets_open(ctypes.byref(assets), profile, root.encode(), 20000, None, None))",
+            "        loaded.kenc_installed_assets_free(assets)",
+            "    return results",
+            "reader, writer = os.pipe()",
+            "first = os.fork()",
+            "if first == 0:",
+            "    os.close(reader)",
+            "    mine = (os.getpid(), admit())",
+            "    second = os.fork()",
+            "    if second == 0:",
+            "        os.write(writer, repr((os.getpid(), admit())).encode() + b'\\n')",
+            "        os._exit(0)",
+            "    os.waitpid(second, 0)",
+            "    os.write(writer, repr(mine).encode() + b'\\n')",
+            "    os._exit(0)",
+            "os.close(writer)",
+            "os.waitpid(first, 0)",
+            "output = b''",
+            "while chunk := os.read(reader, 4096):",
+            "    output += chunk",
+            "sys.stdout.write(output.decode())",
+        ))
+        library = str(self.base / "libkenc-admission-pinned.so")
+        completed = subprocess.run(["/usr/bin/python3", "-I", "-B", "-c", script, library, str(self.root)],
+                                   env=dict(os.environ), capture_output=True, timeout=120)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        output = completed.stdout.decode()
+        if output.startswith("UNSHARE"):
+            self.skipTest("this host refuses an unprivileged user and PID namespace: " + output.strip())
+        KENC_ERR_RUNTIME = 3
+        # PIDs in a new namespace are allocated in order, so the control being
+        # PID 2 also shows that PID 1 started no helper before it answered.
+        self.assertEqual(sorted(ast.literal_eval(line) for line in output.splitlines()),
+                         [(1, [KENC_ERR_RUNTIME, KENC_ERR_RUNTIME]), (2, [KENC_OK, KENC_OK])])
 
     def test_the_library_carries_the_bundle_it_was_built_from(self):
         self.assertEqual(self.library.kenc_installed_content_commit().decode(), self.commit)

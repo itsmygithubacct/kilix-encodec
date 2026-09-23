@@ -146,6 +146,11 @@ kenc_result kenc_installed_assets_open(kenc_installed_assets **out,
     if (started == UINT64_MAX) { return KENC_ERR_RUNTIME; }
     uint64_t deadline = started + timeout_ms;
     if (stopped(deadline, cancelled, context)) { return KENC_ERR_RUNTIME; }
+    /* The helper never accepts PID 1 as its parent, so a caller that is PID 1
+     * of its PID namespace (a container entrypoint without an init, or
+     * `unshare -pf app`) can never be answered. Say so as KENC_ERR_RUNTIME,
+     * as for a deadline, before any helper starts: it is not a model refusal. */
+    if (getpid() == 1) { return KENC_ERR_RUNTIME; }
     kenc_result result = KENC_ERR_MODEL;
     kenc_installed_assets *assets = calloc(1u, sizeof(*assets));
     if (assets == NULL) { return KENC_ERR_MEMORY; }

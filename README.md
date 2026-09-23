@@ -432,7 +432,16 @@ helper besides a fixed `PATH` and locale: they are exactly what
 screen filed them. Each crosses exactly as the caller has it, set or unset and
 empty included: an empty `HOME` means `/` to kilix-license, so the helper then
 looks under `/.local/gpu_terminal/license-receipts`, as the writer does.
-`XDG_STATE_HOME` no longer selects anything. A successful asset object owns
+`XDG_STATE_HOME` no longer selects anything.
+
+A caller that is PID 1 of its PID namespace (a container entrypoint without an
+init, or `unshare -pf app`) is never admitted, because the helper does not
+accept PID 1 as its parent. `kenc_installed_assets_open` then returns
+`KENC_ERR_RUNTIME` at once, without starting the helper, as it does when the
+deadline passes or the call is cancelled: admission did not run, and no model
+or licence was judged. `KENC_ERR_MODEL` stays the answer for a refused
+catalogue entry, receipt or installed tree, and for a helper that failed. Run
+such a consumer under an init, or call admission from a child process. A successful asset object owns
 its FDs until `kenc_installed_assets_free`; model contexts retain their own bytes.
 
 `make test-content-python CONTENT_SOURCE=/path/to/kilix-content` checks the

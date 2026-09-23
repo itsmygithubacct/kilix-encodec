@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Return `KENC_ERR_RUNTIME` from `kenc_installed_assets_open` when the caller
+  is PID 1 of its PID namespace, before any helper starts. The helper has
+  always refused a PID 1 parent, and that refusal read as `KENC_ERR_MODEL`,
+  the same as a refused model. The header is unchanged.
 - Pass the receipt-root variables to the admission helper exactly as the
   caller has them, empty values included. With `HOME=""` kilix-license files
   receipts under `/`, but the helper dropped the empty value and looked in the
