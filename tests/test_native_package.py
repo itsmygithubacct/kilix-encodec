@@ -56,7 +56,12 @@ class PackageTests(unittest.TestCase):
             package.source_files(self.repo,self.commit_all(),lambda:None)
 
     def test_source_archive_is_exact_and_repeatable(self):
-        _,files=package.source_files(self.repo,self.commit,lambda:None)
+        long_name = 'tests/data/receipts-' + 'a' * 24 + '/' + 'b' * 130 + '.json'
+        path = self.repo/long_name
+        path.parent.mkdir(parents=True)
+        path.write_text('{"receipt": true}\n')
+        commit = self.commit_all()
+        _,files=package.source_files(self.repo,commit,lambda:None)
         first,second=self.root/'first.gz',self.root/'second.gz'
         package.write_source_archive(files,first)
         package.write_source_archive(files,second)

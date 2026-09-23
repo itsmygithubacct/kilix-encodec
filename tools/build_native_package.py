@@ -107,7 +107,9 @@ def write_source_archive(files, destination):
     # A compact exact source offer, including native and embedded helper notices;
     # generated binaries, models and the converter environment are absent.
     with destination.open('wb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:
-        with tarfile.open(fileobj=compressed, mode='w', format=tarfile.USTAR_FORMAT) as archive:
+        # Receipt filenames in the source tree exceed ustar's 100-byte name
+        # field. PAX records the complete path without changing the payload.
+        with tarfile.open(fileobj=compressed, mode='w', format=tarfile.PAX_FORMAT) as archive:
             for name, (mode, data) in sorted(files.items()):
                 entry = tarfile.TarInfo(name)
                 entry.size, entry.mode, entry.mtime = len(data), mode, 0
