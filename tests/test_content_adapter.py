@@ -84,7 +84,7 @@ class Fixture:
             above = self.base
             if self.root_parent is not None:
                 above = self.base / self.root_parent
-                above.mkdir(mode=0o700)
+                above.mkdir(mode=0o700, parents=True)
             self.root = above / "data"
             installer = content.Installer(str(self.root))
             self.selected = Path(installer.asset_destination(self.spec))
@@ -349,6 +349,47 @@ class AdapterTests(unittest.TestCase):
                         fixture.refused(self, 'shared ancestor admitted', 'shared ancestor')
                 finally:
                     ancestor.chmod(0o700)
+
+    def test_symlinked_ancestors_and_receipt_store_are_followed_with_the_same_checks(self):
+        # The installer and the receipt writer follow a symlinked `~/.local` or
+        # store directory, so admission does too; the root itself never.
+        for absolute in (False, True):
+            with self.subTest(ancestor_link='absolute' if absolute else 'relative'), \
+                    Fixture(root_parent='middle/real-parent') as fixture:
+                real = fixture.root.parent
+                link = fixture.base / 'linked-parent'
+                link.symlink_to(real if absolute else real.relative_to(fixture.base))
+                through = link / fixture.root.name
+                with adapter.admitted_assets(1, str(through)) as files:
+                    self.assertEqual(len(files), len(fixture.graphs))
+                # The rule holds on the link's target path: its last directory
+                # and a directory above it.
+                for shared in (real, real.parent):
+                    shared.chmod(0o770)
+                    with self.assertRaisesRegex(adapter.AdmissionError, 'shared ancestor'):
+                        with adapter.admitted_assets(1, str(through)):
+                            self.fail('shared directory behind a link admitted')
+                    shared.chmod(0o700)
+        with self.subTest(root='symlink'), Fixture() as fixture:
+            moved = fixture.root.with_name('real-root')
+            fixture.root.rename(moved)
+            fixture.root.symlink_to(moved.name)
+            fixture.refused(self, 'symlinked content root admitted', 'NotADirectoryError')
+        with self.subTest(ancestor='loop'), Fixture() as fixture:
+            loop = fixture.base / 'loop'
+            loop.symlink_to('loop')
+            with self.assertRaisesRegex(adapter.AdmissionError, 'too many symbolic links'):
+                with adapter.admitted_assets(1, str(loop / 'data')):
+                    self.fail('symlink loop admitted')
+        with self.subTest(store='symlink'), Fixture() as fixture:
+            store = fixture.store.root
+            moved = fixture.base / 'receipts-elsewhere'
+            store.rename(moved)
+            store.symlink_to(moved)
+            with fixture.open() as files:
+                self.assertEqual(len(files), len(fixture.graphs))
+            moved.chmod(0o750)
+            fixture.refused(self, 'shared store behind a link admitted', 'not private to this user')
 
     def test_a_catalogue_entry_over_the_native_budget_is_refused(self):
         with Fixture() as fixture:

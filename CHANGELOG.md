@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Follow a symlinked ancestor of the content root (for example a `~/.local`
+  on another disk) and a symlinked receipt-store directory during admission.
+  The installer and the receipt writer both follow them, so content a user had
+  installed and accepted was refused at playback. Every directory on the way
+  is checked as before, a link in a sticky directory must be the caller's or
+  that directory's owner's, and the root itself and everything below it are
+  still never followed.
 - Return `KENC_ERR_RUNTIME` from `kenc_installed_assets_open` when the caller
   is PID 1 of its PID namespace, before any helper starts. The helper has
   always refused a PID 1 parent, and that refusal read as `KENC_ERR_MODEL`,

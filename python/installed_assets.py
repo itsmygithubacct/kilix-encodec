@@ -29,6 +29,7 @@ native loader then repeats its own compiled graph hashes.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import errno
 import fcntl
 import hashlib
 import os
@@ -104,27 +105,67 @@ class _Tree:
         self.links = []
 
     def root(self, path, check):
-        """Walk to the content root by descriptor, refusing any symlinked component.
+        """Walk to the content root by descriptor; the root itself is never a symlink.
 
         Ancestors of the root may belong to anyone (a user namespace shows root's
         directories as the overflow uid) but must not be writable by others unless
-        sticky. The root itself must be this user's, private to its owner.
+        sticky. A symlinked ancestor, such as a `~/.local` that points at another
+        disk, is followed the way the installer followed it when it wrote the
+        tree, but by this walk and not the kernel's: every directory the walk
+        passes through, on either side of a link, must meet the same rule, a link
+        in an other-writable (sticky) directory must belong to this user or to
+        that directory's owner, and at most 40 links are followed. The root
+        itself, and everything below it, is opened without following symlinks
+        and must be this user's, private to its owner.
         """
         parts = PurePosixPath(path).parts
         if not parts or parts[0] != "/" or ".." in parts or len(parts) > 129:
             raise AdmissionError("installed content root is not canonical")
+        pending = list(parts[1:-1])
+        links = 0
         current = os.open("/", _DIRECTORY)
         try:
-            for name in parts[1:]:
+            while True:
                 check()
                 info = os.fstat(current)
                 if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
                     raise AdmissionError("installed content root has a shared ancestor")
-                child = os.open(name, _DIRECTORY, dir_fd=current)
+                if not pending:
+                    break
+                name = pending.pop(0)
+                if name == ".":
+                    continue
+                try:
+                    child = os.open(name, _DIRECTORY, dir_fd=current)
+                except OSError as error:
+                    if error.errno not in (errno.ELOOP, errno.ENOTDIR):
+                        raise
+                    link = os.stat(name, dir_fd=current, follow_symlinks=False)
+                    if not stat.S_ISLNK(link.st_mode):
+                        raise
+                    links += 1
+                    if links > 40:
+                        raise AdmissionError("installed content root has too many symbolic links") from None
+                    if info.st_mode & 0o022 and link.st_uid not in (os.geteuid(), info.st_uid):
+                        raise AdmissionError("installed content root has a foreign symbolic link") from None
+                    target = PurePosixPath(os.readlink(name, dir_fd=current))
+                    if target.is_absolute():
+                        os.close(current)
+                        current = -1
+                        current = os.open("/", _DIRECTORY)
+                        pending[:0] = target.parts[1:]
+                    else:
+                        pending[:0] = target.parts
+                    continue
+                os.close(current)
+                current = child
+            if len(parts) > 1:
+                child = os.open(parts[-1], _DIRECTORY, dir_fd=current)
                 os.close(current)
                 current = child
         except BaseException:
-            os.close(current)
+            if current >= 0:
+                os.close(current)
             raise
         self.descriptors.append(current)
         _owned_directory(os.fstat(current))
@@ -284,9 +325,15 @@ class _Authority:
         return self.records.LicenseRecord.from_bytes(data)
 
     def receipts(self):
-        """The shared receipt store, opened once, read-only, private to this user."""
+        """The shared receipt store, opened once, read-only, private to this user.
+
+        The path is resolved by the kernel, a symlinked store directory included,
+        as kilix-license resolves it when it files a receipt. What binds is the
+        directory actually opened: it must be this user's and private to them,
+        and every later read goes through that descriptor.
+        """
         root = os.fspath(self.license.receipt_store_root())
-        descriptor = os.open(root, _DIRECTORY)
+        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
         try:
             info = os.fstat(descriptor)
             if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:

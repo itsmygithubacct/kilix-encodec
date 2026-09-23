@@ -308,6 +308,19 @@ class NativeAdmission(unittest.TestCase):
         self.assertEqual(sorted(ast.literal_eval(line) for line in output.splitlines()),
                          [(1, [KENC_ERR_RUNTIME, KENC_ERR_RUNTIME]), (2, [KENC_OK, KENC_OK])])
 
+    def test_a_symlinked_ancestor_of_the_content_root_is_followed_through_c(self):
+        linked = self.base / (self.scratch.name + "-linked")
+        linked.symlink_to(self.scratch)
+        try:
+            for profile in self.graphs:
+                assets = ctypes.c_void_p()
+                result = self.library.kenc_installed_assets_open(
+                    ctypes.byref(assets), profile, str(linked / self.root.name).encode(), 20000, None, None)
+                self.assertEqual(result, KENC_OK)
+                self.library.kenc_installed_assets_free(assets)
+        finally:
+            linked.unlink()
+
     def test_the_library_carries_the_bundle_it_was_built_from(self):
         self.assertEqual(self.library.kenc_installed_content_commit().decode(), self.commit)
         self.assertEqual(self.library.kenc_installed_bundle_sha256().decode(), self.receipt["bundle_sha256"])

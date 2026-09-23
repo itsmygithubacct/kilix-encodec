@@ -407,13 +407,20 @@ on every call, with no readiness cache:
   kilix-license record for the asset;
 - the licence is `kilix_license.coverage.require()` over the store
   `kilix_license.receipt_store_root()` names, for the record digest and the
-  manifest digest. The store is only read; admission never writes a receipt;
+  manifest digest. The store is only read; admission never writes a receipt.
+  A symlinked store directory is followed, as the receipt writer follows it;
+  the directory reached must be the caller's and private to them;
 - the installed tree is the directory `Installer.asset_destination()` names and
-  must equal the manifest exactly. It is walked by descriptor without following
-  symlinks, the content root and everything below it must be the caller's and
-  not writable by others, each member is copied once into a sealed memory file
-  while it is hashed, and the tree, the members and the covering receipt are
-  checked again afterwards. asset/v3 has no installed-snapshot API, so this
+  must equal the manifest exactly. It is walked by descriptor. The content root
+  and everything below it are opened without following symlinks and must be
+  the caller's and not writable by others. A symlinked ancestor of the root,
+  such as a `~/.local` that points at another disk, is followed, as the
+  installer followed it: every directory the walk passes through, on both
+  sides of a link, must not be writable by others unless sticky, a link in a
+  sticky directory must be the caller's or that directory's owner's, and at
+  most 40 links are followed. Each member is copied once into a sealed memory
+  file while it is hashed, and the tree, the members and the covering receipt
+  are checked again afterwards. asset/v3 has no installed-snapshot API, so this
   snapshot is the helper's own.
 
 All declared notices are verified too; only the native 9/4 graph members are
