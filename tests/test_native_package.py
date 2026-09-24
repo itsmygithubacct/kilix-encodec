@@ -100,4 +100,27 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):package.source_files(self.repo,self.commit,expired)
 
 
+    def test_direct_dependencies_are_minimums_not_exact_pins(self):
+        lock={'packages':{'libonnxruntime1.21':{'version':'1.21.0+dfsg-1'},
+                          'libssl3t64':{'version':'3.5.6-1~deb13u2'},
+                          'libc6':{'version':'2.41-12+deb13u3'}}}
+        depends=package.debian_depends(lock)
+        self.assertEqual(depends,'libonnxruntime1.21 (>= 1.21.0+dfsg-1), '
+                         'libssl3t64 (>= 3.5.6-1~deb13u2), libc6 (>= 2.41-12+deb13u3)')
+        self.assertNotIn('(= ',depends)
+
+    def test_runtime_libraries_name_their_owner_and_refuse_unowned(self):
+        owners={'libc.so.6':('libc6','2.41-12+deb13u3'),'libcrypto.so.3':('libssl3t64','3.5.6-1~deb13u2')}
+        paths=[Path('/usr/lib/x86_64-linux-gnu/'+name) for name in owners]
+        rows=package.runtime_libraries(paths,lambda path:owners[path.name],
+                                       lambda path:{'bytes':1,'sha256':'0'*64})
+        self.assertEqual(rows['libc.so.6'],{'package':'libc6','version':'2.41-12+deb13u3',
+                                            'built':{'bytes':1,'sha256':'0'*64}})
+        with self.assertRaisesRegex(ValueError,'no Debian owner'):
+            package.runtime_libraries([Path('/usr/lib/x86_64-linux-gnu/libstray.so.1')],
+                                      lambda path:('',''),lambda path:{})
+        with self.assertRaisesRegex(ValueError,'duplicate'):
+            package.runtime_libraries([paths[0],Path('/lib/x86_64-linux-gnu/libc.so.6')],
+                                      lambda path:owners[path.name],lambda path:{})
+
 if __name__=='__main__':unittest.main()

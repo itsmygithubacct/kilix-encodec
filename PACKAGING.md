@@ -25,6 +25,17 @@ the private attempt. System compiler/crypto/resampler/base packages are still
 checked against their selected installed versions. This development build
 mode changes no host package and copies no ORT payload into the output package.
 
+The build is exact; the installed package is not. `Depends:` names
+`libonnxruntime1.21`, `libssl3t64` and `libc6` at the versions built against as
+**minimums**, because Debian delivers their security fixes as new versions: an
+exact pin would make dpkg refuse the package on an already patched machine and
+would hold libc6 and OpenSSL security updates back where it is installed. The
+record (`kilix.encodec.native-package/v2`) names every library the loader
+resolves by the Debian package that ships it and the version built against, and
+keeps the build's bytes only as provenance; an installed system checks each
+library against its owner's own dpkg checksums at an owner version no older
+than that.
+
 The package carries `native-package.json`, the embedded Content build receipt,
 native and third-party notices, the Content license, dependency identities and
 a deterministic archive of the exact native source. No checkpoint, graph,

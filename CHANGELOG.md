@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The Debian package states its direct dependencies (`libonnxruntime1.21`,
+  `libssl3t64`, `libc6`) as minimums instead of exact versions. With exact
+  pins dpkg refused the package on a machine that had taken a libc6 security
+  update, and an installed package held libc6 and OpenSSL security updates
+  back. The package record is now `native-package/v2`: each loaded library is
+  named by its owning Debian package and the version built against, so an
+  installed system can verify it against that package's own checksums.
 - Follow a symlinked ancestor of the content root (for example a `~/.local`
   on another disk) and a symlinked receipt-store directory during admission.
   The installer and the receipt writer both follow them, so content a user had

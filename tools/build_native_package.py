@@ -117,6 +117,41 @@ def write_source_archive(files, destination):
                 archive.addfile(entry, io.BytesIO(data))
 
 
+# The three packages the library links directly. Debian ships security fixes
+# for them as new versions, so the package states the version it was built
+# against as a minimum: an exact pin would make dpkg refuse the package on a
+# machine that is already patched, and would hold libc6 and OpenSSL security
+# updates back on one where it is installed.
+DIRECT_DEPENDENCIES = ('libonnxruntime1.21', 'libssl3t64', 'libc6')
+PACKAGE_NAME = re.compile(r'[a-z0-9][a-z0-9+.-]{1,127}')
+PACKAGE_VERSION = re.compile(r'[A-Za-z0-9.+:~_-]{1,100}')
+
+
+def debian_depends(lock):
+    return ', '.join(name + ' (>= ' + lock['packages'][name]['version'] + ')'
+                     for name in DIRECT_DEPENDENCIES)
+
+
+def runtime_libraries(paths, owner, fingerprint):
+    """Name each loaded library by the Debian package that ships it.
+
+    The installed system verifies a library against its owner's own dpkg
+    checksums at an owner version no older than the one built against, so a
+    security update to that owner is accepted and a stray or replaced file is
+    not. The build's own bytes are kept as provenance only.
+    """
+    rows = {}
+    for path in paths:
+        name = path.name
+        if name in rows:
+            raise ValueError('duplicate runtime library name: ' + name)
+        package, version = owner(path)
+        if not PACKAGE_NAME.fullmatch(package) or not PACKAGE_VERSION.fullmatch(version):
+            raise ValueError('runtime library has no Debian owner: ' + name)
+        rows[name] = {'package': package, 'version': version, 'built': fingerprint(path)}
+    return rows
+
+
 def build(args):
     deadline = time.monotonic() + args.timeout
     with ExitStack() as stack:
@@ -159,6 +194,7 @@ def build(args):
         dependency_root = stage/'dependencies'
         dependency_root.mkdir(mode=0o700)
         packages = {}
+        private_owner = {}
         for name, record in sorted(lock['packages'].items()):
             if args.deb_directory is not None and record['provision'] == 'ort':
                 origin = args.deb_directory/Path(record['filename']).name
@@ -171,6 +207,10 @@ def build(args):
                 expected = f'Package: {name}\nVersion: {record["version"]}\nArchitecture: amd64'
                 if value != expected:
                     raise ValueError('dependency package metadata differs')
+                for line in run(['/usr/bin/dpkg-deb', '-c', str(copied)]).splitlines():
+                    member = line.split()[-1] if line.split() else ''
+                    if member.startswith('./') and not line.startswith('d'):
+                        private_owner[member[2:]] = (name, record['version'])
                 run(['/usr/bin/dpkg-deb', '-x', str(copied), str(dependency_root)])
                 copied.unlink()
                 packages[name] = {'version': record['version'], 'sha256': record['sha256'], 'source': 'verified-private-deb'}
@@ -216,26 +256,47 @@ def build(args):
         linked = run(['/usr/bin/ldd', str(dest/'usr/lib/libkilix-encodec.so.0')])
         if 'not found' in linked:
             raise ValueError('native runtime dependency is absent')
-        runtime_files = {}
+        resolved = []
         for line in linked.splitlines():
             found = re.search(r'(?:=>\s+)?(/\S+)', line)
             if found:
-                path = Path(found[1]).resolve(strict=True)
-                data = process_io.file_bytes(path, check, maximum=96*1024**2)
-                runtime_files[path.name] = {'bytes': len(data), 'sha256': digest(data)}
+                resolved.append(Path(found[1]).resolve(strict=True))
+
+        def owner(path):
+            if path.is_relative_to(dependency_root):
+                return private_owner.get(str(path.relative_to(dependency_root)), ('', ''))
+            # Debian 13 ships libraries under /usr; dpkg may still record /lib.
+            for candidate in (str(path), str(path).replace('/usr/lib/', '/lib/', 1)):
+                try:
+                    listing = run(['/usr/bin/dpkg-query', '-S', candidate])
+                except RuntimeError:
+                    continue
+                owners = [line[:-len(': ' + candidate)] for line in listing.splitlines()
+                          if line.endswith(': ' + candidate) and not line.startswith('diversion ')]
+                if len(owners) == 1 and ',' not in owners[0]:
+                    package = owners[0].split(':', 1)[0]
+                    return package, run(['/usr/bin/dpkg-query', '-W', '-f=${Version}', package])
+                return '', ''
+            return '', ''
+
+        def fingerprint(path):
+            data = process_io.file_bytes(path, check, maximum=96*1024**2)
+            return {'bytes': len(data), 'sha256': digest(data)}
+
+        runtime = runtime_libraries(resolved, owner, fingerprint)
         doc = dest/'usr/share/doc/kilix-encodec'
         write_source_archive(files, doc/'source.tar.gz')
         (doc/'debian-dependencies.json').write_bytes(files['tools/debian-dependencies.json'][1])
         for name in ('source.tar.gz', 'debian-dependencies.json'):
             (doc/name).chmod(0o644)
-        record = {'schema': 'kilix.encodec.native-package/v1', 'source_commit': args.commit,
+        record = {'schema': 'kilix.encodec.native-package/v2', 'source_commit': args.commit,
                   'source_tree': tree, 'content_commit': args.content_commit,
                   'content_bundle_sha256': content_receipt['bundle_sha256'],
                   'compiler': {'name': compiler.name, 'sha256': digest(compiler_bytes), 'version': compiler_version},
                   'build': {'ONNX': 1, 'CONTENT': 1, 'PREFIX': '/usr', 'CFLAGS': cflags.replace(str(stage), '$BUILD'),
                             'ONNX_CFLAGS': '-I$ORT/include', 'ONNX_LIBS': '-L$ORT/lib -lonnxruntime',
                             'LDFLAGS': '-Wl,-rpath-link,$ORT/lib'},
-                  'snapshot': lock['snapshot'], 'packages': packages, 'runtime_files': runtime_files,
+                  'snapshot': lock['snapshot'], 'packages': packages, 'runtime_libraries': runtime,
                   'files': inventory(dest, check)}
         (doc/'native-package.json').write_bytes(canonical(record))
         (doc/'native-package.json').chmod(0o644)
@@ -243,7 +304,7 @@ def build(args):
         control.mkdir(mode=0o755)
         control.chmod(0o755)
         version = files['VERSION'][1].decode().strip()+'+git'+args.commit[:12]+'.'+args.content_commit[:12]
-        depends = ', '.join(name+' (= '+lock['packages'][name]['version']+')' for name in ('libonnxruntime1.21', 'libssl3t64', 'libc6'))
+        depends = debian_depends(lock)
         (control/'control').write_text(f'Package: libkilix-encodec\nVersion: {version}\nArchitecture: amd64\n'
             'Maintainer: itsmygithubacct <itsmygithubacct@users.noreply.github.com>\n'
             f'Depends: {depends}\nSection: libs\nPriority: optional\n'
