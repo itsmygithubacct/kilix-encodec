@@ -127,9 +127,43 @@ PACKAGE_NAME = re.compile(r'[a-z0-9][a-z0-9+.-]{1,127}')
 PACKAGE_VERSION = re.compile(r'[A-Za-z0-9.+:~_-]{1,100}')
 
 
-def debian_depends(lock):
-    return ', '.join(name + ' (>= ' + lock['packages'][name]['version'] + ')'
-                     for name in DIRECT_DEPENDENCIES)
+def debian_depends(lock, runtime):
+    """Every package a loaded library comes from, at the version built against.
+
+    The three direct dependencies come first at their lock versions; the other
+    owners follow in name order, so dpkg refuses an older library up front
+    instead of the installed-system check refusing it after the fact.
+    """
+    floors = {name: lock['packages'][name]['version'] for name in DIRECT_DEPENDENCIES}
+    for row in runtime.values():
+        if floors.setdefault(row['package'], row['version']) != row['version']:
+            raise ValueError('one package recorded at two versions: ' + row['package'])
+    order = list(DIRECT_DEPENDENCIES) + sorted(set(floors) - set(DIRECT_DEPENDENCIES))
+    return ', '.join(name + ' (>= ' + floors[name] + ')' for name in order)
+
+
+def debian_owner(path, dependency_root, private_owner, query):
+    """(package, version) that ships path, or ('', '') when there is not exactly one.
+
+    query(argv) returns a command's output and raises RuntimeError on failure.
+    Debian 13 ships libraries under /usr; dpkg may still record /lib.
+    """
+    if path.is_relative_to(dependency_root):
+        return private_owner.get(str(path.relative_to(dependency_root)), ('', ''))
+    for candidate in (str(path), str(path).replace('/usr/lib/', '/lib/', 1)):
+        try:
+            listing = query(['/usr/bin/dpkg-query', '-S', candidate])
+        except RuntimeError:
+            continue
+        owners = [line[:-len(': ' + candidate)] for line in listing.splitlines()
+                  if line.endswith(': ' + candidate) and not line.startswith('diversion ')]
+        if len(owners) != 1 or ',' in owners[0]:
+            return '', ''
+        package = owners[0].split(':', 1)[0]
+        # Qualified, so an i386 co-installation cannot concatenate two versions.
+        versions = query(['/usr/bin/dpkg-query', '-W', '-f=${Version}\\n', package + ':amd64']).splitlines()
+        return (package, versions[0]) if len(versions) == 1 else ('', '')
+    return '', ''
 
 
 def runtime_libraries(paths, owner, fingerprint):
@@ -263,21 +297,7 @@ def build(args):
                 resolved.append(Path(found[1]).resolve(strict=True))
 
         def owner(path):
-            if path.is_relative_to(dependency_root):
-                return private_owner.get(str(path.relative_to(dependency_root)), ('', ''))
-            # Debian 13 ships libraries under /usr; dpkg may still record /lib.
-            for candidate in (str(path), str(path).replace('/usr/lib/', '/lib/', 1)):
-                try:
-                    listing = run(['/usr/bin/dpkg-query', '-S', candidate])
-                except RuntimeError:
-                    continue
-                owners = [line[:-len(': ' + candidate)] for line in listing.splitlines()
-                          if line.endswith(': ' + candidate) and not line.startswith('diversion ')]
-                if len(owners) == 1 and ',' not in owners[0]:
-                    package = owners[0].split(':', 1)[0]
-                    return package, run(['/usr/bin/dpkg-query', '-W', '-f=${Version}', package])
-                return '', ''
-            return '', ''
+            return debian_owner(path, dependency_root, private_owner, run)
 
         def fingerprint(path):
             data = process_io.file_bytes(path, check, maximum=96*1024**2)
@@ -304,7 +324,7 @@ def build(args):
         control.mkdir(mode=0o755)
         control.chmod(0o755)
         version = files['VERSION'][1].decode().strip()+'+git'+args.commit[:12]+'.'+args.content_commit[:12]
-        depends = debian_depends(lock)
+        depends = debian_depends(lock, runtime)
         (control/'control').write_text(f'Package: libkilix-encodec\nVersion: {version}\nArchitecture: amd64\n'
             'Maintainer: itsmygithubacct <itsmygithubacct@users.noreply.github.com>\n'
             f'Depends: {depends}\nSection: libs\nPriority: optional\n'

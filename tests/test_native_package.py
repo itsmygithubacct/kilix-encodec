@@ -100,14 +100,53 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):package.source_files(self.repo,self.commit,expired)
 
 
-    def test_direct_dependencies_are_minimums_not_exact_pins(self):
+    def test_every_owner_is_a_minimum_with_direct_dependencies_first(self):
         lock={'packages':{'libonnxruntime1.21':{'version':'1.21.0+dfsg-1'},
                           'libssl3t64':{'version':'3.5.6-1~deb13u2'},
                           'libc6':{'version':'2.41-12+deb13u3'}}}
-        depends=package.debian_depends(lock)
+        row=lambda package,version:{'package':package,'version':version,'built':{}}
+        runtime={'libc.so.6':row('libc6','2.41-12+deb13u3'),'libz.so.1':row('zlib1g','1:1.3'),
+                 'libabsl_base.so':row('libabsl20240722','20240722.0-4'),
+                 'libabsl_city.so':row('libabsl20240722','20240722.0-4')}
+        depends=package.debian_depends(lock,runtime)
         self.assertEqual(depends,'libonnxruntime1.21 (>= 1.21.0+dfsg-1), '
-                         'libssl3t64 (>= 3.5.6-1~deb13u2), libc6 (>= 2.41-12+deb13u3)')
+                         'libssl3t64 (>= 3.5.6-1~deb13u2), libc6 (>= 2.41-12+deb13u3), '
+                         'libabsl20240722 (>= 20240722.0-4), zlib1g (>= 1:1.3)')
         self.assertNotIn('(= ',depends)
+        runtime['libabsl_city.so']=row('libabsl20240722','20240722.0-3')
+        with self.assertRaisesRegex(ValueError,'two versions'):
+            package.debian_depends(lock,runtime)
+
+    def test_debian_owner_requires_exactly_one_amd64_owner_and_version(self):
+        root=Path('/private/deps')
+        private={'usr/lib/x86_64-linux-gnu/libonnxruntime.so.1.21.0':('libonnxruntime1.21','1.21.0+dfsg-1')}
+        self.assertEqual(package.debian_owner(root/'usr/lib/x86_64-linux-gnu/libonnxruntime.so.1.21.0',root,private,None),
+                         ('libonnxruntime1.21','1.21.0+dfsg-1'))
+        self.assertEqual(package.debian_owner(root/'usr/lib/x86_64-linux-gnu/other.so',root,private,None),('',''))
+        lib='/usr/lib/x86_64-linux-gnu/libc.so.6'
+        def replies(search, versions, *, missing=()):
+            calls=[]
+            def query(argv):
+                calls.append(argv)
+                if argv[1]=='-S':
+                    if argv[2] in missing: raise RuntimeError('not found')
+                    return search.replace('PATH',argv[2])
+                self.assertEqual(argv[-1],'libc6:amd64')
+                return versions
+            return query,calls
+        query,calls=replies('libc6:amd64: PATH','2.41-12+deb13u3')
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('libc6','2.41-12+deb13u3'))
+        query,_=replies('diversion by libc6 from: PATH\nlibc6:amd64: PATH','2.41-12+deb13u3')
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('libc6','2.41-12+deb13u3'))
+        query,_=replies('libc6:amd64, other:amd64: PATH','x')
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('',''))
+        query,_=replies('libc6:amd64: PATH','2.41-12+deb13u4\n2.41-12+deb13u4')
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('',''))
+        query,calls=replies('libc6:amd64: PATH','2.41-12+deb13u3',missing=(lib,))
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('libc6','2.41-12+deb13u3'))
+        self.assertEqual(calls[1][2],'/lib/x86_64-linux-gnu/libc.so.6')
+        query,_=replies('','',missing=(lib,'/lib/x86_64-linux-gnu/libc.so.6'))
+        self.assertEqual(package.debian_owner(Path(lib),root,private,query),('',''))
 
     def test_runtime_libraries_name_their_owner_and_refuse_unowned(self):
         owners={'libc.so.6':('libc6','2.41-12+deb13u3'),'libcrypto.so.3':('libssl3t64','3.5.6-1~deb13u2')}
