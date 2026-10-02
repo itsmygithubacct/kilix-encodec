@@ -1,0 +1,22 @@
+--- a/onnxruntime/core/session/environment.cc
++++ b/onnxruntime/core/session/environment.cc
+@@ -244,14 +244,13 @@
+ #ifdef USE_DML
+       dml::RegisterDmlSchemas();
+ #endif
+-      RegisterOnnxOperatorSetSchema();
+-
+-#ifndef DISABLE_ML_OPS
+-      RegisterOnnxMLOperatorSetSchema();
+-#endif
++      // Debian links system ONNX with lazy built-in schema registration.
++      // Force that owner once instead of registering the same sets twice.
++      ORT_ENFORCE(ONNX_NAMESPACE::OpSchemaRegistry::Schema("Add", 1) != nullptr,
++                  "System ONNX base schemas are unavailable");
+ 
+ #if defined(ENABLE_TRAINING_OPS)
+-      RegisterOnnxTrainingOperatorSetSchema();
++      // System ONNX already owns its compiled-in training schemas.
+ #endif
+ 
+ #if defined(ENABLE_TRAINING_OPS)
