@@ -74,24 +74,26 @@
       "depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.0), libprotobuf32t64 (>= 3.21.12), libstdc++6 (>= 13.1)"
     },
     "libonnxruntime-dev": {
-      "version": "1.21.0+dfsg-1",
-      "sha256": "14f7d959d5deacbcf1504830d4189f91fc67382b399ed9ae9d3aa9c4050ced08",
-      "bytes": 85340,
-      "installed_kib": 559,
-      "filename": "pool/main/o/onnxruntime/libonnxruntime-dev_1.21.0+dfsg-1_amd64.deb",
-      "archive": "debian",
+      "version": "1.21.0+dfsg-1+kilix1",
+      "sha256": "b0ce49106fc12e73a07c62ed27e4d119c36cb58102e51310c416d235a91b7026",
+      "bytes": 96548,
+      "installed_kib": 601,
+      "filename": "libonnxruntime-dev_1.21.0+dfsg-1+kilix1_amd64.deb",
+      "archive": "kilix",
       "provision": "ort",
-      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1)"
+      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix1)",
+      "url": "https://github.com/itsmygithubacct/kilix-encodec/releases/download/ort-deb-rc5/libonnxruntime-dev_1.21.0+dfsg-1+kilix1_amd64.deb"
     },
     "libonnxruntime1.21": {
-      "version": "1.21.0+dfsg-1",
-      "sha256": "bec9de1a9358cde5752196de028c8af33d67314285143a05369860bb74b13e80",
-      "bytes": 4263812,
-      "installed_kib": 16523,
-      "filename": "pool/main/o/onnxruntime/libonnxruntime1.21_1.21.0+dfsg-1_amd64.deb",
-      "archive": "debian",
+      "version": "1.21.0+dfsg-1+kilix1",
+      "sha256": "8e0fbcd748da21a7f35c467c02d04b0a62cc37d3de48249a99f5bd14d5f46fa3",
+      "bytes": 4037280,
+      "installed_kib": 14916,
+      "filename": "libonnxruntime1.21_1.21.0+dfsg-1+kilix1_amd64.deb",
+      "archive": "kilix",
       "provision": "ort",
-      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)"
+      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)",
+      "url": "https://github.com/itsmygithubacct/kilix-encodec/releases/download/ort-deb-rc5/libonnxruntime1.21_1.21.0+dfsg-1+kilix1_amd64.deb"
     },
     "libprotobuf32t64": {
       "version": "3.21.12-11+deb13u1",

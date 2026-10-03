@@ -8,8 +8,9 @@ patch below reduces SSE2 inference cost. Both target Debian
 
 This dependency patch is for the Debian `onnxruntime 1.21.0+dfsg-1` source,
 after its Debian patch series. It addresses duplicate built-in schema
-registration when Debian links system ONNX. It is a development candidate;
-the EnCodec runtime and selected dependency package remain unchanged.
+registration when Debian links system ONNX. The packaged development
+selection below incorporates it together with the performance patch;
+production release promotion remains pending.
 
 Debian's [system-ONNX patch](https://sources.debian.org/patches/onnxruntime/1.21.0%2Bdfsg-1/system-onnx.patch/)
 uses the distro library, whose built-in schema registry owns lazy registration.
@@ -123,3 +124,45 @@ tail sizes, zero/accumulate modes, padding/dilation fallbacks and partial rows.
 It requires x86-64, a C/C++ compiler and the two source trees. The test helper
 extracts the original functions from the supplied source instead of replacing
 them with a reference reimplementation.
+
+## Offline Debian package staging
+
+`stage_debian.py` packages the exact already-built development candidate
+recorded in `stage-inputs.json`. It does not compile a fresh Debian source,
+install packages, download inputs, or establish release qualification. The
+runtime and development packages use the distinct version
+`1.21.0+dfsg-1+kilix1`; Debian's shared and DNNL provider population is retained.
+Build those two provider targets before staging:
+
+```sh
+ninja -C /root/rc5-ort-schema-fix/build -j2 \
+  libonnxruntime_providers_shared.so libonnxruntime_providers_dnnl.so
+python3 packaging/onnxruntime/stage_debian.py \
+  --source /root/rc5-ort-schema-fix/source \
+  --build /root/rc5-ort-schema-fix/build \
+  --source-dsc /path/to/onnxruntime_1.21.0+dfsg-1.dsc \
+  --output /path/to/new-package-directory
+```
+
+The lock binds the source descriptor, modified sources, patches, installed
+headers/notices, CMake installation/export scripts, pkg-config data, compiler
+configuration and all three input shared libraries. Input checks run before
+and after installation into the staging directory. Packages contain selected
+dependency requirements, root-owned inventories, dpkg checksums, notices, patches
+and staging provenance. No model weights or model agreements are included.
+
+Staging strips debug symbols and removes the pinned library search paths.
+All other allocated instructions, constants and data, section addresses and
+sizes, and dynamic loader entries must remain identical. The development
+symlink, pkg-config flags and CMake imported target resolve the multiarch
+runtime. Existing runtime callers still choose their thread allocation
+explicitly; this packaging does not change the one-thread default.
+
+An owned H1 snapshot installed the staged runtime through dpkg and ran the
+original native candidate without `LD_LIBRARY_PATH`. Its passing repeat
+measured all six p99 rows at 17.79–18.77 ms. Two preceding installed-runtime
+runs exceeded 20 ms; a diagnostic using the original private runtime also
+exceeded it. Those failures are retained and no cause or sustained reliability
+is inferred from the passing repeat. This is installed dependency evidence,
+not source-bound native-package, concurrent transport, soak, listening or
+whole-release qualification.
