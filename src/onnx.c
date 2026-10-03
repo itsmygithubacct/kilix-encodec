@@ -357,7 +357,15 @@ static kenc_result create_session(kenc_model *model, size_t graph,
     ORT_TRY(api->SetInterOpNumThreads(options, 1));
     ORT_TRY(api->SetSessionExecutionMode(options, ORT_SEQUENTIAL));
     ORT_TRY(api->SetSessionGraphOptimizationLevel(options, ORT_ENABLE_ALL));
-    ORT_TRY(api->AddSessionConfigEntry(options, "session.intra_op.allow_spinning", "0"));
+    /* Network workers stay ready between operators, then sleep when Run ends.
+     * Encoder/decoder sessions keep their own requested thread limits without
+     * idle pools competing during the other stream's inference. */
+    ORT_TRY(api->AddSessionConfigEntry(options, "session.intra_op.allow_spinning",
+        graph < 2u && threads > 1u ? "1" : "0"));
+    ORT_TRY(api->AddSessionConfigEntry(options, "session.force_spinning_stop", "1"));
+    if (graph < 2u && threads > 1u) {
+        ORT_TRY(api->AddSessionConfigEntry(options, "session.dynamic_block_base", "4"));
+    }
     ORT_TRY(api->AddSessionConfigEntry(options, "session.inter_op.allow_spinning", "0"));
     ORT_TRY(api->CreateSessionFromArray(model->environment, model->graphs[graph],
         kenc_graphs[graph].bytes, options, &session));

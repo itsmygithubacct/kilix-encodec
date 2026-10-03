@@ -64,7 +64,7 @@ typedef struct {
     uint16_t packet_samples;
     uint16_t epoch_packets;
     uint8_t codebooks;
-    uint8_t threads;
+    uint8_t threads; /* Mono inference: 1, 2 or 4, including the calling thread. */
 } kenc_options;
 
 typedef struct {

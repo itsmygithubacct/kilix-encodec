@@ -181,20 +181,20 @@ def noise(frame):
     return [(i * 7919 + frame * 104729) % 20001 - 10000 for i in range(960)]
 
 
-def stream_options(native, books):
+def stream_options(native, books, threads=1):
     options = native.options_default()
     options.codebooks = books
-    options.threads = 1
+    options.threads = threads
     return options
 
 
-def native_stream(native, model, books, frames, profile=None, reset_at=None):
+def native_stream(native, model, books, frames, profile=None, reset_at=None, threads=1):
     """Encode then decode frames through fresh native contexts; returns packets and PCM.
 
     profile None keeps the contexts' default. At reset_at the encoder is reset
     explicitly (a DISCONTINUITY epoch start) and the decoder follows the stream.
     """
-    options = stream_options(native, books)
+    options = stream_options(native, books, threads)
     encoder, decoder = c.c_void_p(), c.c_void_p()
     try:
         if native.encoder_create(c.byref(encoder), model, c.byref(options)) != OK or \
@@ -488,6 +488,45 @@ def epoch_controls(native, assets, use_oracle):
         native.model_free(model)
 
 
+def four_thread_controls(native, assets, use_oracle):
+    """Exercise the new CPU budget without changing the legacy C0 assertions."""
+    checks = 0
+    def check(value, description):
+        nonlocal checks
+        if not value:
+            raise AssertionError(description)
+        checks += 1
+    model = c.c_void_p()
+    check(native.model_load(c.byref(model), os.fsencode(assets)) == OK and model.value,
+          'validated model loaded for four-thread controls')
+    frames = [tone(i, 437, 113) if i % 3 else noise(i) for i in range(30)]
+    try:
+        for books in (4, 8, 16):
+            for profile in (C0, C5_R4):
+                old_packets, old_pcm = native_stream(native, model, books, frames, profile,
+                                                     reset_at=27, threads=2)
+                packets, pcm = native_stream(native, model, books, frames, profile,
+                                             reset_at=27, threads=4)
+                check(packets == old_packets,
+                      f'{books} codebooks profile {profile}: four-thread packets equal two-thread packets')
+                check(max(abs(a-b) for aa, bb in zip(pcm, old_pcm) for a, b in zip(aa, bb)) <= 2,
+                      f'{books} codebooks profile {profile}: four-thread PCM within 2 LSB of two-thread PCM')
+                if use_oracle:
+                    oracle = Oracle(assets, books, profile)
+                    for frame, packet, output in zip(frames, packets, pcm):
+                        _, _, _, flags, codes = parse_wire(packet, books)
+                        if flags & RESET:
+                            oracle.reset()
+                        expected_codes, expected_pcm = oracle.run(frame)
+                        check(codes == expected_codes, 'four-thread tokens equal independent ORT oracle')
+                        check(max(abs(a-b) for a, b in zip(output, expected_pcm)) <= 2,
+                              'four-thread PCM within 2 LSB of independent ORT oracle')
+        print(f'native four-thread controls: {checks}/{checks} PASS', flush=True)
+        return checks
+    finally:
+        native.model_free(model)
+
+
 def exercise(library, assets, use_oracle, reference_library):
     native = Native(library)
     checks = 0
@@ -615,6 +654,7 @@ def exercise(library, assets, use_oracle, reference_library):
                 for mode,ptr in reversed(handles):
                     getattr(native,mode+'_free')(ptr)
                 native.model_free(model)
+    checks += four_thread_controls(native, assets, use_oracle)
     checks += epoch_controls(native, assets, use_oracle)
     mixed, skipped = mixed_peer_controls(native, assets, reference_library)
     checks += mixed

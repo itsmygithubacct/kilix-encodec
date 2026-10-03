@@ -20,8 +20,8 @@ kenc_result kenc_options_validate(const kenc_options *options)
     if (options->sample_rate != KENC_SAMPLE_RATE_24KHZ
         || options->packet_samples != KENC_PACKET_SAMPLES
         || options->epoch_packets == 0u
-        || options->threads == 0u
-        || options->threads > 2u) {
+        || (options->threads != 1u && options->threads != 2u
+            && options->threads != 4u)) {
         return KENC_ERR_INVALID;
     }
     if (options->codebooks != 4u && options->codebooks != 8u
@@ -101,4 +101,3 @@ const char *kenc_epoch_start_name(kenc_epoch_start profile)
         return NULL;
     }
 }
-

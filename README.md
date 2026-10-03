@@ -47,7 +47,7 @@ manifest emitted by exporter 0.1.5 with the MIT encodec source pin. It checks
 their compiled byte counts and SHA-256 digests before initializing ORT, then
 creates sessions from those same verified bytes. Asset symlinks, special files and substitutions are refused.
 Tensor names, ranks, dimensions and types are checked before allocating stream
-buffers. Each stream has separate recurrent state and 1 or 2 CPU threads;
+buffers. Each mono stream has separate recurrent state and 1, 2 or 4 CPU threads;
 inference uses caller-owned output storage and preallocated state tensors.
 
 The separate `kenc_stereo_*` API verifies the exact 48 kHz manifest, two graphs
@@ -79,7 +79,8 @@ build-onnx/kenc decode --model-dir /path/to/pinned/48khz-export \
   output-stereo.kenc decoded.wav
 ```
 
-`--threads 1|2` controls native inference. Inputs must match the selected rate
+`--threads 1|2|4` controls native inference; four threads are mono-only.
+The count includes the calling thread and defaults to one. Inputs must match the selected rate
 and channel count; this command does not resample. The parser bounds the WAV
 chunk count and every length and rejects symlinks and special input files.
 Existing outputs are preserved with exclusive creation. A failed conversion
@@ -119,6 +120,8 @@ binary/manifest/runtime digests and peak RSS. The default 24 kHz population is
 1,000 calls in each of six encode/decode rows. The stereo profile uses 100 calls
 in each of four decoder rows. Outputs explicitly distinguish unfrozen-host
 measurements from a verified H1 fixture and do not grant whole-release credit.
+The [four-thread H1 result and required ORT dependency patches](packaging/onnxruntime/README.md#sse2-inference-and-one-dimensional-transpose-convolution)
+document the CPU allocation and separate it from the previous two-thread budget.
 
 ```sh
 python tools/bench_native.py --library build-onnx/libkilix-encodec.so \

@@ -34,7 +34,7 @@ static kenc_result source_create(kenc_file_source **out, int descriptor,
 {
     if (out == NULL) { return KENC_ERR_INVALID; }
     *out = NULL;
-    if (info == NULL || (threads != 1u && threads != 2u)) { return KENC_ERR_INVALID; }
+    if (info == NULL || (threads != 1u && threads != 2u && threads != 4u)) { return KENC_ERR_INVALID; }
     kenc_file_source *source = calloc(1u, sizeof(*source));
     if (source == NULL) { return KENC_ERR_MEMORY; }
     kenc_result result = kenc_file_reader_create(&source->reader, descriptor, &source->info);

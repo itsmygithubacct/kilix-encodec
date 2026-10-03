@@ -107,6 +107,18 @@ def main(args):
                     command += [source, encoded]
                     run(command, 0)
                     retained = encoded.read_bytes()
+                    if profile == '24k':
+                        threaded_file = root / f'{profile}-{bitrate}-{epoch_start}-four.kenc'
+                        threaded_wave = root / f'{profile}-{bitrate}-{epoch_start}-four.wav'
+                        threaded_command = list(command)
+                        threaded_command[threaded_command.index('--threads') + 1] = '4'
+                        threaded_command[-1] = threaded_file
+                        run(threaded_command, 0)
+                        assert threaded_file.read_bytes() == retained
+                        run(['decode', '--model-dir', assets, '--threads', '4', threaded_file, threaded_wave], 0)
+                        with wave.open(str(threaded_wave), 'rb') as result:
+                            assert result.getnframes() == samples
+                        checks += 2
                     run(command, 1, b'existing outputs are preserved')
                     assert encoded.read_bytes() == retained
                     checks += 1

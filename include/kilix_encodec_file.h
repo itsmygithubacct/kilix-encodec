@@ -84,6 +84,7 @@ void kenc_file_reader_free(kenc_file_reader *reader);
  * not advance the source or write PCM. Seek returns an indexed boundary and
  * performs stereo pre-roll internally, preserving continuous-playback overlap.
  * A runtime failure requires a successful seek before pulling again. */
+/* Mono files accept 1, 2 or 4 threads; stereo files accept 1 or 2. */
 kenc_result kenc_file_source_create(kenc_file_source **out, int descriptor,
     const char *mono_assets, const char *stereo_assets, uint8_t threads,
     kenc_file_info *info);

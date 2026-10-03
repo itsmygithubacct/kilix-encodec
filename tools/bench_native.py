@@ -106,7 +106,8 @@ if __name__=='__main__':
     parser.add_argument('--library',type=Path,required=True)
     parser.add_argument('--assets',type=Path,required=True)
     parser.add_argument('--profile',choices=('24k','48k'),default='24k')
-    parser.add_argument('--threads',type=int,choices=(1,2),default=1)
+    parser.add_argument('--threads',type=int,choices=(1,2,4),default=1,
+                        help='inference threads including caller; four is mono-only')
     parser.add_argument('--epoch-start',choices=tuple(EPOCH_START_MARKERS),default='C5-R4')
     parser.add_argument('--samples',type=int)
     parser.add_argument('--warmup',type=int)
@@ -114,6 +115,7 @@ if __name__=='__main__':
     parser.add_argument('--fixture-runner',type=Path)
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
+    if args.profile=='48k' and args.threads==4:parser.error('four threads are supported only for the 24k profile')
     if args.samples is None:args.samples=1000 if args.profile=='24k' else 100
     if args.warmup is None:args.warmup=50 if args.profile=='24k' else 5
     minimum=1000 if args.profile=='24k' else 100

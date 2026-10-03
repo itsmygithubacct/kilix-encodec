@@ -21,6 +21,11 @@ int main(void)
     TEST_CHECK(model == NULL);
     TEST_CHECK(kenc_options_validate(NULL) == KENC_ERR_INVALID);
     TEST_CHECK(kenc_options_validate(&options) == KENC_OK);
+    for (unsigned int threads = 0u; threads <= UINT8_MAX; ++threads) {
+        options.threads = (uint8_t)threads;
+        TEST_CHECK(kenc_options_validate(&options)
+            == ((threads == 1u || threads == 2u || threads == 4u) ? KENC_OK : KENC_ERR_INVALID));
+    }
     TEST_CHECK(strcmp(kenc_result_string(KENC_ERR_MODEL),
                    "model unavailable or invalid")
         == 0);

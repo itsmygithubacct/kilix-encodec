@@ -1,0 +1,344 @@
+--- a/onnxruntime/core/mlas/lib/sgemm.cpp
++++ b/onnxruntime/core/mlas/lib/sgemm.cpp
+@@ -1003,6 +1003,270 @@
+
+ #endif
+
++#if defined(MLAS_TARGET_AMD64) && !defined(FORCE_GENERIC_ALGORITHMS)
++template<size_t Rows, size_t Vectors>
++static size_t MlasSgemmNarrowTileSse(
++    const float* A, const float* B, float* C, size_t CountK, size_t CountN,
++    size_t lda, size_t ldc, float alpha, bool ZeroMode)
++{
++    __m128 s00 = _mm_setzero_ps();
++    __m128 s01 = _mm_setzero_ps();
++    __m128 s10 = _mm_setzero_ps();
++    __m128 s11 = _mm_setzero_ps();
++    __m128 s20 = _mm_setzero_ps();
++    __m128 s21 = _mm_setzero_ps();
++    __m128 s30 = _mm_setzero_ps();
++    __m128 s31 = _mm_setzero_ps();
++    __m128 s40 = _mm_setzero_ps();
++    __m128 s41 = _mm_setzero_ps();
++    __m128 s50 = _mm_setzero_ps();
++    __m128 s51 = _mm_setzero_ps();
++    size_t k = 0;
++    for (; k + 4 <= CountK; k += 4) {
++        const __m128 a0 = Rows > 0 ? _mm_loadu_ps(A + 0 * lda + k) : _mm_setzero_ps();
++        const __m128 a1 = Rows > 1 ? _mm_loadu_ps(A + 1 * lda + k) : _mm_setzero_ps();
++        const __m128 a2 = Rows > 2 ? _mm_loadu_ps(A + 2 * lda + k) : _mm_setzero_ps();
++        const __m128 a3 = Rows > 3 ? _mm_loadu_ps(A + 3 * lda + k) : _mm_setzero_ps();
++        const __m128 a4 = Rows > 4 ? _mm_loadu_ps(A + 4 * lda + k) : _mm_setzero_ps();
++        const __m128 a5 = Rows > 5 ? _mm_loadu_ps(A + 5 * lda + k) : _mm_setzero_ps();
++        {
++            const __m128 b0 = _mm_loadu_ps(B + (k + 0) * 16);
++            const __m128 b1 = Vectors == 2 ? _mm_loadu_ps(B + (k + 0) * 16 + 4) : _mm_setzero_ps();
++            if constexpr (Rows > 0) {
++                const __m128 a = _mm_shuffle_ps(a0, a0, 0x00);
++                s00 = _mm_add_ps(s00, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s01 = _mm_add_ps(s01, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 1) {
++                const __m128 a = _mm_shuffle_ps(a1, a1, 0x00);
++                s10 = _mm_add_ps(s10, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s11 = _mm_add_ps(s11, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 2) {
++                const __m128 a = _mm_shuffle_ps(a2, a2, 0x00);
++                s20 = _mm_add_ps(s20, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s21 = _mm_add_ps(s21, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 3) {
++                const __m128 a = _mm_shuffle_ps(a3, a3, 0x00);
++                s30 = _mm_add_ps(s30, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s31 = _mm_add_ps(s31, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 4) {
++                const __m128 a = _mm_shuffle_ps(a4, a4, 0x00);
++                s40 = _mm_add_ps(s40, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s41 = _mm_add_ps(s41, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 5) {
++                const __m128 a = _mm_shuffle_ps(a5, a5, 0x00);
++                s50 = _mm_add_ps(s50, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s51 = _mm_add_ps(s51, _mm_mul_ps(a, b1));
++            }
++        }
++        {
++            const __m128 b0 = _mm_loadu_ps(B + (k + 1) * 16);
++            const __m128 b1 = Vectors == 2 ? _mm_loadu_ps(B + (k + 1) * 16 + 4) : _mm_setzero_ps();
++            if constexpr (Rows > 0) {
++                const __m128 a = _mm_shuffle_ps(a0, a0, 0x55);
++                s00 = _mm_add_ps(s00, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s01 = _mm_add_ps(s01, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 1) {
++                const __m128 a = _mm_shuffle_ps(a1, a1, 0x55);
++                s10 = _mm_add_ps(s10, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s11 = _mm_add_ps(s11, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 2) {
++                const __m128 a = _mm_shuffle_ps(a2, a2, 0x55);
++                s20 = _mm_add_ps(s20, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s21 = _mm_add_ps(s21, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 3) {
++                const __m128 a = _mm_shuffle_ps(a3, a3, 0x55);
++                s30 = _mm_add_ps(s30, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s31 = _mm_add_ps(s31, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 4) {
++                const __m128 a = _mm_shuffle_ps(a4, a4, 0x55);
++                s40 = _mm_add_ps(s40, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s41 = _mm_add_ps(s41, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 5) {
++                const __m128 a = _mm_shuffle_ps(a5, a5, 0x55);
++                s50 = _mm_add_ps(s50, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s51 = _mm_add_ps(s51, _mm_mul_ps(a, b1));
++            }
++        }
++        {
++            const __m128 b0 = _mm_loadu_ps(B + (k + 2) * 16);
++            const __m128 b1 = Vectors == 2 ? _mm_loadu_ps(B + (k + 2) * 16 + 4) : _mm_setzero_ps();
++            if constexpr (Rows > 0) {
++                const __m128 a = _mm_shuffle_ps(a0, a0, 0xaa);
++                s00 = _mm_add_ps(s00, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s01 = _mm_add_ps(s01, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 1) {
++                const __m128 a = _mm_shuffle_ps(a1, a1, 0xaa);
++                s10 = _mm_add_ps(s10, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s11 = _mm_add_ps(s11, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 2) {
++                const __m128 a = _mm_shuffle_ps(a2, a2, 0xaa);
++                s20 = _mm_add_ps(s20, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s21 = _mm_add_ps(s21, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 3) {
++                const __m128 a = _mm_shuffle_ps(a3, a3, 0xaa);
++                s30 = _mm_add_ps(s30, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s31 = _mm_add_ps(s31, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 4) {
++                const __m128 a = _mm_shuffle_ps(a4, a4, 0xaa);
++                s40 = _mm_add_ps(s40, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s41 = _mm_add_ps(s41, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 5) {
++                const __m128 a = _mm_shuffle_ps(a5, a5, 0xaa);
++                s50 = _mm_add_ps(s50, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s51 = _mm_add_ps(s51, _mm_mul_ps(a, b1));
++            }
++        }
++        {
++            const __m128 b0 = _mm_loadu_ps(B + (k + 3) * 16);
++            const __m128 b1 = Vectors == 2 ? _mm_loadu_ps(B + (k + 3) * 16 + 4) : _mm_setzero_ps();
++            if constexpr (Rows > 0) {
++                const __m128 a = _mm_shuffle_ps(a0, a0, 0xff);
++                s00 = _mm_add_ps(s00, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s01 = _mm_add_ps(s01, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 1) {
++                const __m128 a = _mm_shuffle_ps(a1, a1, 0xff);
++                s10 = _mm_add_ps(s10, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s11 = _mm_add_ps(s11, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 2) {
++                const __m128 a = _mm_shuffle_ps(a2, a2, 0xff);
++                s20 = _mm_add_ps(s20, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s21 = _mm_add_ps(s21, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 3) {
++                const __m128 a = _mm_shuffle_ps(a3, a3, 0xff);
++                s30 = _mm_add_ps(s30, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s31 = _mm_add_ps(s31, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 4) {
++                const __m128 a = _mm_shuffle_ps(a4, a4, 0xff);
++                s40 = _mm_add_ps(s40, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s41 = _mm_add_ps(s41, _mm_mul_ps(a, b1));
++            }
++            if constexpr (Rows > 5) {
++                const __m128 a = _mm_shuffle_ps(a5, a5, 0xff);
++                s50 = _mm_add_ps(s50, _mm_mul_ps(a, b0));
++                if constexpr (Vectors == 2) s51 = _mm_add_ps(s51, _mm_mul_ps(a, b1));
++            }
++        }
++    }
++    for (; k < CountK; ++k) {
++        const __m128 b0 = _mm_loadu_ps(B + k * 16);
++        const __m128 b1 = Vectors == 2 ? _mm_loadu_ps(B + k * 16 + 4) : _mm_setzero_ps();
++        if constexpr (Rows > 0) {
++            const __m128 a = _mm_set1_ps(A[0 * lda + k]);
++            s00 = _mm_add_ps(s00, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s01 = _mm_add_ps(s01, _mm_mul_ps(a, b1));
++        }
++        if constexpr (Rows > 1) {
++            const __m128 a = _mm_set1_ps(A[1 * lda + k]);
++            s10 = _mm_add_ps(s10, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s11 = _mm_add_ps(s11, _mm_mul_ps(a, b1));
++        }
++        if constexpr (Rows > 2) {
++            const __m128 a = _mm_set1_ps(A[2 * lda + k]);
++            s20 = _mm_add_ps(s20, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s21 = _mm_add_ps(s21, _mm_mul_ps(a, b1));
++        }
++        if constexpr (Rows > 3) {
++            const __m128 a = _mm_set1_ps(A[3 * lda + k]);
++            s30 = _mm_add_ps(s30, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s31 = _mm_add_ps(s31, _mm_mul_ps(a, b1));
++        }
++        if constexpr (Rows > 4) {
++            const __m128 a = _mm_set1_ps(A[4 * lda + k]);
++            s40 = _mm_add_ps(s40, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s41 = _mm_add_ps(s41, _mm_mul_ps(a, b1));
++        }
++        if constexpr (Rows > 5) {
++            const __m128 a = _mm_set1_ps(A[5 * lda + k]);
++            s50 = _mm_add_ps(s50, _mm_mul_ps(a, b0));
++            if constexpr (Vectors == 2) s51 = _mm_add_ps(s51, _mm_mul_ps(a, b1));
++        }
++    }
++    const __m128 scale = _mm_set1_ps(alpha);
++    if constexpr (Rows > 0) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s00, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s01, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[0 * ldc + col] = ZeroMode ? values[col] : values[col] + C[0 * ldc + col];
++        }
++    }
++    if constexpr (Rows > 1) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s10, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s11, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[1 * ldc + col] = ZeroMode ? values[col] : values[col] + C[1 * ldc + col];
++        }
++    }
++    if constexpr (Rows > 2) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s20, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s21, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[2 * ldc + col] = ZeroMode ? values[col] : values[col] + C[2 * ldc + col];
++        }
++    }
++    if constexpr (Rows > 3) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s30, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s31, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[3 * ldc + col] = ZeroMode ? values[col] : values[col] + C[3 * ldc + col];
++        }
++    }
++    if constexpr (Rows > 4) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s40, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s41, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[4 * ldc + col] = ZeroMode ? values[col] : values[col] + C[4 * ldc + col];
++        }
++    }
++    if constexpr (Rows > 5) {
++        float values[8];
++        _mm_storeu_ps(values, _mm_mul_ps(s50, scale));
++        if constexpr (Vectors == 2) _mm_storeu_ps(values + 4, _mm_mul_ps(s51, scale));
++        for (size_t col = 0; col < CountN; ++col) {
++            C[5 * ldc + col] = ZeroMode ? values[col] : values[col] + C[5 * ldc + col];
++        }
++    }
++    return Rows;
++}
++static size_t MlasSgemmNarrowKernelSse(
++    const float* A, const float* B, float* C, size_t CountK, size_t CountM,
++    size_t CountN, size_t lda, size_t ldc, float alpha, bool ZeroMode)
++{
++    if (CountN <= 4) {
++        if (CountM >= 6) return MlasSgemmNarrowTileSse<6, 1>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++        if (CountM >= 4) return MlasSgemmNarrowTileSse<4, 1>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++        if (CountM >= 2) return MlasSgemmNarrowTileSse<2, 1>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++        return MlasSgemmNarrowTileSse<1, 1>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++    } else {
++        if (CountM >= 4) return MlasSgemmNarrowTileSse<4, 2>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++        if (CountM >= 2) return MlasSgemmNarrowTileSse<2, 2>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++        return MlasSgemmNarrowTileSse<1, 2>(A, B, C, CountK, CountN, lda, ldc, alpha, ZeroMode);
++    }
++}
++#endif
+ MLAS_FORCEINLINE
+ float*
+ MlasSgemmKernelLoop(
+@@ -1057,6 +1321,22 @@
+
+ --*/
+ {
++#if defined(MLAS_TARGET_AMD64) && !defined(FORCE_GENERIC_ALGORITHMS)
++    const size_t tail = CountN % 16;
++    if (tail != 0 && tail <= 8 && GetMlasPlatform().GemmFloatKernel == MlasGemmFloatKernelSse) {
++        const size_t full_columns = CountN - tail;
++        if (full_columns != 0) {
++            MlasSgemmKernelLoop(A, B, C, CountK, CountM, full_columns, lda, ldc, alpha, ZeroMode);
++        }
++        const float* tail_b = B + full_columns * CountK;
++        size_t row = 0;
++        while (row < CountM) {
++            row += MlasSgemmNarrowKernelSse(A + row * lda, tail_b, C + row * ldc + full_columns,
++                CountK, CountM - row, tail, lda, ldc, alpha, ZeroMode);
++        }
++        return C + CountM * ldc;
++    }
++#endif
+     while (CountM > 0) {
+
+         size_t RowsHandled;
+--- a/onnxruntime/core/mlas/lib/x86_64/SgemmKernelSse2.S
++++ b/onnxruntime/core/mlas/lib/x86_64/SgemmKernelSse2.S
+@@ -145,11 +145,11 @@
+ .LCompute16xNBlockBy4Loop\@:
+         EmitIfCountGE \RowCount\(), 1, "movups xmm0,XMMWORD PTR [rdi]"
+         EmitIfCountGE \RowCount\(), 2, "movups xmm1,XMMWORD PTR [rdi+r10]"
+-        ComputeBlockSseBy16 2, 0, 0x00
+-        ComputeBlockSseBy16 2, 16*4, 0x55
++        ComputeBlockSseBy16 \RowCount\(), 0, 0x00
++        ComputeBlockSseBy16 \RowCount\(), 16*4, 0x55
+         sub     rsi,-32*4                   # advance matrix B by 32 columns
+-        ComputeBlockSseBy16 2, 0, 0xAA
+-        ComputeBlockSseBy16 2, 16*4, 0xFF
++        ComputeBlockSseBy16 \RowCount\(), 0, 0xAA
++        ComputeBlockSseBy16 \RowCount\(), 16*4, 0xFF
+         sub     rsi,-32*4                   # advance matrix B by 32 columns
+         add     rdi,4*4                     # advance matrix A by 4 columns
+         sub     rbp,4
+@@ -162,7 +162,7 @@
+ .LCompute16xNBlockBy1Loop\@:
+         EmitIfCountGE \RowCount\(), 1, "movss xmm0,[rdi]"
+         EmitIfCountGE \RowCount\(), 2, "movss xmm1,[rdi+r10]"
+-        ComputeBlockSseBy16 2, 0, 0x00
++        ComputeBlockSseBy16 \RowCount\(), 0, 0x00
+         add     rsi,16*4                    # advance matrix B by 16 columns
+         add     rdi,4                       # advance matrix A by 1 column
+         dec     rbp
+--- a/onnxruntime/core/util/math_cpu.cc
++++ b/onnxruntime/core/util/math_cpu.cc
+@@ -831,6 +831,18 @@
+                                                       const int64_t* kernel_shape, const int64_t* stride,
+                                                       const int64_t* dilation, const int64_t* pad, ptrdiff_t N,
+                                                       float* data_img, CPUMathUtil* context) {
++  // A one-dimensional transpose convolution is the height-one case of the
++  // existing two-dimensional scatter. Use its linear loop when the inferred
++  // column count agrees; the generic path retains all other padding/dilation
++  // cases. Both paths add contributions in channel/kernel/input order.
++  if (N == 1 && pad[0] == 0 && dilation[0] == 1 &&
++      img_shape[0] >= kernel_shape[0] &&
++      (img_shape[0] - kernel_shape[0]) / stride[0] + 1 == output_shape[0]) {
++    Col2im<float, CPUMathUtil, StorageOrder::NCHW>(
++        data_col, channels_col / kernel_shape[0], 1, img_shape[0],
++        1, kernel_shape[0], 1, 1, 0, 0, 0, 0, 1, stride[0], data_img, context);
++    return;
++  }
+   Set<float, CPUMathUtil>(narrow<ptrdiff_t>(img_size), 0, data_img, context);
+   Im2col<float, StorageOrder::NCHW>()(
+       data_col,

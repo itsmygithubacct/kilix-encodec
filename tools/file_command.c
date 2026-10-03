@@ -32,10 +32,11 @@ void kenc_file_usage(void)
 {
     fprintf(stderr,
         "usage: kenc encode --model-dir DIR [--profile 24k|48k] [--bitrate 3|6|12|24]\n"
-        "                   [--threads 1|2] [--epoch-start C0|C5-R4] INPUT.wav OUTPUT.kenc\n"
-        "       kenc decode --model-dir DIR [--threads 1|2] [--seek-sample N]\n"
+        "                   [--threads 1|2|4] [--epoch-start C0|C5-R4] INPUT.wav OUTPUT.kenc\n"
+        "       kenc decode --model-dir DIR [--threads 1|2|4] [--seek-sample N]\n"
         "                   INPUT.kenc OUTPUT.wav\n"
         "Input WAV must be PCM16, 24 kHz mono or 48 kHz stereo for the selected profile.\n"
+        "Four threads are supported for the 24 kHz mono profile only.\n"
         "Encoding writes C0 unless --epoch-start C5-R4 (24k only) is selected; decoding\n"
         "follows the file's epoch-start marker.\n"
         "Existing output files are preserved. Failed new outputs remain incomplete.\n");
@@ -82,7 +83,7 @@ static int parse(command_options *options, int argc, char **argv)
                 if (!integer(value, &bitrate) || (bitrate != 3u && bitrate != 6u && bitrate != 12u && bitrate != 24u)) { return 0; }
                 seen_rate = 1;
             } else if (strcmp(name, "--threads") == 0 && !seen_threads) {
-                if (!integer(value, &number) || (number != 1u && number != 2u)) { return 0; }
+                if (!integer(value, &number) || (number != 1u && number != 2u && number != 4u)) { return 0; }
                 options->threads = (uint8_t)number;
                 seen_threads = 1;
             } else if (strcmp(name, "--epoch-start") == 0 && options->encoding && !options->epoch_start_set) {
@@ -102,6 +103,7 @@ static int parse(command_options *options, int argc, char **argv)
         }
     }
     if (options->profile == KENC_FILE_PROFILE_MONO && bitrate == 24u) { return 0; }
+    if (options->profile == KENC_FILE_PROFILE_STEREO && options->threads == 4u) { return 0; }
     if (options->epoch_start != KENC_EPOCH_START_C0 && options->profile != KENC_FILE_PROFILE_MONO) { return 0; }
     options->books = (uint8_t)(options->profile == KENC_FILE_PROFILE_MONO ? bitrate * 4u / 3u : bitrate * 2u / 3u);
     return positional == 2 && options->assets != NULL;
