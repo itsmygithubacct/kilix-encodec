@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Permit the hash-pinned converter software bundle to be owned by root when
+  installed system-wide. Model inputs still require the caller's ownership;
+  writable or changed runtime bundles remain refused. Add regression coverage
+  and clean-runner converter checks.
+
 - The Debian package states its direct dependencies (`libonnxruntime1.21`,
   `libssl3t64`, `libc6`) as minimums instead of exact versions. With exact
   pins dpkg refused the package on a machine that had taken a libc6 security

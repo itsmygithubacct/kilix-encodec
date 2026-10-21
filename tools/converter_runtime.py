@@ -182,14 +182,15 @@ def require_receipt(store_path, manifest_digest):
         os.close(held)
 
 
-def sealed(path, size, expected, deadline):
+def sealed(path, size, expected, deadline, *, system_runtime=False):
     parent = directory(path.parent)
     source = writer = -1
     try:
         source = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
                          dir_fd=parent)
         info = os.fstat(source)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+        owners = (0, os.geteuid()) if system_runtime else (os.geteuid(),)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid not in owners
                 or info.st_size != size or info.st_mode & 0o022):
             raise ValueError('input metadata differs from the pinned population')
         check(deadline)
@@ -321,7 +322,10 @@ def run(input_path, output_path, timeout, receipt_store, manifest_digest):
         if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700 or os.listdir(output):
             raise ValueError('output must be an existing, private empty directory')
         bundle_path = Path(__file__).resolve().parent.parent / PROFILE['directory'] / 'runtime.tar'
-        bundle = sealed(bundle_path, BUNDLE_BYTES, BUNDLE_SHA256, deadline)
+        # A distribution may install this hash-bound software bundle as root.
+        # Model inputs and output directories still belong to the calling user.
+        bundle = sealed(bundle_path, BUNDLE_BYTES, BUNDLE_SHA256, deadline,
+                        system_runtime=True)
         descriptors.append(bundle)
         mounts = []
         for name, path in input_paths(input_path).items():
