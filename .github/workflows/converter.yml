@@ -15,4 +15,4 @@ jobs:
       - name: Converter and licence authority checks
         run: make PYTHON=/usr/bin/python3 test-converter
       - name: Native software and model exclusion checks
-        run: make PYTHON=/usr/bin/python3 test
+        run: TMPDIR="$RUNNER_TEMP" make PYTHON=/usr/bin/python3 test
