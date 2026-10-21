@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Supply `/bin` inside the converter sandbox. The pinned ONNX Runtime imports
+  through `/bin/sh`; omitting it caused a crash before conversion could start.
+
 - Permit the hash-pinned converter software bundle to be owned by root when
   installed system-wide. Model inputs still require the caller's ownership;
   writable or changed runtime bundles remain refused. Add regression coverage

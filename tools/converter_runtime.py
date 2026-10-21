@@ -334,7 +334,7 @@ def run(input_path, output_path, timeout, receipt_store, manifest_digest):
             descriptors.append(fd)
             mounts += ['--ro-bind-data', str(fd), '/input/' + name]
         command = ['/usr/bin/bwrap', '--die-with-parent', '--unshare-all', '--new-session',
-            '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib',
+            '--ro-bind', '/bin', '/bin', '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib',
             '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/etc/ld.so.cache', '/etc/ld.so.cache',
             '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--dir', '/runtime',
             '--dir', '/input', '--dir', '/output', '--ro-bind-data', str(bundle), '/bundle.tar',
