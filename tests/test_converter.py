@@ -472,7 +472,7 @@ class ConverterTests(unittest.TestCase):
             return os.stat_result(values)
 
         with mock.patch.object(os, 'fstat', side_effect=root_owned), \
-                mock.patch.object(os, 'geteuid', return_value=1000):
+                mock.patch.object(os, 'geteuid', return_value=os.geteuid() or 1000):
             with self.assertRaisesRegex(ValueError, 'metadata'):
                 runtime.sealed(source, 7, expected, time.monotonic() + 2)
             fd = runtime.sealed(source, 7, expected, time.monotonic() + 2,
