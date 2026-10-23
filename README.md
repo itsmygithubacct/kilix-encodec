@@ -613,3 +613,13 @@ is not listed, passes. Raw float32 codebooks have no header, and one 1024x128
 codebook is 512 KiB, so the first 1 MiB of `rvq-codebooks.f32le` committed as
 a neutral `.dat` file is not detected. Review of what is committed covers that
 case; the scan does not.
+
+### Native package architecture selection
+
+`tools/build_native_package.py --architecture arm64` requires native Debian
+ARM64 and a committed `tools/debian-dependencies-arm64.json` in the selected
+source. The existing default selects AMD64 and its unchanged dependency lock.
+Each architecture uses its own package identities and multiarch library path;
+no lock is inferred from the other architecture. Until exact patched ARM64 ORT
+packages and their dependency lock are qualified, the ARM64 build refuses.
+Content admission and model authorization remain required separately.

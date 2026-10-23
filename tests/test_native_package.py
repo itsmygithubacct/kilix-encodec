@@ -81,6 +81,20 @@ class PackageTests(unittest.TestCase):
         (lib/'escape').symlink_to('/etc/passwd')
         with self.assertRaises(ValueError):package.inventory(root,lambda:None)
 
+    def test_arm64_owner_qualifies_the_package_query(self):
+        lib = '/usr/lib/aarch64-linux-gnu/libc.so.6'
+        calls = []
+        def query(argv):
+            calls.append(argv)
+            return 'libc6:arm64: ' + lib if '-S' in argv else '2.41-12'
+        self.assertEqual(package.debian_owner(Path(lib), self.root, {}, query,
+                                             architecture='arm64'), ('libc6', '2.41-12'))
+        self.assertEqual(calls[-1][-1], 'libc6:arm64')
+        self.assertEqual(package.debian_owner(Path(lib), self.root, {},
+            lambda argv: 'libc6:amd64: ' + lib, architecture='arm64'), ('', ''))
+        with self.assertRaisesRegex(ValueError, 'unsupported'):
+            package.debian_owner(Path(lib), self.root, {}, query, architecture='unknown')
+
     def test_existing_output_entries_refuse_before_build(self):
         output=self.root/'output'
         for kind in ('directory','file','symlink'):
@@ -88,7 +102,7 @@ class PackageTests(unittest.TestCase):
                 if kind=='directory':output.mkdir()
                 elif kind=='file':output.write_bytes(b'preserve')
                 else:output.symlink_to(self.root/'missing')
-                args=argparse.Namespace(output=output,source=self.repo,content_source=self.repo,timeout=1)
+                args=argparse.Namespace(output=output,source=self.repo,content_source=self.repo,timeout=1,architecture="amd64")
                 before=len(os.listdir('/proc/self/fd'))
                 with self.assertRaisesRegex(ValueError,'new entry'):package.build(args)
                 self.assertEqual(len(os.listdir('/proc/self/fd')),before)

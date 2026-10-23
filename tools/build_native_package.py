@@ -142,12 +142,14 @@ def debian_depends(lock, runtime):
     return ', '.join(name + ' (>= ' + floors[name] + ')' for name in order)
 
 
-def debian_owner(path, dependency_root, private_owner, query):
+def debian_owner(path, dependency_root, private_owner, query, *, architecture="amd64"):
     """(package, version) that ships path, or ('', '') when there is not exactly one.
 
     query(argv) returns a command's output and raises RuntimeError on failure.
     Debian 13 ships libraries under /usr; dpkg may still record /lib.
     """
+    if architecture not in ("amd64", "arm64"):
+        raise ValueError("unsupported native architecture")
     if path.is_relative_to(dependency_root):
         return private_owner.get(str(path.relative_to(dependency_root)), ('', ''))
     for candidate in (str(path), str(path).replace('/usr/lib/', '/lib/', 1)):
@@ -160,8 +162,10 @@ def debian_owner(path, dependency_root, private_owner, query):
         if len(owners) != 1 or ',' in owners[0]:
             return '', ''
         package = owners[0].split(':', 1)[0]
+        if owners[0] not in (package, package + ':' + architecture):
+            return '', ''
         # Qualified, so an i386 co-installation cannot concatenate two versions.
-        versions = query(['/usr/bin/dpkg-query', '-W', '-f=${Version}\\n', package + ':amd64']).splitlines()
+        versions = query(['/usr/bin/dpkg-query', '-W', '-f=${Version}\\n', package + ':' + architecture]).splitlines()
         return (package, versions[0]) if len(versions) == 1 else ('', '')
     return '', ''
 
@@ -187,6 +191,11 @@ def runtime_libraries(paths, owner, fingerprint):
 
 
 def build(args):
+    architecture = args.architecture
+    if architecture not in ("amd64", "arm64"):
+        raise ValueError("unsupported native architecture")
+    multiarch = "aarch64-linux-gnu" if architecture == "arm64" else "x86_64-linux-gnu"
+    lock_name = "tools/debian-dependencies.json" if architecture == "amd64" else "tools/debian-dependencies-arm64.json"
     deadline = time.monotonic() + args.timeout
     with ExitStack() as stack:
         parent = stack.enter_context(process_io.Directory(args.output.parent, private=True))
@@ -206,8 +215,10 @@ def build(args):
             if process_io.file_bytes(ROOT/'tools'/name, check, maximum=2*1024**2) != files['tools/'+name][1]:
                 raise ValueError('package recipe differs from the selected source')
         materialize(files, stage/'source')
-        lock = json.loads(files['tools/debian-dependencies.json'][1])
-        if lock['schema'] != 'kilix.encodec.debian-dependencies/v1' or lock['architecture'] != 'amd64':
+        if lock_name not in files:
+            raise ValueError("selected source lacks the exact " + architecture + " dependency lock")
+        lock = json.loads(files[lock_name][1])
+        if lock['schema'] != 'kilix.encodec.debian-dependencies/v1' or lock['architecture'] != architecture:
             raise ValueError('unsupported dependency closure')
         environment = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C',
                        'HOME': str(stage), 'SOURCE_DATE_EPOCH': '0',
@@ -223,8 +234,8 @@ def build(args):
             (logs/(str(len(commands))+'.log')).write_text(value)
             return value.strip()
 
-        if run(['/usr/bin/dpkg', '--print-architecture']) != 'amd64':
-            raise ValueError('native package requires Debian amd64')
+        if run(['/usr/bin/dpkg', '--print-architecture']) != architecture:
+            raise ValueError('native package requires Debian ' + architecture)
         dependency_root = stage/'dependencies'
         dependency_root.mkdir(mode=0o700)
         packages = {}
@@ -238,7 +249,7 @@ def build(args):
                 copied = stage/(name+'.deb')
                 copied.write_bytes(payload)
                 value = run(['/usr/bin/dpkg-deb', '-f', str(copied), 'Package', 'Version', 'Architecture'])
-                expected = f'Package: {name}\nVersion: {record["version"]}\nArchitecture: amd64'
+                expected = f'Package: {name}\nVersion: {record["version"]}\nArchitecture: {architecture}'
                 if value != expected:
                     raise ValueError('dependency package metadata differs')
                 for line in run(['/usr/bin/dpkg-deb', '-c', str(copied)]).splitlines():
@@ -250,7 +261,7 @@ def build(args):
                 packages[name] = {'version': record['version'], 'sha256': record['sha256'], 'source': 'verified-private-deb'}
             else:
                 value = run(['/usr/bin/dpkg-query', '-W', '-f=${db:Status-Status}\t${Version}\t${Architecture}', name])
-                if value != f'installed\t{record["version"]}\tamd64':
+                if value != f'installed\t{record["version"]}\t{architecture}':
                     raise ValueError(f'provision {name}={record["version"]} from the selected Debian snapshot before building')
                 packages[name] = {'version': record['version'], 'source': 'installed-dpkg'}
         compiler = Path(args.cc).resolve(strict=True)
@@ -259,10 +270,10 @@ def build(args):
         compiler_bytes = process_io.file_bytes(compiler, check, maximum=64*1024**2)
         compiler_version = run([str(compiler), '--version'])
         cflags = '-O2 -g -std=c11 -fPIC -Wall -Wextra -Wpedantic -Werror -ffile-prefix-map='+str(stage)+'=/usr/src/kilix-encodec'
-        libdir = dependency_root/'usr/lib/x86_64-linux-gnu'
+        libdir = dependency_root/'usr/lib'/multiarch
         include = dependency_root/'usr/include/onnxruntime'
         if args.deb_directory is None:
-            libdir, include = Path('/usr/lib/x86_64-linux-gnu'), Path('/usr/include/onnxruntime')
+            libdir, include = Path('/usr/lib')/multiarch, Path('/usr/include/onnxruntime')
         environment['LD_LIBRARY_PATH'] = str(libdir)
         build_dir = stage/'build'
         dest = stage/'package'
@@ -297,7 +308,7 @@ def build(args):
                 resolved.append(Path(found[1]).resolve(strict=True))
 
         def owner(path):
-            return debian_owner(path, dependency_root, private_owner, run)
+            return debian_owner(path, dependency_root, private_owner, run, architecture=architecture)
 
         def fingerprint(path):
             data = process_io.file_bytes(path, check, maximum=96*1024**2)
@@ -306,7 +317,7 @@ def build(args):
         runtime = runtime_libraries(resolved, owner, fingerprint)
         doc = dest/'usr/share/doc/kilix-encodec'
         write_source_archive(files, doc/'source.tar.gz')
-        (doc/'debian-dependencies.json').write_bytes(files['tools/debian-dependencies.json'][1])
+        (doc/'debian-dependencies.json').write_bytes(files[lock_name][1])
         for name in ('source.tar.gz', 'debian-dependencies.json'):
             (doc/name).chmod(0o644)
         record = {'schema': 'kilix.encodec.native-package/v2', 'source_commit': args.commit,
@@ -325,7 +336,7 @@ def build(args):
         control.chmod(0o755)
         version = files['VERSION'][1].decode().strip()+'+git'+args.commit[:12]+'.'+args.content_commit[:12]
         depends = debian_depends(lock, runtime)
-        (control/'control').write_text(f'Package: libkilix-encodec\nVersion: {version}\nArchitecture: amd64\n'
+        (control/'control').write_text(f'Package: libkilix-encodec\nVersion: {version}\nArchitecture: {architecture}\n'
             'Maintainer: itsmygithubacct <itsmygithubacct@users.noreply.github.com>\n'
             f'Depends: {depends}\nSection: libs\nPriority: optional\n'
             'Description: Shared Kilix codec and installed-content admission\n No model payload or model authorization is included.\n')
@@ -352,6 +363,7 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--architecture', choices=('amd64', 'arm64'), default='amd64')
     parser.add_argument('--source', type=Path, default=ROOT)
     parser.add_argument('--commit', required=True)
     parser.add_argument('--content-source', required=True, type=Path)
