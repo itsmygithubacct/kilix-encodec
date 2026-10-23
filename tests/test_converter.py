@@ -474,6 +474,39 @@ class ConverterTests(unittest.TestCase):
             runtime.sealed(source, 1, expected, time.monotonic() + 2)
         self.assertLess(time.monotonic() - started, .5)
 
+    def test_system_runtime_accepts_root_owner_without_relaxing_model_inputs(self):
+        runtime = runtime_module()
+        source = self.root / 'system-runtime'
+        source.write_bytes(b'runtime')
+        expected = hashlib.sha256(b'runtime').hexdigest()
+        original = os.fstat
+
+        def root_owned(fd):
+            info = original(fd)
+            values = list(info)
+            if stat.S_ISREG(info.st_mode):
+                values[4] = 0
+            return os.stat_result(values)
+
+        with mock.patch.object(os, 'fstat', side_effect=root_owned), \
+                mock.patch.object(os, 'geteuid', return_value=os.geteuid() or 1000):
+            with self.assertRaisesRegex(ValueError, 'metadata'):
+                runtime.sealed(source, 7, expected, time.monotonic() + 2)
+            fd = runtime.sealed(source, 7, expected, time.monotonic() + 2,
+                                system_runtime=True)
+            try:
+                self.assertEqual(os.read(fd, 20), b'runtime')
+            finally:
+                os.close(fd)
+            source.chmod(0o666)
+            with self.assertRaisesRegex(ValueError, 'metadata'):
+                runtime.sealed(source, 7, expected, time.monotonic() + 2,
+                               system_runtime=True)
+            source.chmod(0o600)
+            with self.assertRaisesRegex(ValueError, 'bytes'):
+                runtime.sealed(source, 7, '0' * 64, time.monotonic() + 2,
+                               system_runtime=True)
+
     def test_runtime_cancel_during_snapshot_refuses(self):
         runtime = runtime_module()
         source = self.root / 'input'

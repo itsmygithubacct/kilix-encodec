@@ -1,0 +1,18 @@
+name: Converter checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  converter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-numpy
+      - name: Converter and licence authority checks
+        run: make PYTHON=/usr/bin/python3 test-converter
+      - name: Native software and model exclusion checks
+        run: TMPDIR="$RUNNER_TEMP" make PYTHON=/usr/bin/python3 test
