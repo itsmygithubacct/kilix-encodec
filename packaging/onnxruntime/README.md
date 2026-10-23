@@ -173,3 +173,10 @@ the actual native build; it never reuses the AMD64 compiled-input lock. The
 selected architecture must match Debian and all three runtime ELF libraries.
 Multiarch paths, package control metadata and filenames follow that selection.
 This does not establish model, performance or installed release acceptance.
+
+The committed ARM64 staging and dependency locks record a native Debian 13
+development build of the same patched source. `observed-trixie-20261023`
+identifies the captured package population, not an immutable Debian snapshot
+service timestamp. Each archive has its actual version, size and SHA-256.
+The custom runtime/development archives remain unpublished; provide their
+verified local bytes explicitly. Neither lock promotes a production release.

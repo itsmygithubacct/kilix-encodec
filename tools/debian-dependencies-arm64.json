@@ -1,0 +1,204 @@
+{
+  "schema": "kilix.encodec.debian-dependencies/v1",
+  "snapshot": "observed-trixie-20261023",
+  "architecture": "arm64",
+  "status": "development-candidate-not-published",
+  "packages": {
+    "libabsl20240722": {
+      "version": "20240722.0-4",
+      "sha256": "eb6648c73cd69c577a2bc18c8d66d44de897c0207a734ffdb55f91945404d0ac",
+      "bytes": 452500,
+      "installed_kib": 6512,
+      "filename": "pool/main/a/abseil/libabsl20240722_20240722.0-4_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libgcc-s1 (>= 4.5), libstdc++6 (>= 13.1)",
+      "url": "https://deb.debian.org/debian/pool/main/a/abseil/libabsl20240722_20240722.0-4_arm64.deb"
+    },
+    "libc6": {
+      "version": "2.41-12+deb13u4",
+      "sha256": "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc",
+      "bytes": 2483572,
+      "installed_kib": 23769,
+      "filename": "pool/main/g/glibc/libc6_2.41-12+deb13u4_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "libgcc-s1",
+      "url": "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.41-12+deb13u4_arm64.deb"
+    },
+    "libcpuinfo0": {
+      "version": "0.0~git20250327.39ea79a-1",
+      "sha256": "4a74413171dff27c486011b5d7e7aa971fb7cb331895ab9727169a8b9efa2604",
+      "bytes": 25944,
+      "installed_kib": 85,
+      "filename": "pool/main/c/cpuinfo/libcpuinfo0_0.0~git20250327.39ea79a-1_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.34)",
+      "url": "https://deb.debian.org/debian/pool/main/c/cpuinfo/libcpuinfo0_0.0~git20250327.39ea79a-1_arm64.deb"
+    },
+    "libdnnl3.6": {
+      "version": "3.7.2+ds-2",
+      "sha256": "74dc05cdbfa84e8102daa13a2a9aa53f80efc99f854f8ac1bf3f213194eb91f0",
+      "bytes": 3606716,
+      "installed_kib": 24567,
+      "filename": "pool/main/o/onednn/libdnnl3.6_3.7.2+ds-2_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.3.1), libgomp1 (>= 4.9), libstdc++6 (>= 14)",
+      "url": "https://deb.debian.org/debian/pool/main/o/onednn/libdnnl3.6_3.7.2+ds-2_arm64.deb"
+    },
+    "libgcc-s1": {
+      "version": "14.2.0-19",
+      "sha256": "1108bc87879833d6d9a145f22a4a15cddb34e065b4b5f4b97bee586adbac2851",
+      "bytes": 54104,
+      "installed_kib": 148,
+      "filename": "pool/main/g/gcc-14/libgcc-s1_14.2.0-19_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "gcc-14-base (= 14.2.0-19), libc6 (>= 2.35)",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgcc-s1_14.2.0-19_arm64.deb"
+    },
+    "libgomp1": {
+      "version": "14.2.0-19",
+      "sha256": "43e84cb7971d8a4d8870cab6204e998ea4f23ee1339bb0ff556dd881bac82d25",
+      "bytes": 123520,
+      "installed_kib": 352,
+      "filename": "pool/main/g/gcc-14/libgomp1_14.2.0-19_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "gcc-14-base (= 14.2.0-19), libc6 (>= 2.38)",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgomp1_14.2.0-19_arm64.deb"
+    },
+    "libonnx1t64": {
+      "version": "1.17.0-3+b1",
+      "sha256": "79175eee488f1d601a576ce6c1e4ec3b6bab9df9e8cdffb3beb67519ac935795",
+      "bytes": 1082600,
+      "installed_kib": 4343,
+      "filename": "pool/main/o/onnx/libonnx1t64_1.17.0-3+b1_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.0), libprotobuf32t64 (>= 3.21.12), libstdc++6 (>= 13.1)",
+      "url": "https://deb.debian.org/debian/pool/main/o/onnx/libonnx1t64_1.17.0-3+b1_arm64.deb"
+    },
+    "libonnxruntime-dev": {
+      "version": "1.21.0+dfsg-1+kilix1",
+      "sha256": "0ff4cb00ed76ef8077a44ced44da1c93635d7fa9d2e3bfa78e227483c37e8d48",
+      "bytes": 96004,
+      "installed_kib": 599,
+      "filename": "libonnxruntime-dev_1.21.0+dfsg-1+kilix1_arm64.deb",
+      "archive": "kilix",
+      "provision": "ort",
+      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix1)"
+    },
+    "libonnxruntime1.21": {
+      "version": "1.21.0+dfsg-1+kilix1",
+      "sha256": "9b0b2bc3d6379e092261d1fdd96ccb5c4a78edfa0101ba3ad62152fe3169e449",
+      "bytes": 3282520,
+      "installed_kib": 12899,
+      "filename": "libonnxruntime1.21_1.21.0+dfsg-1+kilix1_arm64.deb",
+      "archive": "kilix",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)"
+    },
+    "libprotobuf32t64": {
+      "version": "3.21.12-11+deb13u1",
+      "sha256": "51bf38fcca667be0deef732a903563ee6ffa9bfc04433310c2c49e4c92d06b09",
+      "bytes": 858432,
+      "installed_kib": 3496,
+      "filename": "pool/main/p/protobuf/libprotobuf32t64_3.21.12-11+deb13u1_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.0), libstdc++6 (>= 14), zlib1g (>= 1:1.1.4)",
+      "url": "https://deb.debian.org/debian/pool/main/p/protobuf/libprotobuf32t64_3.21.12-11+deb13u1_arm64.deb"
+    },
+    "libpthreadpool0": {
+      "version": "0.0~git20240616.560c60d-1",
+      "sha256": "a6bb3d1da6bbaa931776b6f9ca21516ead459f2d68ad21b06904c7a73145d0c6",
+      "bytes": 23244,
+      "installed_kib": 146,
+      "filename": "pool/main/p/pthreadpool/libpthreadpool0_0.0~git20240616.560c60d-1_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.34)",
+      "url": "https://deb.debian.org/debian/pool/main/p/pthreadpool/libpthreadpool0_0.0~git20240616.560c60d-1_arm64.deb"
+    },
+    "libre2-11": {
+      "version": "20240702-3+b1",
+      "sha256": "7a09b3125b8dacac1a6d8c96e419cd38da5848e48f082b6e54891c5dda00e004",
+      "bytes": 149056,
+      "installed_kib": 470,
+      "filename": "pool/main/r/re2/libre2-11_20240702-3+b1_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libabsl20240722 (>= 20240722.0-1), libc6 (>= 2.38), libgcc-s1 (>= 3.0), libstdc++6 (>= 14)",
+      "url": "https://deb.debian.org/debian/pool/main/r/re2/libre2-11_20240702-3+b1_arm64.deb"
+    },
+    "libsamplerate0": {
+      "version": "0.2.2-4+b2",
+      "sha256": "5d9fad694b249d48d8457e1242ab60e04db6a30d7d56f80c6ae463ff122147ec",
+      "bytes": 944716,
+      "installed_kib": 1506,
+      "filename": "pool/main/libs/libsamplerate/libsamplerate0_0.2.2-4+b2_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "libc6 (>= 2.17)",
+      "url": "https://deb.debian.org/debian/pool/main/libs/libsamplerate/libsamplerate0_0.2.2-4+b2_arm64.deb"
+    },
+    "libsamplerate0-dev": {
+      "version": "0.2.2-4+b2",
+      "sha256": "8f741c8b6d7b37036f605ca64162ea9b22294eaeaaaab779c039d7233b570323",
+      "bytes": 62912,
+      "installed_kib": 137,
+      "filename": "pool/main/libs/libsamplerate/libsamplerate0-dev_0.2.2-4+b2_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "libsamplerate0 (= 0.2.2-4+b2), pkg-config",
+      "url": "https://deb.debian.org/debian/pool/main/libs/libsamplerate/libsamplerate0-dev_0.2.2-4+b2_arm64.deb"
+    },
+    "libssl-dev": {
+      "version": "3.5.7-1~deb13u3",
+      "sha256": "ee3ce1214925d3905a8ad54ea1250b016438322f73a9719474fcd0ece6243a8e",
+      "bytes": 3398620,
+      "installed_kib": 16425,
+      "filename": "pool/updates/main/o/openssl/libssl-dev_3.5.7-1~deb13u3_arm64.deb",
+      "archive": "debian-security",
+      "provision": "system",
+      "depends": "libssl3t64 (= 3.5.7-1~deb13u3)",
+      "url": "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl-dev_3.5.7-1~deb13u3_arm64.deb"
+    },
+    "libssl3t64": {
+      "version": "3.5.7-1~deb13u3",
+      "sha256": "d0681293a160392186c6ef85a165e40603d1628a099936137d24d391bd591f97",
+      "bytes": 2770200,
+      "installed_kib": 8019,
+      "filename": "pool/updates/main/o/openssl/libssl3t64_3.5.7-1~deb13u3_arm64.deb",
+      "archive": "debian-security",
+      "provision": "system",
+      "depends": "libc6 (>= 2.38), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4), openssl-provider-legacy",
+      "url": "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl3t64_3.5.7-1~deb13u3_arm64.deb"
+    },
+    "libstdc++6": {
+      "version": "14.2.0-19",
+      "sha256": "6669b0c52a2e7c6af9adfdabce3ff6e286065cdfbc7b85280862b5f799daebee",
+      "bytes": 637536,
+      "installed_kib": 3022,
+      "filename": "pool/main/g/gcc-14/libstdc++6_14.2.0-19_arm64.deb",
+      "archive": "debian",
+      "provision": "system",
+      "depends": "gcc-14-base (= 14.2.0-19), libc6 (>= 2.38), libgcc-s1 (>= 4.5)",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libstdc++6_14.2.0-19_arm64.deb"
+    },
+    "libxnnpack0.20241108": {
+      "version": "0.0~git20241108.4ea82e5-2",
+      "sha256": "b41ecc82ede57136e60bb309c143dc557e9a80f356f910da4220059ad8390110",
+      "bytes": 355608,
+      "installed_kib": 1176,
+      "filename": "pool/main/x/xnnpack/libxnnpack0.20241108_0.0~git20241108.4ea82e5-2_arm64.deb",
+      "archive": "debian",
+      "provision": "ort",
+      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20231104.d6860c4~), libpthreadpool0 (>= 0.0~git20240616.560c60d)",
+      "url": "https://deb.debian.org/debian/pool/main/x/xnnpack/libxnnpack0.20241108_0.0~git20241108.4ea82e5-2_arm64.deb"
+    }
+  }
+}
