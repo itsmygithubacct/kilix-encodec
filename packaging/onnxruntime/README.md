@@ -180,3 +180,13 @@ identifies the captured package population, not an immutable Debian snapshot
 service timestamp. Each archive has its actual version, size and SHA-256.
 The custom runtime/development archives remain unpublished; provide their
 verified local bytes explicitly. Neither lock promotes a production release.
+
+### ARM64 processors without FP16 arithmetic
+
+`arm64-fp16-lazy-init.patch` backports upstream commit
+[`f22ee08f94bef72369987e7c7bde2e773b8b593c`](https://github.com/microsoft/onnxruntime/commit/f22ee08f94bef72369987e7c7bde2e773b8b593c).
+It defers FP16 vector constant initialization until the corresponding kernel
+is called through CPU dispatch. The unpatched 1.21.0 library can execute FP16
+instructions during loading on processors such as Cortex-A53 that lack them.
+Apply this patch after the other two patches for the ARM64 build. Keep the
+failed pre-fix package evidence separate from the rebuilt dependency lock.
