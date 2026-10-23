@@ -166,3 +166,10 @@ exceeded it. Those failures are retained and no cause or sustained reliability
 is inferred from the passing repeat. This is installed dependency evidence,
 not source-bound native-package, concurrent transport, soak, listening or
 whole-release qualification.
+
+Native staging accepts `--architecture amd64` (the default) or `--architecture arm64`.
+The ARM64 path requires a separate, byte-exact `stage-inputs-arm64.json` from
+the actual native build; it never reuses the AMD64 compiled-input lock. The
+selected architecture must match Debian and all three runtime ELF libraries.
+Multiarch paths, package control metadata and filenames follow that selection.
+This does not establish model, performance or installed release acceptance.

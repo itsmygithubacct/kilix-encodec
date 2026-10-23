@@ -33,7 +33,15 @@ def verify(path, expected):
 
 
 def stage(args):
-    lock = json.loads((HERE / 'stage-inputs.json').read_text())
+    architecture = args.architecture
+    multiarch = {'amd64': 'x86_64-linux-gnu', 'arm64': 'aarch64-linux-gnu'}[architecture]
+    native = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
+    if native != architecture:
+        raise ValueError('staging requires native Debian ' + architecture)
+    lock_name = 'stage-inputs.json' if architecture == 'amd64' else 'stage-inputs-arm64.json'
+    lock = json.loads((HERE / lock_name).read_text())
+    if lock.get('architecture', 'amd64') != architecture:
+        raise ValueError('staging input architecture differs')
     for name, expected in lock['patches'].items():
         verify(HERE / name, expected)
     def verify_install_inputs():
@@ -66,8 +74,6 @@ def stage(args):
         (args.output / ('command-%02d.log' % len(commands))).write_text(result.stdout)
         return result.stdout
 
-    if run(['dpkg', '--print-architecture']).strip() != 'amd64':
-        raise ValueError('this staged input requires Debian amd64')
     installed = args.output / 'cmake-install'
     # Build the provider targets before staging so development metadata and
     # the runtime package retain Debian's DNNL/shared-provider population.
@@ -78,10 +84,10 @@ def stage(args):
     dev_name = 'libonnxruntime-dev'
     roots = {name: args.output / name for name in (runtime_name, dev_name)}
     for root in roots.values():
-        (root / 'usr/lib/x86_64-linux-gnu').mkdir(parents=True)
+        (root / ('usr/lib/' + multiarch)).mkdir(parents=True)
     runtime = roots[runtime_name]
     development = roots[dev_name]
-    libraries = runtime / 'usr/lib/x86_64-linux-gnu'
+    libraries = runtime / ('usr/lib/' + multiarch)
     before = {}
     remove_rpath = args.output / 'remove-rpath.cmake'
     remove_rpath.write_text('file(RPATH_REMOVE FILE "${library}")\n')
@@ -89,6 +95,11 @@ def stage(args):
                  'libonnxruntime_providers_shared.so',
                  'libonnxruntime_providers_dnnl.so'):
         origin = args.build / name
+        with origin.open('rb') as stream:
+            header = stream.read(20)
+        machine = {'amd64': 62, 'arm64': 183}[architecture]
+        if header[:6] != b'\x7fELF\x02\x01' or int.from_bytes(header[18:20], 'little') != machine:
+            raise ValueError('runtime ELF architecture differs: ' + name)
         destination = libraries / name
         before[name] = fingerprint(origin)
         shutil.copyfile(installed / 'usr/lib' / name, destination)
@@ -153,23 +164,23 @@ def stage(args):
         if fingerprint(origin) != before[name]:
             raise ValueError('staging changed an input library: ' + name)
     (libraries / 'libonnxruntime.so.1.21').symlink_to('libonnxruntime.so.1.21.0')
-    dev_libraries = development / 'usr/lib/x86_64-linux-gnu'
+    dev_libraries = development / ('usr/lib/' + multiarch)
     (dev_libraries / 'libonnxruntime.so').symlink_to('libonnxruntime.so.1.21')
     shutil.copytree(installed / 'usr/include', development / 'usr/include')
     cmake_metadata = development / 'usr/lib/cmake'
     shutil.copytree(installed / 'usr/lib/cmake', cmake_metadata)
     for path in cmake_metadata.rglob('*.cmake'):
-        path.write_text(path.read_text().replace('/lib/', '/lib/x86_64-linux-gnu/'))
+        path.write_text(path.read_text().replace('/lib/', '/lib/' + multiarch + '/'))
     pkgconfig = dev_libraries / 'pkgconfig'
     pkgconfig.mkdir()
     pc = (installed / 'usr/lib/pkgconfig/libonnxruntime.pc').read_text()
     pc = pc.replace('prefix=/usr/local', 'prefix=/usr').replace(
-        'libdir=${prefix}/lib', 'libdir=${prefix}/lib/x86_64-linux-gnu')
+        'libdir=${prefix}/lib', 'libdir=${prefix}/lib/' + multiarch)
     (pkgconfig / 'libonnxruntime.pc').write_text(pc)
     version = lock['package_version']
     dependencies = run(['dpkg-query', '-W', '-f=${Depends}', runtime_name]).strip()
     provenance = {'schema': 'kilix.encodec.ort-debian-stage/v1',
-                  'release_qualified': False, 'inputs': lock,
+                  'release_qualified': False, 'architecture': architecture, 'inputs': lock,
                   'original_libraries': before,
                   'install_inputs': lock['install_inputs'],
                   'staged_libraries': {name: fingerprint(libraries / name) for name in before},
@@ -192,7 +203,7 @@ def stage(args):
                    if path.is_file() and not path.is_symlink())
         depends = dependencies if name == runtime_name else runtime_name + ' (= ' + version + ')'
         (control / 'control').write_text(
-            f'Package: {name}\nVersion: {version}\nArchitecture: amd64\n'
+            f'Package: {name}\nVersion: {version}\nArchitecture: {architecture}\n'
             f'Maintainer: {MAINTAINER}\nDepends: {depends}\n'
             f'Installed-Size: {(size + 1023) // 1024}\nSection: libs\nPriority: optional\n'
             'Multi-Arch: same\nDescription: pinned Kilix ONNX Runtime development candidate\n'
@@ -208,7 +219,7 @@ def stage(args):
             if not path.is_symlink():
                 path.chmod(0o755 if path.is_dir() else 0o644)
             os.utime(path, (0, 0), follow_symlinks=False)
-        artifact = args.output / f'{name}_{version}_amd64.deb'
+        artifact = args.output / f'{name}_{version}_{architecture}.deb'
         run(['dpkg-deb', '--root-owner-group', '--build', str(root), str(artifact)])
     provenance['commands'] = commands
     provenance['packages'] = {path.name: fingerprint(path) for path in args.output.glob('*.deb')}
@@ -218,6 +229,7 @@ def stage(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--architecture', choices=('amd64', 'arm64'), default='amd64')
     for name in ('source', 'build', 'source-dsc', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
     stage(parser.parse_args())
