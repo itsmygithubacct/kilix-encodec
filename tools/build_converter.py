@@ -18,6 +18,7 @@ import io
 import json
 import math
 import os
+import platform
 from pathlib import Path
 import shutil
 import signal
@@ -120,12 +121,19 @@ def profile_payload(selected, profile):
             'record': {'digest': selected['record']['digest'], 'id': selected['record']['id']}}
 
 
-def build(environment, python, uv, output_root, profile='24khz'):
+def binding_path(architecture):
+    if architecture not in ('amd64', 'arm64'):
+        raise ValueError('unsupported converter architecture')
+    return ROOT / 'tools' / ('converter-inputs.json' if architecture == 'amd64'
+                             else 'converter-inputs-arm64.json')
+
+
+def build(environment, python, uv, output_root, profile='24khz', architecture='amd64'):
     environment = owned(environment)
     python = owned(python)
     uv = owned(uv)
     output_root = owned(output_root)
-    binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=262144))
+    binding = json.loads(build_io.file_bytes(binding_path(architecture), CHECK, maximum=262144))
     selected = select_profile(binding, profile)
     pin = binding.get('encodec_source')
     expected_commit = '2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e'
@@ -298,6 +306,7 @@ def build(environment, python, uv, output_root, profile='24khz'):
         (stage / 'runtime.tar').chmod(0o400)
         receipt = {'schema': 'kilix.encodec.converter-build/v3', 'toolchain': evidence['toolchain'],
             'profile': profile, 'command': selected['command'],
+            'architecture': architecture, 'binding_sha256': digest(binding_path(architecture)),
             'inputs': selected['inputs'], 'outputs': selected['outputs'],
             'licence_authority': {'ref': authority['ref'], 'record': runtime_profile['record'],
                                   'files': binding['licence_authority']['files']},
@@ -432,6 +441,11 @@ def prepare_environment(binding, cache, stage, offline):
 def supervised_build(args, deadline):
     """Pin the whole build destination and tear down descendants before cleanup."""
     global CHECK
+    architecture = getattr(args, 'architecture', 'amd64')
+    native = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(platform.machine())
+    if architecture != native:
+        raise ValueError('converter build requires native ' + architecture)
+    binding_path(architecture)
     with ExitStack() as stack:
         source = stack.enter_context(build_io.Directory(ROOT))
         target = stack.enter_context(build_io.Directory(args.output_root))
@@ -457,7 +471,7 @@ def supervised_build(args, deadline):
             if (os.fstat(stage.fd).st_dev, os.fstat(stage.fd).st_ino) != (identity.st_dev, identity.st_ino):
                 raise ValueError('new build directory identity differs')
             CHECK = lambda: build_io.checkpoint(deadline, source, target, cache, stage)
-            binding = json.loads(build_io.file_bytes(ROOT / 'tools/converter-inputs.json', CHECK, maximum=262144))
+            binding = json.loads(build_io.file_bytes(binding_path(architecture), CHECK, maximum=262144))
             profiled = select_profile(binding, profile)
             for relative, expected in {**binding['source_files'], **profiled['source_files']}.items():
                 build_io.file_bytes(ROOT / relative, CHECK, maximum=2 * 1024**2, expected=expected)
@@ -470,7 +484,7 @@ def supervised_build(args, deadline):
             CHECK = lambda: build_io.checkpoint(deadline, source, target, cache, stage, *selected)
             package = stage.path / 'package'
             package.mkdir(mode=0o700)
-            build(environment, python, uv, package, profile)
+            build(environment, python, uv, package, profile, architecture=architecture)
             CHECK()
             binary = stack.enter_context(build_io.Directory(target.path / 'bin', create=True))
             converter = stack.enter_context(build_io.Directory(package / directory, private=True))
@@ -521,6 +535,7 @@ def supervised_build(args, deadline):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--architecture', choices=('amd64', 'arm64'), default='amd64')
     parser.add_argument('--profile', choices=PROFILES, default='24khz',
                         help='24khz: stateful mono graphs; 48khz: stereo frame graphs')
     parser.add_argument('--environment', type=Path)

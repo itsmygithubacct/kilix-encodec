@@ -110,6 +110,23 @@ def vendored_authority():
 
 
 class ConverterTests(unittest.TestCase):
+    def test_architecture_bindings_preserve_profiles_and_select_distinct_tools(self):
+        amd = json.loads(builder.binding_path('amd64').read_text())
+        arm = json.loads(builder.binding_path('arm64').read_text())
+        for key in ('profiles', 'source_files', 'licence_authority', 'encodec_source'):
+            self.assertEqual(arm[key], amd[key])
+        for key in ('python_binary_sha256', 'uv_binary_sha256'):
+            self.assertNotEqual(arm[key], amd[key])
+        self.assertIn(['torchaudio', '2.6.0'], arm['runtime_packages'])
+        with self.assertRaises(ValueError):
+            builder.binding_path('unknown')
+
+    def test_foreign_architecture_refuses_before_output_access(self):
+        args = types.SimpleNamespace(architecture='arm64')
+        with mock.patch.object(builder.platform, 'machine', return_value='x86_64'):
+            with self.assertRaisesRegex(ValueError, 'requires native arm64'):
+                builder.supervised_build(args, time.monotonic() + 1)
+
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix='.converter-test-', dir=Path.home()))
         self.fds = len(os.listdir('/proc/self/fd'))
@@ -554,7 +571,7 @@ def prepare(binding,cache,stage,offline):
  python=stage.path/"python";python.mkdir(mode=0o700);(python/"bin").mkdir(mode=0o700)
  uv=stage.path/"uv";uv.mkdir(mode=0o700)
  return environment,python/"bin/python3.12",uv/"uv"
-def package(environment,python,uv,output,profile):
+def package(environment,python,uv,output,profile,architecture="amd64"):
  (output/".converter").mkdir(mode=0o700);(output/".converter/runtime.tar").write_bytes(b"runtime")
  (output/"bin").mkdir(mode=0o700);(output/"bin/kilix-encodec-convert-24khz").write_bytes(b"command")
  if kind=="ancestor":

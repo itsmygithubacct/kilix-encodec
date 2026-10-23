@@ -1,0 +1,337 @@
+{
+  "encodec_source": {
+    "commit": "2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e",
+    "license_sha256": "cf9b17822d1fcd4ff32ccbe14183386fb3adf6f2ff92dc184130823f7fc28173",
+    "relicensing_commit": "349b72939f57cb3bc7b60906c0ee8228c849485d",
+    "sha256": "47d071d2d90f3d107ed83c930c4c189a066f92d299371ff04b6ede573c7cf434",
+    "url": "https://github.com/facebookresearch/encodec/archive/2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e.tar.gz",
+    "version": "0.1.2a3"
+  },
+  "licence_authority": {
+    "files": {
+      "third_party/kilix-license.pin": "2e8b4aa58c02db5b4131184e9b5b58a82e0067e34a8a083f454ba865ac127967",
+      "third_party/kilix-license/LICENSE": "443acd34ba896c5ee92d9ebd200436eb96f2f1aa0815e16c12c42c8f1a5fd30f",
+      "third_party/kilix-license/src/kilix_license/__init__.py": "a89f66e1c9957631b575d1c78147b72315a100445dfb8df2de6a51f5d5830e3a",
+      "third_party/kilix-license/src/kilix_license/agreement.py": "adc5275b8a63586b81d90f6451de275a34f10c93c21c22132c0803af423e8ee3",
+      "third_party/kilix-license/src/kilix_license/catalog.py": "5c0beae90a32c4e09febbd97baf014e7d46eacd3c6c8bee2ce3c211d1c59986d",
+      "third_party/kilix-license/src/kilix_license/changed.py": "3ca6586bbd1aafc4b082c3727c73e95d601a7e1c31f1698184328bf350cc1b5b",
+      "third_party/kilix-license/src/kilix_license/coverage.py": "d25b2641733da626508217da4463dc3e98c972af01829eeed98b8f759646c238",
+      "third_party/kilix-license/src/kilix_license/data/records/encodec-24khz-stateful.json": "c9e8f92742b342c401b78474517c1b9605b6e3b78db07bddb9eb98a6a64fad71",
+      "third_party/kilix-license/src/kilix_license/data/records/encodec-48khz-frame.json": "4d1006881076b49e9ff805b133c80fb20115ae3f3281df311ec066f2974d45ef",
+      "third_party/kilix-license/src/kilix_license/digest.py": "e0e6fbfe2b20395af057e4cb042484da4f5509140aa5f01eb774289a399bf2da",
+      "third_party/kilix-license/src/kilix_license/errors.py": "46e9cfc399e73a16b4a8eccf0233720db0c4f3dee00231da2d0d11b76235876f",
+      "third_party/kilix-license/src/kilix_license/generate.py": "6e3d176e03b28937906da0a543aba880eeea1f95c9b17573c48cf01c0f0666cd",
+      "third_party/kilix-license/src/kilix_license/paraphrase.py": "006cdee5bbc521b44c2e7e958f6f02715271100b941e0c2a8b1df26d7f7a9499",
+      "third_party/kilix-license/src/kilix_license/paths.py": "3e5077106d5dc7193817b57e07f1fca3b751b0d68580cfcc4e4492aa57a46833",
+      "third_party/kilix-license/src/kilix_license/receipts.py": "b15e06d0175479628b28ad9d828f0a248257f2ce3f9a9b37bfc4377ea0553a45",
+      "third_party/kilix-license/src/kilix_license/records.py": "97e532025905de07af956576f979af824389345b3620bd24f1c9fb122858cf77",
+      "third_party/kilix-license/src/kilix_license/screen.py": "89bc751c2e56051a9f0556ac834cd951f2c1272e578061406372cdaa5f273086",
+      "third_party/kilix-license/src/kilix_license/store.py": "136021de6ebd50dd7b07ab3ba783e802799b2735d55cac021ed905a2d0ee414b",
+      "third_party/kilix-license/src/kilix_license/texts.py": "16d4c14e48e83325fa1071ca4c1c7ae6c3ad8e9cd4a8cc18019259bdda88b01e"
+    },
+    "ref": "7104ea5cb2670a9d52c14fcb324c86710e4c2681"
+  },
+  "profiles": {
+    "24khz": {
+      "command": "kilix-encodec-convert-24khz",
+      "directory": ".converter",
+      "entry": [
+        "tools/export_24khz.py",
+        "--checkpoint",
+        "/input/encodec_24khz-d7cc33bc.th",
+        "--output-dir",
+        "/output"
+      ],
+      "input": "file",
+      "inputs": {
+        "encodec_24khz-d7cc33bc.th": {
+          "bytes": 93171529,
+          "sha256": "d7cc33bcf1aad7f2dad9836f36431530744abeace3ca033005e3290ed4fa47bf",
+          "url": "https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th"
+        }
+      },
+      "label": "24 kHz stateful graph",
+      "outputs": {
+        "decoder_stateful_op17.onnx": {
+          "bytes": 29733075,
+          "sha256": "90cb4f26f05df4ad3537cfc2ab495fa4e6f9074b5f32303cdf4b89dbe548722a"
+        },
+        "encoder_stateful_op17.onnx": {
+          "bytes": 29720617,
+          "sha256": "19c6f57f0d39d2660942c958a797133fa0eedd4120cccf5daecc5726427b8269"
+        },
+        "manifest.json": {
+          "bytes": 12835,
+          "sha256": "bb615145d4a33dbfa4c07c1ff3283303b461af1c6fc83dbf50b59bcf6489f81b"
+        },
+        "rvq_decode_12kbps_op17.onnx": {
+          "bytes": 8396869,
+          "sha256": "5e0db494814c629326fe4d82ce799915fdb45f841d3d99526bf126468849b9b2"
+        },
+        "rvq_decode_3kbps_op17.onnx": {
+          "bytes": 2099386,
+          "sha256": "776ab1b5a3990fb9b96a6eca43010356b08dc6f9c423af32601fb67f84a8a322"
+        },
+        "rvq_decode_6kbps_op17.onnx": {
+          "bytes": 4198507,
+          "sha256": "505b6e01f75e6e966499be4e20a42d282959320653978a951cf44094aae7b2c0"
+        },
+        "rvq_encode_12kbps_op17.onnx": {
+          "bytes": 16285603,
+          "sha256": "cf1c80c23955255809ba90f564e6f30e0911851a298c4622f180585b4a4c5a37"
+        },
+        "rvq_encode_3kbps_op17.onnx": {
+          "bytes": 3677949,
+          "sha256": "a873a3264a134df0d61557e0e751ac3702f15ad5a8fb97d53712ab746d533ad0"
+        },
+        "rvq_encode_6kbps_op17.onnx": {
+          "bytes": 7880428,
+          "sha256": "938a494c90dcb185a01e18457a9c08d6b6184785e8099baca29499cf5dbd020c"
+        }
+      },
+      "record": {
+        "digest": "8af1dc699df34436899f0b93dce271d2fadb119f62e136e74ad797686d880f4b",
+        "id": "encodec-24khz-stateful",
+        "path": "third_party/kilix-license/src/kilix_license/data/records/encodec-24khz-stateful.json"
+      },
+      "source_files": {}
+    },
+    "48khz": {
+      "command": "kilix-encodec-convert-48khz",
+      "directory": ".converter-48khz",
+      "entry": [
+        "tools/export_48khz.py",
+        "--model-dir",
+        "/input",
+        "--output-dir",
+        "/output"
+      ],
+      "input": "directory",
+      "inputs": {
+        "config.json": {
+          "bytes": 803,
+          "sha256": "4a914ed15ed5a69e19932d05b0c51f2d22c68ffac70e959a757594cb0cd6e2a7",
+          "url": "https://huggingface.co/facebook/encodec_48khz/resolve/c3def8e7185ac8c8efdce6eb8c4a651e487a503e/config.json"
+        },
+        "model.safetensors": {
+          "bytes": 76291152,
+          "sha256": "47a15ffbaf7bb76176d0833e10590de0a8988a7848748608cefc36a1c88adfdc",
+          "url": "https://huggingface.co/facebook/encodec_48khz/resolve/c3def8e7185ac8c8efdce6eb8c4a651e487a503e/model.safetensors"
+        },
+        "preprocessor_config.json": {
+          "bytes": 231,
+          "sha256": "df1268bac588b486545baa1d0b6c9c32366c817efbd113158b4c2ef74f6eefeb",
+          "url": "https://huggingface.co/facebook/encodec_48khz/resolve/c3def8e7185ac8c8efdce6eb8c4a651e487a503e/preprocessor_config.json"
+        }
+      },
+      "label": "48 kHz frame graph",
+      "outputs": {
+        "decoder_frame_op17.onnx": {
+          "bytes": 29882042,
+          "sha256": "e0c2bc574a50e910f7d0daa7c1598c237cec0a4365eb229ecfbaf9c06dd397b1"
+        },
+        "encoder_frame_op17.onnx": {
+          "bytes": 29909926,
+          "sha256": "2fad822a1ab98a9b7d83340121c7cd7c8bb0a6cb2457b70aa458e6ef9022e27a"
+        },
+        "manifest.json": {
+          "bytes": 3930,
+          "sha256": "2ce5225dc458dd30fe91854755dcfb360300fe3cee7d0c5682e7be684eae7a87"
+        },
+        "rvq-codebooks.f32le": {
+          "bytes": 8388608,
+          "sha256": "4304cd8e3c8a9b59733224311aa405e0b04bd9b6c6737c32d8f682f9b255594f"
+        }
+      },
+      "record": {
+        "digest": "9c1baee4ad48816bba2568c7e14f136b388f11722d6e422a933a1a4a24d30f3f",
+        "id": "encodec-48khz-frame",
+        "path": "third_party/kilix-license/src/kilix_license/data/records/encodec-48khz-frame.json"
+      },
+      "revision": "c3def8e7185ac8c8efdce6eb8c4a651e487a503e",
+      "source_files": {
+        "tools/export_48khz.py": "ad38e6a704555c7fb8a08b500b7ae3a8476b265e63e77df4ca0bd865de02fcac",
+        "tools/verify_48khz.py": "e1fffa23c39a80a87ce91c61916afccbb6f1e6a21eca6f0d4a6d637059538a73"
+      }
+    }
+  },
+  "python_binary_sha256": "bb93660a92b6939b74c9b725ecf68ac3409f0071e200631bb6c8784778bb3e1e",
+  "runtime_packages": [
+    [
+      "certifi",
+      "2026.7.22"
+    ],
+    [
+      "charset-normalizer",
+      "3.5.1"
+    ],
+    [
+      "einops",
+      "0.8.1"
+    ],
+    [
+      "encodec",
+      "0.1.2a3"
+    ],
+    [
+      "filelock",
+      "3.32.4"
+    ],
+    [
+      "flatbuffers",
+      "25.12.19"
+    ],
+    [
+      "fsspec",
+      "2026.7.0"
+    ],
+    [
+      "hf-xet",
+      "1.6.0"
+    ],
+    [
+      "huggingface-hub",
+      "0.36.2"
+    ],
+    [
+      "idna",
+      "3.19"
+    ],
+    [
+      "jinja2",
+      "3.1.6"
+    ],
+    [
+      "markupsafe",
+      "3.0.3"
+    ],
+    [
+      "ml-dtypes",
+      "0.6.0"
+    ],
+    [
+      "mpmath",
+      "1.3.0"
+    ],
+    [
+      "networkx",
+      "3.6.1"
+    ],
+    [
+      "numpy",
+      "2.1.3"
+    ],
+    [
+      "onnx",
+      "1.22.0"
+    ],
+    [
+      "onnxruntime",
+      "1.29.0"
+    ],
+    [
+      "packaging",
+      "26.3"
+    ],
+    [
+      "protobuf",
+      "7.36.0"
+    ],
+    [
+      "pyyaml",
+      "6.0.3"
+    ],
+    [
+      "regex",
+      "2026.8.31"
+    ],
+    [
+      "requests",
+      "2.34.2"
+    ],
+    [
+      "safetensors",
+      "0.6.2"
+    ],
+    [
+      "setuptools",
+      "84.0.0"
+    ],
+    [
+      "sympy",
+      "1.13.1"
+    ],
+    [
+      "tokenizers",
+      "0.22.2"
+    ],
+    [
+      "torch",
+      "2.6.0+cpu"
+    ],
+    [
+      "torchaudio",
+      "2.6.0"
+    ],
+    [
+      "tqdm",
+      "4.70.0"
+    ],
+    [
+      "transformers",
+      "4.57.6"
+    ],
+    [
+      "typing-extensions",
+      "4.16.0"
+    ],
+    [
+      "urllib3",
+      "2.7.0"
+    ]
+  ],
+  "schema": "kilix.encodec.converter-inputs/v2",
+  "source_files": {
+    "pyproject.toml": "c91ffe26b161d6576a4a18ea3b7492ba1115ee58f10e4a6efed2cb40e6eb21df",
+    "tools/export_24khz.py": "4d83e00064b9a731f0a3ebd7ea60c26de82e11479af5e66345792274ceb39ec3",
+    "tools/stateful_graph.py": "7a94906d6e1cd809162ba77ea82728f2bf544a0c98895d268e8d2e786b0790f4",
+    "uv.lock": "c79d96ee87bfc9d7b09b09c1b3bb7f51faf53d3ec1e480bef53d2e69d40a1d9e"
+  },
+  "tool_archives": {
+    "python": {
+      "binary_member": "python/bin/python3.12",
+      "binary_sha256": "bb93660a92b6939b74c9b725ecf68ac3409f0071e200631bb6c8784778bb3e1e",
+      "bytes": 17911606,
+      "sha256": "300e8098cfc305b329a258128afa1d6366ced039f16c70ec93ab4ff18f86c8ff",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+    },
+    "uv": {
+      "binary_member": "uv-aarch64-unknown-linux-gnu/uv",
+      "binary_sha256": "20d0be6a6bd33f55e4ceb0e52ac2f733722b1a7959498e6401ecf84bc05e48a8",
+      "bytes": 20423730,
+      "sha256": "bb66cb52e7b1823aed1183630d8d8e5c958840d584a4c55ec10a4cfc168dcca2",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-aarch64-unknown-linux-gnu.tar.gz"
+    }
+  },
+  "toolchain": {
+    "encodec": "0.1.2a3",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.29.0",
+    "python": "3.12.8",
+    "torch": "2.6.0+cpu",
+    "uv": "uv 0.12.3 (aarch64-unknown-linux-gnu)"
+  },
+  "uv_binary_sha256": "20d0be6a6bd33f55e4ceb0e52ac2f733722b1a7959498e6401ecf84bc05e48a8",
+  "uv_notices": {
+    "uv-LICENSE-APACHE": {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "source_url": "https://raw.githubusercontent.com/astral-sh/uv/507230998c9541d67814b57463ac00e454ff6991/LICENSE-APACHE"
+    },
+    "uv-LICENSE-MIT": {
+      "bytes": 1077,
+      "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
+      "source_url": "https://raw.githubusercontent.com/astral-sh/uv/507230998c9541d67814b57463ac00e454ff6991/LICENSE-MIT"
+    }
+  }
+}
