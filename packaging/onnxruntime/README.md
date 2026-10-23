@@ -190,3 +190,8 @@ is called through CPU dispatch. The unpatched 1.21.0 library can execute FP16
 instructions during loading on processors such as Cortex-A53 that lack them.
 Apply this patch after the other two patches for the ARM64 build. Keep the
 failed pre-fix package evidence separate from the rebuilt dependency lock.
+
+The ARM64 `+kilix2` staging lock includes this backport. Its exact packaged
+runtime passed a native load and synthetic addition check on Cortex-A53 as
+well as a newer ARM64 machine. This covers the startup compatibility finding;
+it is not EnCodec model, sustained performance or installed release acceptance.

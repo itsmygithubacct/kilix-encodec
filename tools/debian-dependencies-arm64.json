@@ -82,21 +82,21 @@
       "url": "https://deb.debian.org/debian/pool/main/o/onnx/libonnx1t64_1.17.0-3+b1_arm64.deb"
     },
     "libonnxruntime-dev": {
-      "version": "1.21.0+dfsg-1+kilix1",
-      "sha256": "0ff4cb00ed76ef8077a44ced44da1c93635d7fa9d2e3bfa78e227483c37e8d48",
-      "bytes": 96004,
-      "installed_kib": 599,
-      "filename": "libonnxruntime-dev_1.21.0+dfsg-1+kilix1_arm64.deb",
+      "version": "1.21.0+dfsg-1+kilix2",
+      "sha256": "461df0e4fc37628ba1fed62c56b705b0620d0b15be0e80d20addff8934c8677b",
+      "bytes": 97324,
+      "installed_kib": 610,
+      "filename": "libonnxruntime-dev_1.21.0+dfsg-1+kilix2_arm64.deb",
       "archive": "kilix",
       "provision": "ort",
-      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix1)"
+      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix2)"
     },
     "libonnxruntime1.21": {
-      "version": "1.21.0+dfsg-1+kilix1",
-      "sha256": "9b0b2bc3d6379e092261d1fdd96ccb5c4a78edfa0101ba3ad62152fe3169e449",
-      "bytes": 3282520,
-      "installed_kib": 12899,
-      "filename": "libonnxruntime1.21_1.21.0+dfsg-1+kilix1_arm64.deb",
+      "version": "1.21.0+dfsg-1+kilix2",
+      "sha256": "88a279eaf1b2f40895d74211a7149a820eaa2694634f1b1222e3f600871a4a70",
+      "bytes": 3284944,
+      "installed_kib": 12910,
+      "filename": "libonnxruntime1.21_1.21.0+dfsg-1+kilix2_arm64.deb",
       "archive": "kilix",
       "provision": "ort",
       "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)"

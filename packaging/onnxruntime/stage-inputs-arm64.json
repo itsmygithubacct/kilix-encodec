@@ -6,12 +6,13 @@
     "onnxruntime/core/mlas/lib/sgemm.cpp": "ee9bd594ace36b6eddbc909ebcfbd9a351757ab307c77156906af4275402baf3",
     "onnxruntime/core/mlas/lib/x86_64/SgemmKernelSse2.S": "dabb506474ac6dfef4d04bf1fa2dabd5fd15a21a96dce73b74eb1ab8039c06cf",
     "onnxruntime/core/util/math_cpu.cc": "de42096ca41fbc856d5fc487a28065c75b416a0779b00fb345788a5f11648539",
-    "onnxruntime/core/session/environment.cc": "14a7af32a9370076ced59bd8a20caba7b5c6841dd1b8f6125e4d508d5a7557ee"
+    "onnxruntime/core/session/environment.cc": "14a7af32a9370076ced59bd8a20caba7b5c6841dd1b8f6125e4d508d5a7557ee",
+    "onnxruntime/core/mlas/lib/softmax_kernel_neon_fp16.cpp": "23e787bbfc706227578e1d8aa5a983346a9d7ca86f07567152a9f9175147a106"
   },
   "cmake_cache_sha256": "2ca2ff61f10d5db87f9906e17f9624fbde661c3916e5e073826ecdbdb61ba6f8",
-  "runtime_sha256": "53382b2dd88bbc686de2c044bd79926d049978ef3f74f574ea14b977d61ace4c",
-  "package_version": "1.21.0+dfsg-1+kilix1",
-  "original_native_candidate": "441b4b9306f3d2f46b9f9d5383921efd65876436",
+  "runtime_sha256": "1a83f9bd406b0bf8c332aa76ba7b6e71ccb6f7f1a8267198cd28a60431a0a1be",
+  "package_version": "1.21.0+dfsg-1+kilix2",
+  "original_native_candidate": "6626ebb7d0a8195d84e5a3a79bfcf4ccb1ed29f0",
   "status": "native-arm64-development-package-staging-only",
   "install_inputs": {
     "source": {
@@ -150,7 +151,7 @@
       "onnxruntimeConfigVersion.cmake": "af4bb8f93f96c4fd3601af873aace10de7e80a0336e469fe418c1535439e1a37",
       "CMakeCache.txt": "2ca2ff61f10d5db87f9906e17f9624fbde661c3916e5e073826ecdbdb61ba6f8",
       "libonnxruntime.pc": "303e6533234ba7bc0793e9953fd14345928cb89c5670913339fa764efd9ce9f5",
-      "libonnxruntime.so.1.21.0": "53382b2dd88bbc686de2c044bd79926d049978ef3f74f574ea14b977d61ace4c",
+      "libonnxruntime.so.1.21.0": "1a83f9bd406b0bf8c332aa76ba7b6e71ccb6f7f1a8267198cd28a60431a0a1be",
       "libonnxruntime_providers_dnnl.so": "f57ac129a9e7782164ddd17c774103cffefc2dbc002777855fbe56f723f83fde",
       "libonnxruntime_providers_shared.so": "f296b3fbe6df3996546c13cbde2fc149e7ce425d77c42efa659260949dc6c693"
     }
@@ -166,7 +167,8 @@
   },
   "patches": {
     "debian-system-onnx-single-registration.patch": "5e0c75863736795886ab78cffcc1538a54015afaded40035d32b4c3197807b5f",
-    "sse2-narrow-and-col1d.patch": "9507d20a0b00e54646fc047145fb12e2c65075d932f27b9ff7e596cd419499f7"
+    "sse2-narrow-and-col1d.patch": "9507d20a0b00e54646fc047145fb12e2c65075d932f27b9ff7e596cd419499f7",
+    "arm64-fp16-lazy-init.patch": "7a70759cb94b5ee481a432b7b7cd0d4fce4fc0ad6a2a42bf099234f377b15655"
   },
   "architecture": "arm64"
 }
