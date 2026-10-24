@@ -596,6 +596,8 @@ print(json.dumps({"error":error,"seconds":time.monotonic()-started,"children":pa
         helper.write_text('''import ctypes,json,os,pathlib,sys,time,types
 sys.path.insert(0,sys.argv[1]);import build_converter as builder
 assert ctypes.CDLL(None).prctl(36,1,0,0,0)==0
+native={"x86_64":"amd64","amd64":"amd64","aarch64":"arm64","arm64":"arm64"}.get(builder.platform.machine())
+assert native in ("amd64","arm64")
 area=pathlib.Path(sys.argv[2]);kind=sys.argv[3];container=area/"container"
 container.mkdir(mode=0o700);target=container/"target";target.mkdir(mode=0o700)
 cache=area/"cache";cache.mkdir(mode=0o700)
@@ -604,7 +606,8 @@ def prepare(binding,cache,stage,offline):
  python=stage.path/"python";python.mkdir(mode=0o700);(python/"bin").mkdir(mode=0o700)
  uv=stage.path/"uv";uv.mkdir(mode=0o700)
  return environment,python/"bin/python3.12",uv/"uv"
-def package(environment,python,uv,output,profile,architecture="amd64"):
+def package(environment,python,uv,output,profile,architecture):
+ assert architecture==native
  (output/".converter").mkdir(mode=0o700);(output/".converter/runtime.tar").write_bytes(b"runtime")
  (output/"bin").mkdir(mode=0o700);(output/"bin/kilix-encodec-convert-24khz").write_bytes(b"command")
  if kind=="ancestor":
@@ -619,11 +622,11 @@ def publish(source_dir,source,target_dir,name):
   os.mkdir(name,0o700,dir_fd=target_dir)
   (target/name/"sentinel").write_bytes(b"outside")
 builder.build_io.rename_new=publish
-args=types.SimpleNamespace(output_root=target,cache_dir=cache,environment=None,offline=True,profile="24khz")
-error=None
+args=types.SimpleNamespace(output_root=target,cache_dir=cache,environment=None,offline=True,profile="24khz",architecture=native)
+error=detail=None
 try:builder.supervised_build(args,time.monotonic()+2)
-except BaseException as caught:error=type(caught).__name__
-print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.getpid()}/children").read_text().split()}))
+except BaseException as caught:error=type(caught).__name__;detail=str(caught)
+print(json.dumps({"error":error,"detail":detail,"children":pathlib.Path(f"/proc/self/task/{os.getpid()}/children").read_text().split()}))
 ''')
         for kind in ('success', 'ancestor', 'entry'):
             with self.subTest(kind=kind):
@@ -636,7 +639,7 @@ print(json.dumps({"error":error,"children":pathlib.Path(f"/proc/self/task/{os.ge
                 self.assertEqual(row['children'], [])
                 target = area / 'container/target'
                 if kind == 'success':
-                    self.assertIsNone(row['error'])
+                    self.assertIsNone(row['error'], row)
                     self.assertEqual((target / '.converter/runtime.tar').read_bytes(), b'runtime')
                     self.assertEqual((target / 'bin/kilix-encodec-convert-24khz').read_bytes(), b'command')
                 else:
