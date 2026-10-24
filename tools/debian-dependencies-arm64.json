@@ -2,7 +2,7 @@
   "schema": "kilix.encodec.debian-dependencies/v1",
   "snapshot": "observed-trixie-20261023",
   "architecture": "arm64",
-  "status": "development-candidate-not-published",
+  "status": "published-native-arm64-runtime-candidate",
   "packages": {
     "libabsl20240722": {
       "version": "20240722.0-4",
@@ -89,7 +89,8 @@
       "filename": "libonnxruntime-dev_1.21.0+dfsg-1+kilix2_arm64.deb",
       "archive": "kilix",
       "provision": "ort",
-      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix2)"
+      "depends": "libonnxruntime1.21 (= 1.21.0+dfsg-1+kilix2)",
+      "url": "https://github.com/itsmygithubacct/kilix-encodec/releases/download/ort-deb-rc5/libonnxruntime-dev_1.21.0+dfsg-1+kilix2_arm64.deb"
     },
     "libonnxruntime1.21": {
       "version": "1.21.0+dfsg-1+kilix2",
@@ -99,7 +100,8 @@
       "filename": "libonnxruntime1.21_1.21.0+dfsg-1+kilix2_arm64.deb",
       "archive": "kilix",
       "provision": "ort",
-      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)"
+      "depends": "libc6 (>= 2.38), libcpuinfo0 (>= 0.0~git20240830.fa1c679), libdnnl3.6 (>= 3.5.3), libgcc-s1 (>= 4.0), libonnx1t64 (>= 1.17.0), libprotobuf32t64 (>= 3.21.12), libpthreadpool0 (>= 0.0~git20200423.6acde9c), libre2-11-absl20240722, libstdc++6 (>= 14), libxnnpack0.20241108 (>= 0.0~git20241108.4ea82e5)",
+      "url": "https://github.com/itsmygithubacct/kilix-encodec/releases/download/ort-deb-rc5/libonnxruntime1.21_1.21.0+dfsg-1+kilix2_arm64.deb"
     },
     "libprotobuf32t64": {
       "version": "3.21.12-11+deb13u1",

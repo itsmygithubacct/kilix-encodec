@@ -89,8 +89,7 @@ remain inside the timed call. This is native development capacity evidence;
 it does not qualify a packaged dependency, concurrent KMX workload, transport,
 listening acceptance or sustained/fault operation.
 
-The evidence directory is
-`/home/pleb/research/gpu_terminal/encodec-latency-20261003/`.
+The following filenames identify the retained development evidence.
 `final-four-capacity.json` preserves all 6,000 integer durations, exact loaded
 library hashes, fixture identity and harness hashes; `final-four-execution.json`
 records the command. `final-two-capacity.json` records the separate two-thread
@@ -195,3 +194,11 @@ The ARM64 `+kilix2` staging lock includes this backport. Its exact packaged
 runtime passed a native load and synthetic addition check on Cortex-A53 as
 well as a newer ARM64 machine. This covers the startup compatibility finding;
 it is not EnCodec model, sustained performance or installed release acceptance.
+
+The ARM64 runtime and development candidates at version `1.21.0+dfsg-1+kilix2`
+are published under the `ort-deb-rc5` prerelease. The architecture-specific
+dependency lock binds their verified HTTPS URLs, sizes and SHA256 hashes.
+The same prerelease supplies the complete Debian source, three patches and
+ARM64 staging inputs as recorded in `ORT-ARM64-SOURCE.json`. Native CPU
+compatibility and package checks pass; full model and OS acceptance remain
+separate from artifact publication.
