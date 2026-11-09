@@ -12,621 +12,135 @@ audio fixture, or weight payload is included. Native functional support does
 not establish release qualification, consumer integration, or listening
 acceptance.
 
-## Build and verify
+**Status:** ships in Plebian-OS 0.2.3. Firstboot installs the native Debian
+package `libkilix-encodec` (0.1.5, built from source commit `320ce65b` with
+Kilix Content `d9a1335d`) from this repository's `native-deb-rc5` release
+asset, named by `PLEBIAN_OS_NATIVE_DEB_URL` in `releases/0.2.3.env`.
+Plebian-OS provisioning also installs the two conversion commands (no models) from the
+`converters-0.2.2-test.1` release into `/usr/lib/plebian-os/kilix-encodec/`.
+The EnCodec models never ship: the Kilix Content assets
+`encodec-24khz-stateful` and `encodec-48khz-frame` download the upstream
+checkpoints on first use, after the CC BY-NC 4.0 licence screen, and convert
+them on the user's machine.
+
+## What it does
+
+- Encodes and decodes KMA2 packets for live 24 kHz mono audio (Kilix
+  multiplexer audio) with per-stream recurrent state.
+- Encodes and decodes `.kenc` files, 24 kHz mono or 48 kHz stereo, with
+  verified indexes and sample-exact seeking (`kenc` CLI and
+  `kilix_encodec_file.h`).
+- Admits models only through the Kilix Content catalog and a current
+  kilix-license receipt (`kenc_installed_assets_open`, `CONTENT=1` builds).
+- Builds the local converter commands that turn the pinned upstream checkpoints
+  into the exact ONNX graph populations the loader accepts.
+
+## Quick start
 
 ```sh
-make test
-make sanitize
-uv sync --frozen
-```
-
-`make test` builds all 3 of 3 products, runs 6 of 6 C test binaries, exercises
-CLI format refusals and checks the skeleton manifest with the locked Python
-tool environment. `make sanitize` repeats the C and CLI checks under AddressSanitizer and
-UndefinedBehaviorSanitizer.
-
-The default build requires no neural runtime and refuses model loading. To
-build the native backend, install the selected ONNX Runtime 1.21 C API and
-OpenSSL development libraries, then use an explicit local export:
-
-```sh
-make ONNX=1
-make ONNX=1 test-native MODEL_DIR=/path/to/pinned/24khz-export
-# Optional independent token/PCM comparison, using the locked export group:
-uv run --frozen --group export make ONNX=1 test-native \
-  MODEL_DIR=/path/to/pinned/24khz-export ORACLE=1
-```
-
-`ONNX_CFLAGS` and `ONNX_LIBS` can select a separately staged runtime. Its shared
-libraries must also be on the executable's loader path. Native and default
-builds use different directories (`build-onnx` and `build`). Static consumers
-can obtain runtime, crypto and math dependencies with `pkg-config --static`.
-
-The native loader accepts exactly the eight 24 kHz graphs and canonical
-manifest emitted by exporter 0.1.5 with the MIT encodec source pin. It checks
-their compiled byte counts and SHA-256 digests before initializing ORT, then
-creates sessions from those same verified bytes. Asset symlinks, special files and substitutions are refused.
-Tensor names, ranks, dimensions and types are checked before allocating stream
-buffers. Each mono stream has separate recurrent state and 1, 2 or 4 CPU threads;
-inference uses caller-owned output storage and preallocated state tensors.
-
-The separate `kenc_stereo_*` API verifies the exact 48 kHz manifest, two graphs
-and raw codebooks before ORT initialization. It processes noncausal one-second
-frames, preserving per-frame normalization. Input/output float PCM is
-interleaved stereo; codes are codebook-major. The C quantizer is checked against
-the official safetensors model on identical latents, and every corpus/rate row
-must meet the existing end-to-end token and waveform tolerances. The separate
-`kilix_encodec_file.h` interface adds bounded local files, verified indexes,
-sealed input snapshots and shared overlap-add. [FILE-FORMAT.md](FILE-FORMAT.md)
-specifies framing, limits, padding, seek pre-roll and the version 2 epoch-start
-marker. Live framing and consumer
-integration remain separate work. The stereo API is never a KMX profile.
-
-```sh
-uv run --frozen --group export make ONNX=1 test-stereo \
-  MODEL_DIR=/path/to/pinned/48khz-export \
-  CHECKPOINT_DIR=/path/to/pinned/48khz-safetensors
-```
-
-The native CLI converts PCM16 WAV files with an explicit model directory:
-
-```sh
+make test          # default build: no neural runtime, model loading refused
+make sanitize      # the same checks under ASan and UBSan
+make ONNX=1        # native backend; needs ONNX Runtime 1.21 and OpenSSL dev files
 build-onnx/kenc encode --model-dir /path/to/pinned/24khz-export \
   --profile 24k --bitrate 6 input-mono-24000.wav output.kenc
-build-onnx/kenc encode --model-dir /path/to/pinned/48khz-export \
-  --profile 48k --bitrate 12 input-stereo-48000.wav output-stereo.kenc
-build-onnx/kenc decode --model-dir /path/to/pinned/48khz-export \
-  output-stereo.kenc decoded.wav
+build-onnx/kenc decode --model-dir /path/to/pinned/24khz-export \
+  output.kenc decoded.wav
 ```
 
-`--threads 1|2|4` controls native inference; four threads are mono-only.
-The count includes the calling thread and defaults to one. Inputs must match the selected rate
-and channel count; this command does not resample. The parser bounds the WAV
-chunk count and every length and rejects symlinks and special input files.
-Existing outputs are preserved with exclusive creation. A failed conversion
-retains its newly created incomplete output for caller cleanup; no path is
-deleted. The complete header is written last and synchronized on success.
-Keep an input WAV unchanged during encoding. Decoding uses the library's sealed
-file snapshot. Files exceeding the standard RIFF output-size limit are refused.
-Offline conversion reports progress and estimated remaining time on stderr.
+The full build and test matrix is in [docs/build-and-cli.md](docs/build-and-cli.md).
 
-`kenc decode --seek-sample N` starts at the verified epoch or stereo frame
-boundary at or before N and reports the actual starting sample. The shared
-`kenc_file_source_*` decoder performs stereo pre-roll internally, returns
-interleaved float PCM and trims the final block to the exact duration. Its
-synchronous model loading/inference must run in an owned worker in interactive
-consumers. Short output buffers do not advance it, and a runtime failure
-requires a successful seek before further pulls. Both profiles share this
-source adapter; it owns no output device or DSP.
+## Usage
 
-Native source and CLI tests exercise lifetime and buffer behavior, all seven
-bitrate rows, exact duration, preserving outputs and sample-exact indexed seeks:
+| Command | What it does |
+|---|---|
+| `kenc encode --model-dir DIR --profile 24k\|48k --bitrate N IN.wav OUT.kenc` | Encode PCM16 WAV; `--threads 1\|2\|4`, `--epoch-start C5-R4`. |
+| `kenc decode --model-dir DIR [--seek-sample N] IN.kenc OUT.wav` | Decode, optionally from a verified seek point. |
+| `make test` / `make sanitize` | Default-build C, CLI and manifest checks. |
+| `make ONNX=1 test-native MODEL_DIR=...` | Native 24 kHz tests (`test-stereo`, `test-source-c`, `test-file-cli`, `test-asset-fds` for the rest). |
+| `make export-test` / `make export-48khz-test` | Export and verify graph bundles from a caller-supplied checkpoint. |
+| `make ONNX=1 CONTENT=1 CONTENT_SOURCE=... CONTENT_COMMIT=...` | Build with installed-asset admission embedded. |
+| `python3 tools/build_converter.py [--profile 48khz]` | Build a converter command. |
+| `python3 tools/build_native_package.py ...` | Build the `libkilix-encodec` Debian package ([PACKAGING.md](PACKAGING.md)). |
+| `make catalog-digests-check` | Check the model-weight guard's digest list. |
 
-```sh
-make ONNX=1 test-source-c test-file-cli \
-  MODEL_DIR=/path/to/24k-export STEREO_MODEL_DIR=/path/to/48k-export
+## How it works
+
+```
+upstream checkpoint (first use, after licence receipt)
+   |  bin/kilix-encodec-convert-24khz | -48khz   (sandboxed, local only)
+   v
+ONNX graphs + manifest in the Kilix Content store
+   |  kenc_installed_assets_open: catalog entry + kilix-license receipt
+   |  -> sealed read-only descriptors
+   v
+libkilix-encodec  (hash checks, then ONNX Runtime sessions)
+   |-- KMA2 live packets (24 kHz mono)    -> KMX (kilix-multiplexer)
+   |-- .kenc files (24k mono, 48k stereo) -> kenc CLI
+   `-- linked through pkg-config          -> Kilix Amp
 ```
 
-These are functional checks, without a new capacity or consumer qualification
-claim.
-
-The public caller-owned PCM and PTS inputs are the deterministic test boundary.
-Tests provide seeded synthetic inputs through these same APIs; no production
-environment switch substitutes neural output or bypasses model verification.
-
-`tools/bench_native.py` measures the native library directly using standard
-Python and the public C ABI. It records every measured call, nearest-rank p99,
-binary/manifest/runtime digests and peak RSS. The default 24 kHz population is
-1,000 calls in each of six encode/decode rows. The stereo profile uses 100 calls
-in each of four decoder rows. Outputs explicitly distinguish unfrozen-host
-measurements from a verified H1 fixture and do not grant whole-release credit.
-The [four-thread H1 result and required ORT dependency patches](packaging/onnxruntime/README.md#sse2-inference-and-one-dimensional-transpose-convolution)
-document the CPU allocation and separate it from the previous two-thread budget.
-
-```sh
-python tools/bench_native.py --library build-onnx/libkilix-encodec.so \
-  --assets /path/to/pinned/24khz-export --output /path/to/new-result.json
-```
-
-### Packet contract
-
-KMA2 packets start with bytes `4b 4d 41 02`, followed by canonical unsigned
-LEB128 integers for profile (1), epoch, packet index and PTS in milliseconds;
-one flags byte; then canonical sample-count and payload-byte-count integers.
-The payload stores 10-bit tokens most-significant-bit first, ordered by time
-and then codebook. Codebooks (4, 8 or 16) are selected outside the packet by
-the agreed stream profile. The parser verifies the exact derived payload
-length, bounds every integer and refuses nonminimal encodings, trailing bytes,
-unknown flags, out-of-range values and incompatible profiles.
-
-Every regular encoder call consumes 960 samples (40 ms). The first packet and
-each configured epoch boundary carry RESET; explicit encoder reset also marks
-DISCONTINUITY. At every RESET packet both sides start from zeroed state, so an
-epoch never depends on earlier packets and no latency is added. A decoder
-refuses dependent packets after loss or reordering until it receives a later
-RESET. Replayed epochs are refused. Short output buffers and malformed packets
-do not write output.
-
-### Epoch-start profiles and negotiation
-
-Each stream has one epoch-start profile (owner decision OD-AT):
-
-- **C0**: the zeroed state processes the RESET packet directly. This is the
-  0.2.1 behaviour and the default of every new encoder and decoder, so a
-  stream, peer or file without a marker is C0. Its packets are byte-identical
-  to those of 3747330.
-- **C5-R4** (owner decision OD-AL): the zeroed state is first primed by running
-  the RESET packet's own input through the network four times as a discarded
-  lead-in, which costs five network runs for that packet. Every RESET packet
-  of a C5-R4 stream carries flag `0x08` (`KENC_PACKET_FLAG_EPOCH_PREROLL`).
-
-Peers exchange `kenc_epoch_start_supported()` in their own handshake, then call
-`kenc_epoch_start_negotiate(local, peer, &profile)`. It selects C5-R4 only when
-both advertise it; a peer without an advertisement (0) gets C0, and a nonzero
-advertisement without C0 is refused. Both sides then call
-`kenc_encoder_set_epoch_start` or `kenc_decoder_set_epoch_start` before their
-first packet, or after an explicit reset. A decoder refuses a RESET whose
-marker differs from its profile with `KENC_ERR_EPOCH_START`, without output or
-state change. A pre-marker decoder refuses the marked flag as a protocol error.
-Mixed peers therefore either decode matching PCM or refuse; they never decode
-silently different audio. Files carry the profile in format version 2
-([FILE-FORMAT.md](FILE-FORMAT.md)), and `kenc encode --epoch-start C5-R4`
-writes one. `tools/epoch_stream.py` offers the same profiles, markers,
-negotiation and file-header reading in Python.
-
-The native tests exercise both profiles at all rates, independent streams,
-reset recovery, asset substitution, epoch-start independence, negotiation,
-marker refusal and profile selection rules. With `ORACLE=1` they compare exact
-tokens and PCM against independent Python ORT sessions running
-`tools/epoch_stream.py` with the same profile, including the programme's
-syn-fixture item at 6 kb/s: tokens identical and PCM within 1 LSB, and the
-Python renders equal the checked C5-R4 render and the 3747330 C0 reference.
-`C0_REFERENCE_LIBRARY` names a library built from a git archive of 3747330.
-C0 packets and PCM must then be byte-identical at all rates, each library must
-decode the other's C0 stream with matching PCM, and 3747330 must refuse a
-C5-R4 stream. Without it those 18 controls are printed and counted as SKIPPED.
-
-## Export controls
-
-Export dependencies are isolated in the locked `export` group. The exporter
-accepts only the exact reviewed caller-supplied checkpoint and refuses to write
-inside the Git repository:
-
-```sh
-make export-env
-make export-test \
-  CHECKPOINT=/path/to/encodec_24khz-d7cc33bc.th \
-  OUTPUT_DIR=/path/to/empty/scratch-directory
-```
-
-The 24 kHz scratch bundle contains graphs 8/8 for all 3/3 required bandwidth
-profiles (3/6/12 kb/s), a canonical manifest 1/1, a canonical
-verification result 1/1 and synthetic listening fixtures 3/3. Verification
-checks every graph contract, exact nested RVQ prefixes, continuous-oracle token
-identity at all 3/3 rates, decoder parity, all 8/8 fixed-shape refusals and
-all 6/6 profile timing pipelines. These graph checks use the graphs' all-zero
-initial state; streams use the epoch start below.
-
-A C5-R4 stream begins every epoch of 25 packets, and the stream start, with a
-repeat pre-roll (`tools/epoch_stream.py` with `profile="C5-R4"`; the native
-runtime does the same once C5-R4 is selected). Encoder and
-decoder zero all state, run the epoch's first packet through the unchanged
-per-packet graph 4 times as a discarded lead-in (its 960 samples, or its 3
-code frames through the RVQ decoder), and then process that packet. Only the
-packet itself is used, so no latency is added; an epoch start costs 5 network
-runs. The lead-in run count at a stream start is counted on the graph sessions
-and must equal a literal 4 pinned in `tools/verify_export.py`, independently of
-the runtime's own constant (2/2). A four-epoch stream must match the checkpoint
-rendering each epoch as
-the lead-in followed by the epoch, with the lead-in's 12 latent frames or 3840
-samples dropped: latent parity 4/4 epochs including the first 6 latent frames,
-token identity 4/4, waveform parity 4/4 including the first 150 ms, and each
-of 3/3 reset epochs bit-identical to a fresh stream over that epoch. The same
-comparison must refuse the previous constant cold start and a reflect-padded
-pre-roll at 16/16 epoch heads. Corrupting all audio, or all codes, before
-epoch 1 or 2 must leave every later packet bit-identical (4/4); a repeated
-stream must be identical (1/1). A perturbation probe must find 0 packets of
-added lookahead, and 1 for a planted one-packet lookahead (2/2). The listening
-pair shares the same stream start and is identical before its epoch boundary
-(1/1). The timing result is labelled unfrozen-host measurement and receives
-measured H1 gate credit 0/1. Blind listening and pinned offline delivery
-remain 0/1 each.
-
-`tools/verify_epoch_programme.py` then holds that runtime to the checked F101
-remedy programme recorded in `tests/fixtures/f101-c5r4-programme.json`: the
-14 programme items' codes and float32 PCM identities at 6, 3 and 12 kb/s,
-fresh-encoder and fresh-decoder identity for epochs 1-11 at each rate, the
-never-reset rendering's identity, and the 3 and 12 kb/s boundary level tables
-within 0.01 dB. Its `legacy-c0` check renders every available item with the
-C0 profile and requires codes and PCM identical, at all three rates, to
-`tests/fixtures/f101-c0-3747330-reference.json`. That reference was rendered by
-the streaming functions of a git archive of 3747330
-(`tests/fixtures/build_c0_reference.py`). The 9 synthetic items are regenerated
-and must hash to the
-programme manifest. The 5 recorded excerpts are read from the directory named
-by `KENC_F101_PROGRAMME_DIR`; when it is unset, every control that needs them
-is reported and counted as SKIPPED, never as passed:
-
-```sh
-KENC_F101_PROGRAMME_DIR=/path/to/programme make export-test \
-  CHECKPOINT=/path/to/encodec_24khz-d7cc33bc.th \
-  OUTPUT_DIR=/path/to/empty/scratch-directory
-```
-
-For a frozen-fixture measurement, both verifiers accept `--fixture-tier h1`
-together with the frozen `fixture.sh` path. They fail closed unless the guest
-proves the exact runner digest and complete H1 identity: Debian 13.5,
-q35/qemu64, 4/4 vCPUs, 8 GiB RAM, the root filesystem on the frozen 100 GiB
-disk, and at least 80 GiB free. The 24 kHz gate requires at least 1,000/1,000
-measured packets in every one of 6/6 encode/decode pipelines and p99 below
-20 ms (therefore at least 2x real-time); the 48 kHz decoder requires at least
-100/100 measured frames and must sustain its 990 ms cadence.
-
-### Blinded epoch-boundary trial
-
-The verifier's `listening/` directory is input to a facilitator-operated,
-paired forced-choice trial. Both renderings start with the same pre-roll; the
-epoch-reset rendering also restarts at 1 s, so the pair differs only from that
-boundary. Preparation copies randomized `A`/`B` pairs into a
-public directory while keeping the answer key in a separate private file:
-
-```sh
-python tools/listening_trial.py prepare \
-  --fixtures /path/to/export-bundle/listening \
-  --public-dir /path/to/empty/public-trial \
-  --answer-key /path/to/private/answer-key.json \
-  --trials 20
-```
-
-After each listener returns a completed copy of `response-template.json`, the
-facilitator scores one or more responses without modifying the public trial:
-
-```sh
-python tools/listening_trial.py score \
-  --public-dir /path/to/public-trial \
-  --answer-key /path/to/private/answer-key.json \
-  --response /path/to/listener-01.json \
-  --result /path/to/private/measured-result.json
-```
-
-The manifest, private mapping, audio pairs, responses, and result are
-digest-bound. Scoring reports exact forced-choice and binomial populations but
-grants blind-listening acceptance credit 0/1; that decision remains with the
-release owner.
-
-The separate 48 kHz stereo file-profile exporter accepts only the exact pinned
-official safetensors input and refuses pickle-capable model files. It exports
-only to an empty scratch directory:
-
-```sh
-make export-48khz-test \
-  MODEL_DIR=/path/to/pinned/encodec_48khz-safetensors \
-  OUTPUT_DIR=/path/to/empty/scratch-directory
-```
-
-That scratch bundle contains graphs 2/2, raw RVQ codebooks 1/1, a canonical
-manifest 1/1, a canonical verification result 1/1, and synthetic listening
-fixtures 4/4. Verification covers all 5/5 fixtures at all 4/4 supported
-bandwidths, bounded end-to-end token drift, decoder parity, deterministic
-three-frame overlap-add, fixed-shape refusal, and an unfrozen-host timing
-harness. Blind listening and the measured H1 gate remain 0/1 each until run on
-the frozen fixture.
-
-## Current boundary
-
-- Input/output ownership follows `include/kilix_encodec.h`: callers own all
-  packet and PCM storage; mutable encoder/decoder state is never shared.
-- The native library performs 0 of 1 network operations and invokes 0 of 1
-  Python runtimes.
-- The repository contains no model artifacts. Without `ONNX=1`, model loading
-  returns `KENC_ERR_MODEL`. Native builds require the exact caller-supplied
-  bundle for the chosen profile; they do not claim it is release-qualified.
-- The export tool performs 0 of 1 checkpoint downloads. It opens only the
-  caller-supplied regular file, verifies its exact size and SHA-256, and uses
-  PyTorch's restricted weights-only loader.
-- Both checkpoints and every derivative are CC BY-NC 4.0, licensor Meta
-  Platforms (OD-AR). Their delivery is upstream-convert: the exact bytes of
-  their upstream pins are converted on the user's machine only, under a
-  covering kilix-license receipt (see "Local conversion commands"). Fetching
-  those bytes on first use is left to the installer path, which is not here
-  yet (see "Running a conversion"); until then the caller supplies the pinned
-  download. Derived graphs are produced only on the user's machine and
-  never published (OD-AR, OD-S); nothing is redistributed. Both export
-  manifests record that licence as `license` (`CC-BY-NC-4.0`,
-  `Meta Platforms`). The 24 kHz manifest records `checkpoint_delivery`
-  `upstream-convert` and `derived_graph_publication`
-  `user-machine-only-never-published` in place of the superseded 0.2.1
-  user-supplied and no-grant strings; its graphs did not change. The 48 kHz
-  manifest keeps its earlier wording of the same policy,
-  `derived_artifact_publication` `owner-reserved`: the owner has decided, and
-  the decision is that derived graphs are never published.
-
-Large graphs, weights, and codebooks do not belong in Git history.
-
-The public `kenc_packet_metadata_read` parser exposes verified epoch, index,
-PTS, flags and sample count without model loading. It validates the complete
-opaque KMA2 packet against explicit options; only a decoder context checks
-continuity against prior packets. A refusal leaves metadata unchanged. This
-separate structure preserves the existing decoder-output ABI and keeps wire
-parsing inside the codec library for file/live/KMX consumers.
-
-Installed consumers can use `kenc_model_load_fds`, `kenc_stereo_create_fds`
-and `kenc_file_source_create_fds` with the complete named set of read-only,
-sealed Linux descriptors obtained from their receipt adapter. Each descriptor
-must be caller-owned and CLOEXEC, with all four write/grow/shrink/seal seals.
-The library checks the same exact manifest and graph sizes and hashes before
-ORT parses any graph. It preserves borrowed offsets, never closes those FDs,
-and retains its own bytes after loading. Extra, duplicate or missing names
-refuse. The unused file profile's descriptor set can be null.
-
-These native interfaces verify model bytes. The installed consumer still must
-obtain current packaged catalog and license-receipt authority through
-`kenc_installed_assets_open`; a path or sealed descriptor alone is not model admission.
-Existing directory loaders remain available for explicit development tools.
-`make ONNX=1 test-asset-fds MODEL_DIR=... STEREO_MODEL_DIR=...` checks sealed
-input refusal, byte-for-byte directory-loader parity and post-close lifetime
-for both profiles and the shared file decoder. It does not qualify a consumer
-or transfer timing/listening results to a new release candidate.
-
-Installed admission is an additional explicit build option:
-
-```sh
-make ONNX=1 CONTENT=1 CONTENT_SOURCE=/path/to/kilix-content \
-    CONTENT_COMMIT=FULL_40_CHARACTER_COMMIT
-```
-
-The build reads that exact content Git archive, includes its license, and
-embeds a deterministic ZIP containing the complete authority package, packaged
-catalog, the content commit's vendored kilix-license (modules, the two EnCodec
-licence records and its licence) and this provider's admission helper. The
-content commit must pin the same kilix-license commit as
-`third_party/kilix-license.pin`, and every embedded kilix-license file must
-hash to its `licence_authority.files` digest, or the build refuses. `content_bundle.receipt.json`
-records every source hash, exact content commit and ZIP digest. No package or
-catalog is taken from the process's Python path. The final source closure must
-bind both this provider and the chosen content source; rebuilding against a
-new catalog produces a new binary and build receipt. Model payloads are never
-part of this bundle. `CONTENT=0` is development-only byte/path functionality;
-it refuses the installed admission API.
-
-The packager reads raw commit, tree and blob objects and recomputes their Git
-identities. Git replacement refs, archive attributes and ambient Git routing
-cannot substitute or omit package members. The version-2 build receipt records
-the content tree and every selected source blob, alongside the deterministic
-ZIP and file digests. Missing, oversized or unsupported objects refuse before
-any output is emitted.
-
-`kilix_encodec_content.h` exposes `kenc_installed_assets_open`. Each call runs
-the embedded ZIP from a read-only sealed memory descriptor with isolated system
-Python, a minimal environment and hard resource ceilings. The caller supplies
-an absolute content storage root and a 1–120000 ms deadline. The helper
-(`python/installed_assets.py`) asks the asset/v3 and kilix-license authorities
-on every call, with no readiness cache:
-
-- the catalogue is `kilix_content.verified_packaged_catalog()`, parsed from the
-  one read of its bytes that matched the content component's pin, and its entry
-  must equal the exact F101 IDs, versions, graph population and compatibility
-  compiled here, name exactly one licence, and name this bundle's own
-  kilix-license record for the asset;
-- the licence is `kilix_license.coverage.require()` over the store
-  `kilix_license.receipt_store_root()` names, for the record digest and the
-  manifest digest. The store is only read; admission never writes a receipt.
-  A symlinked store directory is followed, as the receipt writer follows it;
-  the directory reached must be the caller's and private to them;
-- the installed tree is the directory `Installer.asset_destination()` names and
-  must equal the manifest exactly. It is walked by descriptor. The content root
-  and everything below it are opened without following symlinks and must be
-  the caller's and not writable by others. A symlinked ancestor of the root,
-  such as a `~/.local` that points at another disk, is followed, as the
-  installer followed it: every directory the walk passes through, on both
-  sides of a link, must not be writable by others unless sticky, a link in a
-  sticky directory must be the caller's or that directory's owner's, and at
-  most 40 links are followed. Each member is copied once into a sealed memory
-  file while it is hashed, and the tree, the members and the covering receipt
-  are checked again afterwards. asset/v3 has no installed-snapshot API, so this
-  snapshot is the helper's own.
-
-All declared notices are verified too; only the native 9/4 graph members are
-returned. Every returned descriptor is rehashed by the helper, then subject to
-the native loader's unchanged compiled hash/ORT checks. The helper also refuses
-if any authority module was imported from anywhere but its sealed ZIP.
-
-The C caller accepts one bounded, credential-bound descriptor record only
-after the owned helper exits successfully, closes all received FDs on refusal,
-and kills/reaps only its own helper on cancellation or deadline. No arbitrary
-helper/interpreter path, ambient loader/Python import configuration, caller
-catalog, receipt decision, download, converter or path-only admission is used.
-Only `KILIX_LICENSE_RECEIPTS`, `GPU_TERMINAL_HOME` and `HOME` cross into the
-helper besides a fixed `PATH` and locale: they are exactly what
-`receipt_store_root()` reads, so the helper looks for receipts where the licence
-screen filed them. Each crosses exactly as the caller has it, set or unset and
-empty included: an empty `HOME` means `/` to kilix-license, so the helper then
-looks under `/.local/gpu_terminal/license-receipts`, as the writer does.
-`XDG_STATE_HOME` no longer selects anything.
-
-A caller that is PID 1 of its PID namespace (a container entrypoint without an
-init, or `unshare -pf app`) is never admitted, because the helper does not
-accept PID 1 as its parent. `kenc_installed_assets_open` then returns
-`KENC_ERR_RUNTIME` at once, without starting the helper, as it does when the
-deadline passes or the call is cancelled: admission did not run, and no model
-or licence was judged. `KENC_ERR_MODEL` stays the answer for a refused
-catalogue entry, receipt or installed tree, and for a helper that failed. Run
-such a consumer under an init, or call admission from a child process. A successful asset object owns
-its FDs until `kenc_installed_assets_free`; model contexts retain their own bytes.
-
-`make test-content-python CONTENT_SOURCE=/path/to/kilix-content` checks the
-real asset/v3 catalogue and kilix-license receipt code with clearly synthetic
-graph identities and catalog data, plants each refusal (no receipt, a wrong
-receipt, a tampered tree, a tampered catalogue), and runs
-`kenc_installed_assets_open` end to end from a fixture content commit bundled
-by `tools/build_content_bundle.py`. `make test-content-ipc` checks C descriptor framing, privacy, limits,
-cancellation and cleanup with an explicitly synthetic embedded peer. These
-fixtures provide no actual model admission or release qualification credit.
-
-## Local conversion commands
-
-`tools/build_converter.py` builds a relocatable conversion command from the
-unchanged export source and lock. Run it with system Python on Linux x86-64,
-once per profile:
-
-```sh
-python3 tools/build_converter.py                    # 24 kHz stateful graphs
-python3 tools/build_converter.py --profile 48khz    # 48 kHz stereo frame graphs
-```
-
-The default build acquires the exact UV 0.12.3 and CPython 3.12.8 tool archives
-listed in `tools/converter-inputs.json`, then constructs a fresh CPU environment
-from the frozen lock. The lock installs facebookresearch/encodec
-`2d29d9353c2ff0ab1aeadc6a3d439854ee77da3e` (MIT), not PyPI 0.1.1. It builds
-that EnCodec sdist only after the locked wheels supply setuptools. No model
-input is acquired. Tool archives and dependency
-artifacts use a private cache; `--offline` requires that cache to be populated.
-`--cache-dir` selects another private cache, `--output-root` selects an existing
-destination, and `--timeout` bounds the entire build, up to 3,600 seconds.
-An explicit development environment can be selected only with all three
-`--environment`, `--python` and `--uv` paths. That route records the selected
-bytes and the exact package population; it does not acquire a new environment.
-
-| profile | command | runtime directory | upstream input | output population |
-| --- | --- | --- | --- | --- |
-| `24khz` | `bin/kilix-encodec-convert-24khz` | `.converter` | `encodec_24khz-d7cc33bc.th` from `dl.fbaipublicfiles.com` | 8 stateful graphs and `manifest.json` (`op17-v2-bb615145`) |
-| `48khz` | `bin/kilix-encodec-convert-48khz` | `.converter-48khz` | `model.safetensors`, `config.json`, `preprocessor_config.json` from `facebook/encodec_48khz` at `c3def8e7185ac8c8efdce6eb8c4a651e487a503e` | 2 frame graphs, `rvq-codebooks.f32le` and `manifest.json` (`op17-v1-2ce5225d`) |
-
-Each output consists of the command, its adjacent runtime directory holding
-`runtime.tar`, and a build receipt. Keep these together when relocating them.
-The receipt binds the profile, the exporter, lock, tools, package population,
-every runtime member, notices, the pinned licence authority, builder and
-generated command. It is build evidence;
-F100 installed-asset and source-supply authority are separate. Existing output
-entries are never overwritten. The dedicated build process owns and reaps its
-children before removing its private staging directories, including children
-that create a new session. Inputs and destination directory identities are
-checked while building; symlink or shared directory chains refuse.
-Generated package `RECORD` indexes are omitted because they include temporary
-environment command wrappers which are not shipped. Dependency code, version
-metadata and license notices are retained and bound in the runtime receipt.
-
-### Licence receipt gate
-
-Both checkpoints and every derivative are CC BY-NC 4.0, licensor Meta
-Platforms (owner decision OD-AR). The licence authority is kilix-license
-(OD-AJ): its records, first-use screen, agreement and receipts decide, and the
-converter carries no terms text of its own. `third_party/kilix-license/` is a
-`git archive` of kilix-license at the commit in `third_party/kilix-license.pin`.
-The builder verifies every vendored file against `tools/converter-inputs.json`
-and embeds the kilix-license modules and the profile's licence record in the
-command, so nothing is imported from disk at run time:
-
-| profile | licence record | record digest |
-| --- | --- | --- |
-| `24khz` | `encodec-24khz-stateful` | `8af1dc699df34436899f0b93dce271d2fadb119f62e136e74ad797686d880f4b` |
-| `48khz` | `encodec-48khz-frame` | `9c1baee4ad48816bba2568c7e14f136b388f11722d6e422a933a1a4a24d30f3f` |
-
-Before it reads any input, runtime or output, the command calls kilix-license
-`require()` for that record and the asset manifest digest it is given. It
-refuses unless the receipt store holds a receipt covering the whole binding:
-record digest, manifest digest, licence id, licence text digest, decision,
-licensor and the agreement-required non-commercial condition. A missing
-receipt, a receipt for another manifest or record, or a planted receipt whose
-licence text digest or any other bound field changed is refused. The receipt
-store must be an existing private directory of the current user; the command
-only reads it. An absent or empty `--receipt-store`, and an absent or empty
-`--manifest-digest`, are refused by the same gate, with exit status 1, before
-any input is read.
-
-Whatever stands at a receipt's file name is decided by the same gate. A FIFO,
-device, directory, oversized or unreadable entry is not a receipt: the vendored
-kilix-license refuses it without opening or waiting on it. A readable but
-malformed one is refused as well, whatever its parse raises. Every failure of
-the licence authority is this gate's refusal, so no conversion begins on one,
-and a covering receipt beside such an entry still converts.
-
-### Running a conversion
-
-`kilix models install` is to download the pinned upstream bytes on first use,
-after the licence screen has recorded a receipt, and then run the command.
-That installer path is not here yet: it arrives with C4 (kilix-content) and
-KX (the kilix installer). kilix-content's upstream-convert argv does not yet
-pass `--receipt-store` or `--manifest-digest`. Until then the command is run
-directly, as below. The input is never a user-selected file: the command
-accepts only the exact pinned sizes and SHA-256 digests above.
-
-```sh
-bin/kilix-encodec-convert-24khz \
-  --input /absolute/path/to/encodec_24khz-d7cc33bc.th \
-  --output /absolute/path/to/empty-output \
-  --receipt-store /absolute/path/to/kilix-license-receipts \
-  --manifest-digest ASSET_MANIFEST_SHA256 \
-  --timeout 180
-
-bin/kilix-encodec-convert-48khz \
-  --input /absolute/path/to/directory-with-the-three-model-files \
-  --output /absolute/path/to/empty-output \
-  --receipt-store /absolute/path/to/kilix-license-receipts \
-  --manifest-digest ASSET_MANIFEST_SHA256 \
-  --timeout 300
-```
-
-`--manifest-digest` is the asset record's manifest digest, the value the
-licence screen bound into the receipt. The output directory must exist, be
-empty, be owned by the current user and have mode 0700. The command seals
-every input and its complete runtime before execution, runs the unchanged
-exporter in a private process/network/mount namespace (the restricted
-weights-only loader for 24 kHz, safetensors only for 48 kHz), and checks every
-output file against the bound population. The bounded temporary runtime is
-read-only before the selected interpreter starts; the trusted bootstrap
-installs hard resource limits first. Two CPU threads are selected.
-Cancellation and deadlines tear down the owned process tree. A failed attempt
-can leave partial files in its output directory for the caller to inspect or
-discard; a new conversion requires an empty output.
-
-The output holds exactly the bound population and no notice. The licence
-texts are kilix-license's; presenting them with an installed model is left to
-the installer path (C4 and KX above), which is not here yet. Neither this tool
-nor its output grants redistribution, creates a source-supply decision, or
-admits an installed model. Checkpoints, runtime archives and generated graphs
-must not be committed to this repository. The command needs system Python,
-bubblewrap, user namespaces and Linux memfd seals. The development runtime
-occupies roughly 1.1 GiB on disk and additional temporary memory while
-converting; this is not a fitted device profile.
-
-`make test-converter` runs bounded file, cancellation, process ownership,
-output-publication and receipt-gate controls without model payloads or network
-access. Real conversion, reproducible builds and installed admission require
-their separate exact inputs and evidence.
-
-## Model weight guard
-
-`make test` includes `tests/test_no_model_weights.py` (R4-198). It scans the
-tracked tree for model suffixes in any letter case, weight magic numbers
-(GGUF, ggml, OpenFst, safetensors, PyTorch zip and legacy checkpoints, ONNX)
-and size, and for any blob whose SHA-256 is in `tests/data/catalog_digests.txt`.
-That list is generated by `make catalog-digests` from the checkpoints and
-converted populations bound in `tools/converter-inputs.json` and
-`python/graph_population.py`; `--catalog` folds in an accepted kilix-content
-catalogue's EnCodec members. `make catalog-digests-check` and the test refuse
-a hand-edited or stale list.
-
-The guard has an inherent limit. A fragment of raw weight data below the 2 MiB
-size bound, with a neutral name, no magic number and a digest of its own that
-is not listed, passes. Raw float32 codebooks have no header, and one 1024x128
-codebook is 512 KiB, so the first 1 MiB of `rvq-codebooks.f32le` committed as
-a neutral `.dat` file is not detected. Review of what is committed covers that
-case; the scan does not.
-
-### Native package architecture selection
-
-`tools/build_native_package.py --architecture arm64` requires native Debian
-ARM64 and a committed `tools/debian-dependencies-arm64.json` in the selected
-source. The existing default selects AMD64 and its unchanged dependency lock.
-Each architecture uses its own package identities and multiarch library path;
-no lock is inferred from the other architecture. Until exact patched ARM64 ORT
-packages and their dependency lock are qualified, the ARM64 build refuses.
-Content admission and model authorization remain required separately.
-
-`tools/build_converter.py --architecture arm64 --profile 24khz` (or `48khz`)
-selects `tools/converter-inputs-arm64.json` and requires a native ARM64 host.
-The binding pins ARM64 Python and uv bytes and the frozen lock's ARM64 package
-population, including `torchaudio==2.6.0`. The build receipt records the
-architecture and binding digest. The profile outputs and license authority
-are unchanged; building the conversion software does not authorize models.
+The library never touches the network. Every graph is checked for size and
+SHA-256 before ONNX Runtime parses it, and sessions are created from those
+verified bytes. Installed consumers ask an embedded helper, run from a sealed
+ZIP with isolated system Python, to confirm the catalog entry, the licence
+receipt and the installed tree on every call; it returns sealed descriptors that
+the native loader checks again. Packets carry RESET points at epoch boundaries
+so a stream recovers from loss without added latency. Depth:
+[docs/installed-admission.md](docs/installed-admission.md),
+[docs/packet-contract.md](docs/packet-contract.md) and
+[FILE-FORMAT.md](FILE-FORMAT.md).
+
+## Documentation
+
+- [PACKAGING.md](PACKAGING.md): building the shared Debian package.
+- [FILE-FORMAT.md](FILE-FORMAT.md): the `.kenc` file format.
+- [docs/build-and-cli.md](docs/build-and-cli.md): default and native builds,
+  the stereo API, the `kenc` CLI, seeking, native tests and benchmarks.
+- [docs/packet-contract.md](docs/packet-contract.md): KMA2 packets and the C0
+  and C5-R4 epoch-start profiles.
+- [docs/export.md](docs/export.md): graph export and verification, the F101
+  programme check and the blinded listening trial.
+- [docs/installed-admission.md](docs/installed-admission.md): the current
+  boundary, the model licence, sealed descriptors and installed admission.
+- [docs/conversion.md](docs/conversion.md): building and running the local
+  converters and the licence receipt gate.
+- [docs/model-weight-guard.md](docs/model-weight-guard.md): the test that keeps
+  weights out of the repository.
+- [docs/architectures.md](docs/architectures.md): AMD64 and ARM64 package and
+  converter selection.
+- [packaging/onnxruntime/README.md](packaging/onnxruntime/README.md): the
+  Debian ONNX Runtime patches.
+- [CHANGELOG.md](CHANGELOG.md) and
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Related repositories
+
+- [kilix-multiplexer](https://github.com/itsmygithubacct/kilix-multiplexer#readme)
+  (KMX): compressed audio over the semantic session stream.
+- [kilix-amp](https://github.com/itsmygithubacct/kilix-amp#readme): builds with
+  `ENCODEC=1` against this library.
+- [kilix-content](https://github.com/itsmygithubacct/kilix-content#readme): the
+  catalog records for the EnCodec assets and converters.
+- [kilix-license](https://github.com/itsmygithubacct/kilix-license#readme): the
+  licence authority, vendored under `third_party/kilix-license/`.
+- [plebian-os](https://github.com/itsmygithubacct/plebian-os#readme): installs
+  the package and the converters.
+
+## Part of Plebian-OS
+
+kilix-encodec is one of the repositories behind
+[Plebian-OS](https://github.com/itsmygithubacct/plebian-os#readme), a Debian
+install whose desktop is [Kilix](https://github.com/itsmygithubacct/kilix#readme)
+running the [Kilix 95](https://github.com/itsmygithubacct/kilix-95#readme)
+desktop through [Pleb](https://github.com/itsmygithubacct/pleb#readme).
+Plebian-OS installs its native Debian package and converter commands from this
+repository's release assets at firstboot. The map of every repository and how
+it ships is on the
+[components page](https://github.com/itsmygithubacct/plebian-os/blob/main/docs/components.md).
+
+## License
+
+The source is MIT-licensed; see [LICENSE](LICENSE). Both EnCodec checkpoints
+and every derivative are CC BY-NC 4.0, licensor Meta Platforms; they are
+converted on the user's machine only and never redistributed. Third-party
+notices are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
