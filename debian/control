@@ -1,0 +1,19 @@
+Source: kilix-encodec-converter
+Section: sound
+Priority: optional
+Maintainer: itsmygithubacct <itsmygithubacct@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), python3
+Standards-Version: 4.7.2
+Homepage: https://github.com/itsmygithubacct/kilix-encodec
+Vcs-Git: https://github.com/itsmygithubacct/kilix-encodec.git
+Vcs-Browser: https://github.com/itsmygithubacct/kilix-encodec
+Rules-Requires-Root: no
+
+Package: kilix-encodec-converter
+Architecture: all
+Depends: ${misc:Depends}, python3, curl, ca-certificates, zstd, libgomp1, libstdc++6, bubblewrap
+Description: Kilix EnCodec converter
+ Checksum-pinned EnCodec conversion software for both supported
+ architectures. The package downloads the published archive when
+ configured and checks its size and SHA-256. Model weights stay
+ outside this package.

@@ -1,0 +1,233 @@
+#!/usr/bin/python3 -IB
+"""Install the required, pinned EnCodec conversion software (no models)."""
+
+import argparse
+import fcntl
+import hashlib
+import os
+from pathlib import Path, PurePosixPath
+import platform
+import shutil
+import stat
+import subprocess
+import tarfile
+import tempfile
+
+ARCHIVE_URL = "https://github.com/itsmygithubacct/kilix-encodec/releases/download/converters-0.2.2-test.1/kilix-encodec-converters_5e813b1d894e_amd64.tar.zst"
+ARCHIVE_SHA256 = "9a054e00058a3d9b238199084ecba5175205a7614d0531f2135c6f5b3cae347d"
+ARCHIVE_SIZE = 504180781
+MAX_UNPACKED_BYTES = 2800 * 1024 * 1024
+MAX_MEMBERS = 50000
+PAYLOAD_FILES = {
+    ".converter-48khz/receipt.json": "b9da8aa837e7b43aa0bc704297d1b80afcb008daffb46dd513f424d68b13745a",
+    ".converter-48khz/runtime.tar": "155d4148a3d61c228775512254fc8bb21978c60c50ee6a3da331f183bfde7fec",
+    ".converter/receipt.json": "c258baf122426f0840d0f21ca7af11e1878673a10f37deeabcc4df29ab6b0b2a",
+    ".converter/runtime.tar": "26bd3b24d71c745b0142433d67ee5fcd9fb17c56666b95038f0edc3a61ce6942",
+    "BUILD.json": "a2aa111cfa938e55989f2fdc23524dded27a2503e992abbeea61a9b82604495b",
+    "bin/kilix-encodec-convert-24khz": "4f86258b45c8305ebbf77f5b1cddfc4373d65e3fb9b601f776ff9689c410c54a",
+    "bin/kilix-encodec-convert-48khz": "bcb2868fd6f645113b4078ff0e86bfbe993f36260866b617248564aa02ec8a39",
+    "source.tar.gz": "bdabac8f3c72e491b8d5a1e94163a63af2f94be87dcd66d623cf5d8f9f7fab7d"
+}
+DESTINATION = Path("/usr/lib/plebian-os/kilix-encodec")
+
+
+def archive_for(machine):
+    """Select reviewed software bytes; this does not select an OS release."""
+    if machine in ("x86_64", "amd64"):
+        return dict(url=ARCHIVE_URL, sha256=ARCHIVE_SHA256,
+                    size=ARCHIVE_SIZE, files=PAYLOAD_FILES)
+    if machine in ("aarch64", "arm64"):
+        return dict(
+            url="https://github.com/itsmygithubacct/kilix-encodec/releases/download/converters-0.2.2-test.1/kilix-encodec-converters_eaf11af26271_arm64.tar.zst",
+            sha256="96b5e873ae6e14b4052ee2c13741ba040fce4a5dd03a307d28a31ab3aee563cc",
+            size=393332116,
+            files={
+                '.converter-48khz/receipt.json': 'e1ce57914ce44567fefc416a657e672c3116a4180def1a6566245da8df2d4833',
+                '.converter-48khz/runtime.tar': 'a8b3e0f730e33d648ac48c02b773e5618a860f559cdd718d3c04b2f54093d6f1',
+                '.converter/receipt.json': '8cfd3398a376e715d19e0de9d1431efd43f1ddaaf532fbd4251750cd5b86bae7',
+                '.converter/runtime.tar': '6101908af1249626feb1df6644d36370ebea6f08e022b4c15f3e41d12035828b',
+                'BUILD.json': '8c7cd9c345d4a4e8bdd1de56b194a2fbea4813c95310f7111e7246df3ab7cd0b',
+                'bin/kilix-encodec-convert-24khz': 'b6afbd8792bea9b94db115bc70f386a494bead8aba2279e2e91a6f6f471ee18f',
+                'bin/kilix-encodec-convert-48khz': '74f6a0f08122abdde21fc3dfbb262c6bafc6326c2cbe177773ae6b6cf7948839',
+                'source.tar.gz': '723474da246a01bba80e3527b7e682ac01d5b8e6d740e8d6c9872ecd7c37241e',
+            },
+        )
+    raise ValueError("no source-qualified EnCodec converter bundle selected for this architecture")
+
+
+def secure_directory(path):
+    for directory in reversed((path, *path.parents)):
+        if not directory.exists():
+            directory.mkdir(mode=0o755)
+            directory.chmod(0o755)
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError(f"directory is not root-controlled: {directory}")
+
+
+def copy_archive(source, destination, selected=None):
+    selected = selected if selected is not None else archive_for(platform.machine())
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size != selected["size"]:
+            raise ValueError("archive is not a regular file of the pinned size")
+        with destination.open("xb") as output:
+            remaining = selected["size"]
+            while remaining:
+                block = stream.read(min(remaining, 1024 * 1024))
+                if not block:
+                    raise ValueError("archive changed during copy")
+                output.write(block)
+                remaining -= len(block)
+            if stream.read(1):
+                raise ValueError("archive grew during copy")
+
+
+def verify_archive(path, selected=None):
+    selected = selected if selected is not None else archive_for(platform.machine())
+    if path.stat().st_size != selected["size"]:
+        raise ValueError("converter archive size mismatch")
+    with path.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != selected["sha256"]:
+            raise ValueError("converter archive SHA-256 mismatch")
+
+
+def extract_payload(stream, destination):
+    """Extract bounded ordinary files only, without trusting tar metadata."""
+    seen = set()
+    total = 0
+    with tarfile.open(fileobj=stream, mode="r|") as archive:
+        for member in archive:
+            name = member.name.removeprefix("./").rstrip("/")
+            if name in ("", ".") and member.isdir():
+                continue
+            path = PurePosixPath(name)
+            if (not name or path.is_absolute() or ".." in path.parts
+                    or path.as_posix() != name or name in seen):
+                raise ValueError("unsafe or duplicate converter archive path")
+            seen.add(name)
+            if len(seen) > MAX_MEMBERS:
+                raise ValueError("too many converter archive members")
+            target = destination.joinpath(*path.parts)
+            if member.isdir():
+                target.mkdir(mode=0o755, parents=True, exist_ok=True)
+            elif member.isfile():
+                total += member.size
+                if member.size < 0 or total > MAX_UNPACKED_BYTES:
+                    raise ValueError("converter archive exceeds extraction bound")
+                target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+                with archive.extractfile(member) as source, target.open("xb") as output:
+                    shutil.copyfileobj(source, output, 1024 * 1024)
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+            else:
+                raise ValueError("converter archive contains a link or special file")
+    for directory, _subdirs, _files in os.walk(destination):
+        Path(directory).chmod(0o755)
+    for name in ("bin/kilix-encodec-convert-24khz", ".converter/runtime.tar", ".converter/receipt.json", "bin/kilix-encodec-convert-48khz", ".converter-48khz/runtime.tar", ".converter-48khz/receipt.json", "BUILD.json", "source.tar.gz"):
+        if not (destination / name).is_file():
+            raise ValueError(f"converter archive missing {name}")
+
+
+def inventory(root):
+    records = {}
+    for directory, subdirs, files in os.walk(root, followlinks=False):
+        for name in subdirs + files:
+            path = Path(directory) / name
+            info = path.lstat()
+            if info.st_uid != 0 or info.st_mode & 0o022:
+                raise ValueError(f"installed converter entry is not root-controlled: {path}")
+            relative = path.relative_to(root).as_posix()
+            if stat.S_ISREG(info.st_mode):
+                with path.open("rb") as stream:
+                    records[relative] = (stat.S_IMODE(info.st_mode), hashlib.file_digest(stream, "sha256").hexdigest())
+            elif stat.S_ISDIR(info.st_mode):
+                records[relative] = (stat.S_IMODE(info.st_mode), None)
+            else:
+                raise ValueError(f"installed converter contains a link or special file: {path}")
+    return records
+
+
+def expected_inventory(selected=None):
+    selected = selected if selected is not None else archive_for(platform.machine())
+    result = {"bin": (0o755, None), ".converter": (0o755, None), ".converter-48khz": (0o755, None)}
+    result.update({name: (0o755 if name.startswith("bin/") else 0o644, digest)
+                   for name, digest in selected["files"].items()})
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--archive", type=Path, help="use a local copy of the exact pinned archive")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    selected = archive_for(platform.machine())
+    if selected["size"] <= 0 or len(selected["sha256"]) != 64:
+        raise ValueError("converter release archive has not been selected")
+    if args.dry_run:
+        print(f"Required conversion software; no model weights or licence receipts.\n{selected['url']}\n"
+              f"bytes={selected['size']} sha256={selected['sha256']}\nInstall at {DESTINATION}")
+        return
+    if os.geteuid() != 0:
+        raise ValueError("run as root on a supported architecture")
+    for package in ("libgomp1", "libstdc++6", "python3", "bubblewrap", "zstd"):
+        dependency = subprocess.run(
+            ["/usr/bin/dpkg-query", "-W", "-f=${db:Status-Status}", package],
+            capture_output=True, text=True,
+        )
+        if dependency.returncode or dependency.stdout.strip() != "installed":
+            raise ValueError(f"install the Debian {package} package before the converter")
+    secure_directory(DESTINATION.parent)
+    lock_fd = os.open(DESTINATION.parent / ".encodec-converter.lock",
+                      os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(lock_fd, "w") as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+            raise ValueError("unsafe converter installation lock")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if os.path.lexists(DESTINATION):
+            secure_directory(DESTINATION)
+            if inventory(DESTINATION) != expected_inventory(selected):
+                raise ValueError("existing converter differs; refusing to overwrite it")
+            print("Exact converter already installed")
+            return
+        if shutil.disk_usage(DESTINATION.parent).free < selected["size"] + MAX_UNPACKED_BYTES:
+            raise ValueError("insufficient free space for converter download and staging")
+        with tempfile.TemporaryDirectory(prefix=".encodec-", dir=DESTINATION.parent) as temporary:
+            stage = Path(temporary)
+            archive = stage / "converter.tar.zst"
+            if args.archive:
+                copy_archive(args.archive, archive, selected)
+            else:
+                subprocess.run(["/usr/bin/curl", "--fail", "--location", "--silent", "--show-error",
+                                "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20",
+                                "--max-time", "900", "--max-filesize", str(selected["size"]),
+                                "--output", str(archive), selected["url"]], check=True)
+            verify_archive(archive, selected)
+            payload = stage / "payload"
+            payload.mkdir(mode=0o755)
+            process = subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)], stdout=subprocess.PIPE)
+            try:
+                with process.stdout:
+                    extract_payload(process.stdout, payload)
+                    # Consume the trailer so the decompressor also checks its checksum.
+                    while process.stdout.read(1024 * 1024):
+                        pass
+                if process.wait() != 0:
+                    raise ValueError("converter decompression failed")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            if inventory(payload) != expected_inventory(selected):
+                raise ValueError("converter payload differs from the pinned inventory")
+            payload.rename(DESTINATION)
+            print(f"Installed converter at {DESTINATION}")
+    print("Next, as your normal user: kilix models install encodec-24khz-stateful")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, tarfile.TarError, subprocess.SubprocessError) as error:
+        raise SystemExit(f"encodec converter: {error}")

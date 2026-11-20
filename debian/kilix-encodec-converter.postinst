@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+if [ "${1:-}" = configure ]; then
+    /usr/libexec/kilix-encodec-converter/install-converter
+fi
+#DEBHELPER#
+exit 0
