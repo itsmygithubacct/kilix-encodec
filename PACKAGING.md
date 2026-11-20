@@ -56,3 +56,29 @@ Git process, and the dedicated native CLI reaps its owned escaped descendants
 before returning. Raw object identity, offline selection and archive modes
 remain verified. The reusable bundle helper does not acquire process-wide
 reaping authority when called without the dedicated CLI cleanup callback.
+
+## System model converters
+
+The 24 kHz and 48 kHz commands use one checksum-pinned runtime. Each command
+keeps its own exporter, input and output hashes, and licence check. Installing
+the software leaves model acquisition to the user's first-use flow.
+
+| Architecture | Shared archive | Installed files |
+| --- | ---: | ---: |
+| amd64 | 239,108,136 bytes | 1,165,799,836 bytes |
+| arm64 | 173,165,993 bytes | 823,269,268 bytes |
+
+The following commands build and install the amd64 archive from the original
+published software distribution using Python 3.11 or later and zstd 1.5.7.
+
+```sh
+python3 tools/package_shared_converters.py amd64 upstream-amd64.tar.zst kilix-encodec-converters_shared_amd64.tar.zst
+sudo packaging/install-converter --archive kilix-encodec-converters_shared_amd64.tar.zst
+```
+
+The installer accepts the pinned compact and original archives. With an original
+archive it hashes and discards the redundant mono runtime while streaming.
+Upgrading a verified two-runtime installation is offline. The installer links
+the existing stereo runtime into a private directory, verifies the new layout,
+then exchanges the directories atomically and removes the old copy. Running the
+installer again completes cleanup after interruption.

@@ -15,6 +15,7 @@ override_dh_auto_build:
 	rm -rf packaging/__pycache__
 
 override_dh_auto_test:
+	python3 -B tests/test_shared_distribution.py
 
 override_dh_auto_install:
 	install -d $(L)

@@ -1,9 +1,15 @@
 #!/bin/sh
 set -eu
 if [ "${1:-}" = remove ] || [ "${1:-}" = purge ]; then
-    rm -rf /usr/lib/plebian-os/kilix-encodec
-    rm -f /usr/lib/plebian-os/.encodec-converter.lock
-    rmdir /usr/lib/plebian-os 2>/dev/null || true
+    root=/usr/lib/plebian-os
+    if [ -d "$root/kilix-encodec" ] || [ -e "$root/.encodec-converter.lock" ]; then
+        umask 077
+        (
+            flock -x 9
+            rm -rf "$root/kilix-encodec" "$root/.encodec-converter-stage"
+        ) 9>>"$root/.encodec-converter.lock"
+        # Provisioning may already be waiting on this same lock inode.
+    fi
 fi
 #DEBHELPER#
 exit 0

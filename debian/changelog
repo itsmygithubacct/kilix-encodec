@@ -1,3 +1,10 @@
+kilix-encodec-converter (0.2.2+packaging2) UNRELEASED; urgency=medium
+
+  * Share the pinned CPU runtime between the 24 and 48 kHz converters.
+    Migrate a verified existing installation offline and atomically.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Fri, 20 Nov 2026 19:38:00 +0000
+
 kilix-encodec-converter (0.2.2+packaging1) UNRELEASED; urgency=medium
 
   * Install the checksum-pinned converter from the published archive when

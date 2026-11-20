@@ -2,8 +2,10 @@
 """Install the required, pinned EnCodec conversion software (no models)."""
 
 import argparse
+import ctypes
 import fcntl
 import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
 import platform
@@ -11,7 +13,6 @@ import shutil
 import stat
 import subprocess
 import tarfile
-import tempfile
 
 ARCHIVE_URL = "https://github.com/itsmygithubacct/kilix-encodec/releases/download/converters-0.2.2-test.1/kilix-encodec-converters_5e813b1d894e_amd64.tar.zst"
 ARCHIVE_SHA256 = "9a054e00058a3d9b238199084ecba5175205a7614d0531f2135c6f5b3cae347d"
@@ -29,18 +30,86 @@ PAYLOAD_FILES = {
     "source.tar.gz": "bdabac8f3c72e491b8d5a1e94163a63af2f94be87dcd66d623cf5d8f9f7fab7d"
 }
 DESTINATION = Path("/usr/lib/plebian-os/kilix-encodec")
+MONO_COMMAND = "bin/kilix-encodec-convert-24khz"
+MONO_RUNTIME = ".converter/runtime.tar"
+MONO_RECEIPT = ".converter/receipt.json"
+SHARED_RUNTIME = ".converter-48khz/runtime.tar"
+STEREO_RECEIPT = ".converter-48khz/receipt.json"
+
+
+def share_runtime(root, selected):
+    """Bind the mono command to the released stereo runtime's verified superset.
+
+    Inputs are the pinned release files. The executable keeps its original
+    template, model inputs, output digests and embedded licence authority.
+    """
+    mono = json.loads((root / MONO_RECEIPT).read_bytes())
+    stereo = json.loads((root / STEREO_RECEIPT).read_bytes())
+    if not mono["runtime_files"] or any(stereo["runtime_files"].get(path) != entry
+                                        for path, entry in mono["runtime_files"].items()):
+        raise ValueError("stereo runtime does not contain the exact mono runtime files")
+
+    command = (root / MONO_COMMAND).read_text(encoding="utf-8")
+    edits = {
+        f'BUNDLE_SHA256 = "{mono["runtime_tar_sha256"]}"':
+            f'BUNDLE_SHA256 = "{stereo["runtime_tar_sha256"]}"',
+        f'BUNDLE_BYTES = int("{mono["runtime_tar_bytes"]}")':
+            f'BUNDLE_BYTES = int("{stereo["runtime_tar_bytes"]}")',
+        f'RUNTIME_BYTES = int("{mono["runtime_bytes"]}")':
+            f'RUNTIME_BYTES = int("{stereo["runtime_bytes"]}")',
+        # PROFILE is canonical JSON embedded as hex by build_converter.py.
+        b'"directory":".converter"'.hex(): b'"directory":".converter-48khz"'.hex(),
+    }
+    for old, new in edits.items():
+        if command.count(old) != 1:
+            raise ValueError("unexpected mono launcher in converter distribution")
+        command = command.replace(old, new)
+    (root / MONO_COMMAND).write_text(command, encoding="utf-8")
+
+    for key in ("runtime_files", "runtime_bytes", "runtime_tar_bytes", "runtime_tar_sha256"):
+        mono[key] = stereo[key]
+    mono["shared_runtime"] = SHARED_RUNTIME
+    mono["command_sha256"] = hashlib.sha256(command.encode()).hexdigest()
+    (root / MONO_RECEIPT).write_text(json.dumps(mono, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+    upstream = json.loads((root / "BUILD.json").read_bytes())
+    build = {"schema": "kilix.encodec.converter-distribution/v2",
+             "architecture": upstream["architecture"], "source_commit": upstream["source_commit"],
+             "source_distribution_sha256": selected["sha256"], "upstream_build": upstream,
+             "profiles": ["24khz", "48khz"], "model_payloads_included": False,
+             "shared_runtime": SHARED_RUNTIME, "runtime_file_count": len(stereo["runtime_files"]),
+             "files": {}}
+    for name, digest in selected["files"].items():
+        if name in (MONO_RUNTIME, "BUILD.json"):
+            continue
+        path = root / name
+        if name in (MONO_COMMAND, MONO_RECEIPT):
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        build["files"][name] = {"bytes": path.stat().st_size, "sha256": digest}
+    (root / "BUILD.json").write_text(json.dumps(build, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
 def archive_for(machine):
     """Select reviewed software bytes; this does not select an OS release."""
     if machine in ("x86_64", "amd64"):
         return dict(url=ARCHIVE_URL, sha256=ARCHIVE_SHA256,
-                    size=ARCHIVE_SIZE, files=PAYLOAD_FILES)
+                    size=ARCHIVE_SIZE, files=PAYLOAD_FILES, installed_bytes=1165799836,
+                    compact={"size": 239108136,
+                             "sha256": "4de6c2b5517e04c4ab3f42e04df3f903446299cfebd85784b7ef31710e255fcb"},
+                    shared={MONO_COMMAND: "2f0da7a2923757456412d6f02a79e17f1e48235c0d5ce43b37babc5c82bc1439",
+                            MONO_RECEIPT: "1ec7a8d492bbd2fbd10e9bba03b20529e5f7c1707e59af7dbae136745eec2046",
+                            "BUILD.json": "3bfef6c2c1e54f9a8da0aa7e2ae6faae33927a6b7b08f3c70e3b24482e897dd2"})
     if machine in ("aarch64", "arm64"):
         return dict(
             url="https://github.com/itsmygithubacct/kilix-encodec/releases/download/converters-0.2.2-test.1/kilix-encodec-converters_eaf11af26271_arm64.tar.zst",
             sha256="96b5e873ae6e14b4052ee2c13741ba040fce4a5dd03a307d28a31ab3aee563cc",
             size=393332116,
+            installed_bytes=823269268,
+            compact={"size": 173165993,
+                     "sha256": "92b202d73ae96f98e2543e010bd95bc50b75b64997f0a3ec53b8b763857a7fd8"},
+            shared={MONO_COMMAND: "d5cc69701a1e67a85d5cc1bb316ef9fad4e37edb6d40fab0c9f9165ed62aa60e",
+                    MONO_RECEIPT: "63ab9b6dd67b74ed2f7e101c8549c924f9f0cc2b34cfbb11f62dbc543c127202",
+                    "BUILD.json": "88d13a03b8d32a8e6077713515c611255386ceee32c1618c38531c0446a6c3e1"},
             files={
                 '.converter-48khz/receipt.json': 'e1ce57914ce44567fefc416a657e672c3116a4180def1a6566245da8df2d4833',
                 '.converter-48khz/runtime.tar': 'a8b3e0f730e33d648ac48c02b773e5618a860f559cdd718d3c04b2f54093d6f1',
@@ -93,7 +162,7 @@ def verify_archive(path, selected=None):
             raise ValueError("converter archive SHA-256 mismatch")
 
 
-def extract_payload(stream, destination):
+def extract_payload(stream, destination, mono_sha256=None):
     """Extract bounded ordinary files only, without trusting tar metadata."""
     seen = set()
     total = 0
@@ -110,6 +179,8 @@ def extract_payload(stream, destination):
             if len(seen) > MAX_MEMBERS:
                 raise ValueError("too many converter archive members")
             target = destination.joinpath(*path.parts)
+            if name == MONO_RUNTIME and (not mono_sha256 or not member.isfile()):
+                raise ValueError("unexpected mono runtime in converter archive")
             if member.isdir():
                 target.mkdir(mode=0o755, parents=True, exist_ok=True)
             elif member.isfile():
@@ -117,25 +188,32 @@ def extract_payload(stream, destination):
                 if member.size < 0 or total > MAX_UNPACKED_BYTES:
                     raise ValueError("converter archive exceeds extraction bound")
                 target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-                with archive.extractfile(member) as source, target.open("xb") as output:
-                    shutil.copyfileobj(source, output, 1024 * 1024)
+                with archive.extractfile(member) as source:
+                    if name == MONO_RUNTIME:
+                        if hashlib.file_digest(source, "sha256").hexdigest() != mono_sha256:
+                            raise ValueError("discarded mono runtime checksum mismatch")
+                        continue
+                    with target.open("xb") as output:
+                        shutil.copyfileobj(source, output, 1024 * 1024)
                 target.chmod(0o755 if member.mode & 0o111 else 0o644)
             else:
                 raise ValueError("converter archive contains a link or special file")
     for directory, _subdirs, _files in os.walk(destination):
         Path(directory).chmod(0o755)
-    for name in ("bin/kilix-encodec-convert-24khz", ".converter/runtime.tar", ".converter/receipt.json", "bin/kilix-encodec-convert-48khz", ".converter-48khz/runtime.tar", ".converter-48khz/receipt.json", "BUILD.json", "source.tar.gz"):
-        if not (destination / name).is_file():
+    for name in PAYLOAD_FILES:
+        if name == MONO_RUNTIME and mono_sha256 is None:
+            continue
+        if name not in seen or (name != MONO_RUNTIME and not (destination / name).is_file()):
             raise ValueError(f"converter archive missing {name}")
 
 
-def inventory(root):
+def inventory(root, *, owner=0):
     records = {}
     for directory, subdirs, files in os.walk(root, followlinks=False):
         for name in subdirs + files:
             path = Path(directory) / name
             info = path.lstat()
-            if info.st_uid != 0 or info.st_mode & 0o022:
+            if info.st_uid != owner or info.st_mode & 0o022:
                 raise ValueError(f"installed converter entry is not root-controlled: {path}")
             relative = path.relative_to(root).as_posix()
             if stat.S_ISREG(info.st_mode):
@@ -148,12 +226,123 @@ def inventory(root):
     return records
 
 
-def expected_inventory(selected=None):
+def expected_inventory(selected=None, *, shared=False):
     selected = selected if selected is not None else archive_for(platform.machine())
     result = {"bin": (0o755, None), ".converter": (0o755, None), ".converter-48khz": (0o755, None)}
     result.update({name: (0o755 if name.startswith("bin/") else 0o644, digest)
                    for name, digest in selected["files"].items()})
+    if shared:
+        del result[MONO_RUNTIME]
+        for name, digest in selected["shared"].items():
+            result[name] = (result[name][0], digest)
     return result
+
+
+def stage_installed(payload, selected):
+    # The existing release inventory was checked under the install lock.
+    # Reuse its large runtime inode. Only the three rewritten files need copies.
+    for directory in ("bin", ".converter", ".converter-48khz"):
+        (payload / directory).mkdir(mode=0o755)
+        (payload / directory).chmod(0o755)
+    for name in selected["files"]:
+        if name == MONO_RUNTIME:
+            continue
+        if name in selected["shared"]:
+            shutil.copy2(DESTINATION / name, payload / name)
+        else:
+            os.link(DESTINATION / name, payload / name)
+
+
+def transfer_for(selected, supplied):
+    compact = selected.get("compact", {})
+    if supplied is None:
+        return compact if compact.get("url") else selected
+    return compact if supplied.lstat().st_size == compact.get("size") else selected
+
+
+def stage_download(stage, payload, selected, supplied):
+    transfer = transfer_for(selected, supplied)
+    is_shared = transfer is not selected
+    if shutil.disk_usage(stage).free < transfer["size"] + selected["installed_bytes"]:
+        raise ValueError("insufficient free space for converter download and shared runtime")
+    archive = stage / "converter.tar.zst"
+    if supplied:
+        copy_archive(supplied, archive, transfer)
+    else:
+        subprocess.run(["/usr/bin/curl", "--fail", "--location", "--silent", "--show-error",
+                        "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20",
+                        "--max-time", "900", "--max-filesize", str(transfer["size"]),
+                        "--output", str(archive), transfer["url"]], check=True)
+    verify_archive(archive, transfer)
+    with subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)],
+                          stdout=subprocess.PIPE) as process:
+        try:
+            with process.stdout:
+                extract_payload(process.stdout, payload, None if is_shared else selected["files"][MONO_RUNTIME])
+                while process.stdout.read(1024 * 1024):
+                    pass
+            if process.wait() != 0:
+                raise ValueError("converter decompression failed")
+        finally:
+            if process.poll() is None:
+                process.kill()
+    archive.unlink()
+    return is_shared
+
+
+def clear_stage(stage):
+    try:
+        info = stage.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+        raise ValueError("unsafe converter staging directory")
+    shutil.rmtree(stage)
+
+
+def publish_upgrade(payload):
+    # Linux renameat2(RENAME_EXCHANGE) keeps one complete installation visible.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.renameat2(-100, os.fsencode(payload), -100, os.fsencode(DESTINATION), 2):
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), DESTINATION)
+
+
+def install_locked(selected, supplied):
+    stage = DESTINATION.parent / ".encodec-converter-stage"
+    expected = expected_inventory(selected, shared=True)
+    upgrading = os.path.lexists(DESTINATION)
+    if upgrading:
+        secure_directory(DESTINATION)
+        current = inventory(DESTINATION)
+        if current == expected:
+            clear_stage(stage)
+            print("Exact shared converter already installed")
+            return
+        if current != expected_inventory(selected):
+            raise ValueError("existing converter differs; refusing to overwrite it")
+    # A killed installer may leave a partial download or the old exchanged tree.
+    # This private directory is owned by the installer under the same lock.
+    clear_stage(stage)
+    stage.mkdir(mode=0o700)
+    try:
+        payload = stage / "payload"
+        payload.mkdir(mode=0o755)
+        payload.chmod(0o755)
+        if upgrading:
+            stage_installed(payload, selected)
+            share_runtime(payload, selected)
+        elif not stage_download(stage, payload, selected, supplied):
+            share_runtime(payload, selected)
+        if inventory(payload) != expected:
+            raise ValueError("shared converter differs from the pinned inventory")
+        if upgrading:
+            publish_upgrade(payload)
+        else:
+            payload.rename(DESTINATION)
+    finally:
+        clear_stage(stage)
+    print(f"Installed shared converter at {DESTINATION}")
 
 
 def main():
@@ -165,8 +354,10 @@ def main():
     if selected["size"] <= 0 or len(selected["sha256"]) != 64:
         raise ValueError("converter release archive has not been selected")
     if args.dry_run:
-        print(f"Required conversion software; no model weights or licence receipts.\n{selected['url']}\n"
-              f"bytes={selected['size']} sha256={selected['sha256']}\nInstall at {DESTINATION}")
+        transfer = transfer_for(selected, args.archive)
+        print(f"Required conversion software; no model weights or licence receipts.\n"
+              f"{args.archive or transfer['url']}\nbytes={transfer['size']} sha256={transfer['sha256']}\n"
+              f"Installed bytes={selected['installed_bytes']} at {DESTINATION}")
         return
     if os.geteuid() != 0:
         raise ValueError("run as root on a supported architecture")
@@ -185,44 +376,7 @@ def main():
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
             raise ValueError("unsafe converter installation lock")
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if os.path.lexists(DESTINATION):
-            secure_directory(DESTINATION)
-            if inventory(DESTINATION) != expected_inventory(selected):
-                raise ValueError("existing converter differs; refusing to overwrite it")
-            print("Exact converter already installed")
-            return
-        if shutil.disk_usage(DESTINATION.parent).free < selected["size"] + MAX_UNPACKED_BYTES:
-            raise ValueError("insufficient free space for converter download and staging")
-        with tempfile.TemporaryDirectory(prefix=".encodec-", dir=DESTINATION.parent) as temporary:
-            stage = Path(temporary)
-            archive = stage / "converter.tar.zst"
-            if args.archive:
-                copy_archive(args.archive, archive, selected)
-            else:
-                subprocess.run(["/usr/bin/curl", "--fail", "--location", "--silent", "--show-error",
-                                "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20",
-                                "--max-time", "900", "--max-filesize", str(selected["size"]),
-                                "--output", str(archive), selected["url"]], check=True)
-            verify_archive(archive, selected)
-            payload = stage / "payload"
-            payload.mkdir(mode=0o755)
-            process = subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)], stdout=subprocess.PIPE)
-            try:
-                with process.stdout:
-                    extract_payload(process.stdout, payload)
-                    # Consume the trailer so the decompressor also checks its checksum.
-                    while process.stdout.read(1024 * 1024):
-                        pass
-                if process.wait() != 0:
-                    raise ValueError("converter decompression failed")
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                    process.wait()
-            if inventory(payload) != expected_inventory(selected):
-                raise ValueError("converter payload differs from the pinned inventory")
-            payload.rename(DESTINATION)
-            print(f"Installed converter at {DESTINATION}")
+        install_locked(selected, args.archive)
     print("Next, as your normal user: kilix models install encodec-24khz-stateful")
 
 
