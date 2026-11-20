@@ -80,6 +80,8 @@ sudo packaging/install-converter --archive kilix-encodec-converters_shared_amd64
 
 The installer accepts the pinned compact and original archives. With an original
 archive it hashes and discards the redundant mono runtime while streaming.
+Network transfers have a one-hour deadline. A transfer that stays below
+1 KiB/s for two minutes stops early.
 Upgrading a verified two-runtime installation is offline. The installer links
 the existing stereo runtime into a private directory, verifies the new layout,
 then exchanges the directories atomically and removes the old copy. Running the

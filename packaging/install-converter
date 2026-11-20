@@ -271,7 +271,8 @@ def stage_download(stage, payload, selected, supplied):
     else:
         subprocess.run(["/usr/bin/curl", "--fail", "--location", "--silent", "--show-error",
                         "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20",
-                        "--max-time", "900", "--max-filesize", str(transfer["size"]),
+                        "--speed-limit", "1024", "--speed-time", "120", "--max-time", "3600",
+                        "--max-filesize", str(transfer["size"]),
                         "--output", str(archive), transfer["url"]], check=True)
     verify_archive(archive, transfer)
     with subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)],
