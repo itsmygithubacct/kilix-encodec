@@ -17,6 +17,8 @@ import tarfile
 ARCHIVE_URL = "https://github.com/itsmygithubacct/kilix-encodec/releases/download/converters-0.2.2-test.1/kilix-encodec-converters_5e813b1d894e_amd64.tar.zst"
 ARCHIVE_SHA256 = "9a054e00058a3d9b238199084ecba5175205a7614d0531f2135c6f5b3cae347d"
 ARCHIVE_SIZE = 504180781
+COMPACT_RELEASE = ("https://github.com/itsmygithubacct/kilix-encodec/releases/download/"
+                   "converters-0.2.4-rc.1/")
 MAX_UNPACKED_BYTES = 2800 * 1024 * 1024
 MAX_MEMBERS = 50000
 PAYLOAD_FILES = {
@@ -94,7 +96,8 @@ def archive_for(machine):
     if machine in ("x86_64", "amd64"):
         return dict(url=ARCHIVE_URL, sha256=ARCHIVE_SHA256,
                     size=ARCHIVE_SIZE, files=PAYLOAD_FILES, installed_bytes=1165799836,
-                    compact={"size": 239108136,
+                    compact={"url": COMPACT_RELEASE + "kilix-encodec-converters_shared_amd64.tar.zst",
+                             "size": 239108136,
                              "sha256": "4de6c2b5517e04c4ab3f42e04df3f903446299cfebd85784b7ef31710e255fcb"},
                     shared={MONO_COMMAND: "2f0da7a2923757456412d6f02a79e17f1e48235c0d5ce43b37babc5c82bc1439",
                             MONO_RECEIPT: "1ec7a8d492bbd2fbd10e9bba03b20529e5f7c1707e59af7dbae136745eec2046",
@@ -105,7 +108,8 @@ def archive_for(machine):
             sha256="96b5e873ae6e14b4052ee2c13741ba040fce4a5dd03a307d28a31ab3aee563cc",
             size=393332116,
             installed_bytes=823269268,
-            compact={"size": 173165993,
+            compact={"url": COMPACT_RELEASE + "kilix-encodec-converters_shared_arm64.tar.zst",
+                     "size": 173165993,
                      "sha256": "92b202d73ae96f98e2543e010bd95bc50b75b64997f0a3ec53b8b763857a7fd8"},
             shared={MONO_COMMAND: "d5cc69701a1e67a85d5cc1bb316ef9fad4e37edb6d40fab0c9f9165ed62aa60e",
                     MONO_RECEIPT: "63ab9b6dd67b74ed2f7e101c8549c924f9f0cc2b34cfbb11f62dbc543c127202",

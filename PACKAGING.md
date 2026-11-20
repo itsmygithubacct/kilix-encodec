@@ -78,8 +78,10 @@ python3 tools/package_shared_converters.py amd64 upstream-amd64.tar.zst kilix-en
 sudo packaging/install-converter --archive kilix-encodec-converters_shared_amd64.tar.zst
 ```
 
-The installer accepts the pinned compact and original archives. With an original
-archive it hashes and discards the redundant mono runtime while streaming.
+The installer downloads the compact archive for the host architecture from the
+[converter prerelease](https://github.com/itsmygithubacct/kilix-encodec/releases/tag/converters-0.2.4-rc.1).
+For offline installation, `--archive` accepts either pinned format. With an
+original archive the installer hashes and discards the redundant mono runtime while streaming.
 Network transfers have a one-hour deadline. A transfer that stays below
 1 KiB/s for two minutes stops early.
 Upgrading a verified two-runtime installation is offline. The installer links

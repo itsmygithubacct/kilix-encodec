@@ -1,3 +1,10 @@
+kilix-encodec-converter (0.2.2+packaging4) UNRELEASED; urgency=medium
+
+  * Download the published compact archive for amd64 or arm64 by default.
+    Keep offline installation from the original archives available.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Fri, 20 Nov 2026 23:18:00 +0000
+
 kilix-encodec-converter (0.2.2+packaging3) UNRELEASED; urgency=medium
 
   * Allow a progressing converter download to finish on slower connections.
