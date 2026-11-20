@@ -70,6 +70,8 @@ the software leaves model acquisition to the user's first-use flow.
 
 The following commands build and install the amd64 archive from the original
 published software distribution using Python 3.11 or later and zstd 1.5.7.
+The packager checks the final compressed size and SHA-256 against the installer's
+pins before writing the named output.
 
 ```sh
 python3 tools/package_shared_converters.py amd64 upstream-amd64.tar.zst kilix-encodec-converters_shared_amd64.tar.zst

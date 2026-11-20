@@ -2,7 +2,6 @@
 """Package the shared system runtime from a checksum-pinned upstream distribution."""
 
 import argparse
-import hashlib
 import os
 from pathlib import Path
 import runpy
@@ -39,10 +38,10 @@ def package(arch, archive, output):
                         tar.addfile(member, source)
             if compressor.wait():
                 raise ValueError("converter compression failed")
-        with packed.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        compact = selected["compact"]
+        installer["verify_archive"](packed, compact)
         os.link(packed, output)
-    print(f"{digest}  {output.name} ({output.stat().st_size} bytes)")
+    print(f"{compact['sha256']}  {output.name} ({compact['size']} bytes)")
 
 
 if __name__ == "__main__":
